@@ -29,31 +29,58 @@ const RARITY_COLORS := {
 	1: Color("8a8f98"),
 }
 
+## Niveau maximum que peut atteindre un héros, selon sa rareté.
+const MAX_LEVEL := {
+	5: 60,
+	4: 50,
+	3: 40,
+	2: 30,
+	1: 20,
+}
+
+## Statistiques de base de chaque classe, pour un héros 1 étoile de niveau 1.
+## hp = points de vie, atk = attaque, def = défense, spd = vitesse.
+const CLASS_STATS := {
+	"Guerrier": {"hp": 120, "atk": 20, "def": 12, "spd": 10},
+	"Chevalier": {"hp": 160, "atk": 12, "def": 20, "spd": 7},
+	"Mage": {"hp": 80, "atk": 26, "def": 6, "spd": 9},
+	"Archer": {"hp": 90, "atk": 22, "def": 8, "spd": 12},
+	"Assassin": {"hp": 85, "atk": 24, "def": 7, "spd": 15},
+	"Soigneur": {"hp": 95, "atk": 10, "def": 10, "spd": 11},
+}
+
+## Bonus de statistiques par étoile au-dessus de 1 (0.3 = +30 % par étoile).
+const STATS_BONUS_PER_STAR := 0.3
+
 ## Catalogue des héros qu'on peut invoquer.
 const HERO_POOL := [
-	{"name": "Aldric", "rarity": 5, "role": "Épéiste"},
-	{"name": "Séléné", "rarity": 5, "role": "Mage"},
-	{"name": "Kaelen", "rarity": 5, "role": "Archer"},
-	{"name": "Brunhild", "rarity": 4, "role": "Guerrière"},
-	{"name": "Oriane", "rarity": 4, "role": "Prêtresse"},
-	{"name": "Vesper", "rarity": 4, "role": "Assassin"},
-	{"name": "Garrick", "rarity": 3, "role": "Chevalier"},
-	{"name": "Lysa", "rarity": 3, "role": "Archère"},
-	{"name": "Tobias", "rarity": 3, "role": "Mage"},
-	{"name": "Mira", "rarity": 2, "role": "Soigneuse"},
-	{"name": "Doran", "rarity": 2, "role": "Lancier"},
-	{"name": "Pip", "rarity": 2, "role": "Éclaireur"},
-	{"name": "Hugo", "rarity": 1, "role": "Milicien"},
-	{"name": "Léna", "rarity": 1, "role": "Apprentie"},
-	{"name": "Bram", "rarity": 1, "role": "Porteur"},
+	{"name": "Aldric", "rarity": 5, "class": "Guerrier"},
+	{"name": "Séléné", "rarity": 5, "class": "Mage"},
+	{"name": "Kaelen", "rarity": 5, "class": "Archer"},
+	{"name": "Brunhild", "rarity": 4, "class": "Chevalier"},
+	{"name": "Oriane", "rarity": 4, "class": "Soigneur"},
+	{"name": "Vesper", "rarity": 4, "class": "Assassin"},
+	{"name": "Garrick", "rarity": 3, "class": "Chevalier"},
+	{"name": "Lysa", "rarity": 3, "class": "Archer"},
+	{"name": "Tobias", "rarity": 3, "class": "Mage"},
+	{"name": "Mira", "rarity": 2, "class": "Soigneur"},
+	{"name": "Doran", "rarity": 2, "class": "Guerrier"},
+	{"name": "Pip", "rarity": 2, "class": "Assassin"},
+	{"name": "Hugo", "rarity": 1, "class": "Guerrier"},
+	{"name": "Léna", "rarity": 1, "class": "Mage"},
+	{"name": "Bram", "rarity": 1, "class": "Chevalier"},
 ]
 
 var gems := 3000
 var pity_counter := 0
 
 ## Tous les héros invoqués. Chaque invocation crée un héros unique :
-## deux « Aldric » sont deux individus différents (ils pourront mourir séparément).
+## deux « Aldric » sont deux individus différents, avec leurs propres statistiques
+## (ils pourront mourir séparément).
 var roster: Array[Dictionary] = []
+
+## Numéro donné au prochain héros invoqué (chaque héros a un numéro unique).
+var next_hero_id := 1
 
 
 func can_afford(count: int) -> bool:
@@ -107,10 +134,25 @@ func _roll_rarity() -> int:
 func _create_hero(rarity: int) -> Dictionary:
 	var candidates := HERO_POOL.filter(func(h): return h["rarity"] == rarity)
 	var template: Dictionary = candidates.pick_random()
-	return {
+	var hero := {
+		"id": next_hero_id,
 		"name": template["name"],
 		"rarity": rarity,
-		"role": template["role"],
+		"class": template["class"],
 		"level": 1,
 		"alive": true,
+		"stats": _roll_stats(template["class"], rarity),
 	}
+	next_hero_id += 1
+	return hero
+
+
+## Calcule les statistiques d'un nouveau héros : base de sa classe, bonus de rareté,
+## et une petite variation au hasard (±10 %) pour que chaque individu soit unique.
+func _roll_stats(hero_class: String, rarity: int) -> Dictionary:
+	var multiplier := 1.0 + (rarity - 1) * STATS_BONUS_PER_STAR
+	var stats := {}
+	for stat in CLASS_STATS[hero_class]:
+		var base: int = CLASS_STATS[hero_class][stat]
+		stats[stat] = roundi(base * multiplier * randf_range(0.9, 1.1))
+	return stats

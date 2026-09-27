@@ -12,12 +12,20 @@ Les noms et l'univers doivent rester originaux (pas de noms issus de l'œuvre).
 - Chaque push sur `main` publie la version web sur GitHub Pages (`.github/workflows/deploy-web.yml`).
 
 ## Structure
-- `scripts/game_data.gd` : autoload `GameData`, données et règles (taux, pity, catalogue, héros possédés).
-- `scenes/` + `scripts/` : une scène par écran ; l'interface est construite dans le script.
+- `scenes/main.tscn` + `scripts/main.gd` : scène de départ ; barre du haut (gemmes),
+  écran actif, barre de menus en bas (Hub, Invocation, Collection, Donjons).
+- `scripts/game_data.gd` : autoload `GameData`, données et règles (taux, pity, catalogue,
+  classes et statistiques, héros possédés).
+- `scripts/ui.gd` : classe `UI`, fonctions communes pour créer labels, boutons, cartes de héros.
+- Un script par écran (`class_name`), dont l'interface est construite par le code :
+  `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée), `summon_screen.gd`,
+  `collection_screen.gd`, `dungeons_screen.gd`.
+- Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Feuille de route
 1. Gacha (écran d'invocation) : fait
-2. Collection : fiche de chaque héros
-3. Donjon : combat automatique, mort permanente
-4. Base : bâtiments, production, améliorations
-5. Sauvegarde
+2. Hub (cité circulaire) + barre de menus : fait
+3. Collection + fiche de héros : fait
+4. Donjons : la Tour (étages), donjons journaliers (XP, ressources, or) ; combat auto, mort permanente
+5. Quartiers de la cité : terrain d'entraînement, armurerie, laboratoire, synthèse...
+6. Sauvegarde
