@@ -1,0 +1,5 @@
+# Cache de Godot (régénéré automatiquement)
+.godot/
+
+# Exports du jeu
+build/
