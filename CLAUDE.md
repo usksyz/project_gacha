@@ -32,6 +32,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
   secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : saisie des codes secrets (aussi sur la
   Place publique du hub).
+- `scripts/drag_scroll.gd` : autoload `DragScroll`, défilement au doigt (ou clic maintenu) partout dans
+  les `ScrollContainer` et `RichTextLabel`, même en commençant sur un bouton, avec élan. Créer les zones
+  qui défilent avec `UI.make_scroll()` (barres cachées).
 - Saisie de texte : toujours un `LineEdit` avec le clavier de l'appareil (téléphone ou PC), jamais un
   clavier refait dans le jeu ; `html/experimental_virtual_keyboard=true` dans `export_presets.cfg`
   fait apparaître le clavier du téléphone dans la version web.

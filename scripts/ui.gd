@@ -29,6 +29,17 @@ static func make_panel_style(background: Color, border: Color = Color.TRANSPAREN
 	return style
 
 
+## Zone qui défile verticalement et prend toute la hauteur disponible.
+## Pas de barre visible : on fait défiler en glissant le doigt (voir drag_scroll.gd)
+## ou avec la molette de la souris.
+static func make_scroll() -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	return scroll
+
+
 ## Applique le même style à tous les états d'un bouton (normal, survolé, appuyé...).
 static func set_button_style(button: Button, normal: StyleBox, pressed: StyleBox) -> void:
 	button.add_theme_stylebox_override("normal", normal)

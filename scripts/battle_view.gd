@@ -74,6 +74,7 @@ func _build(title: String) -> void:
 	log_label = RichTextLabel.new()
 	log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	log_label.scroll_following = true
+	log_label.get_v_scroll_bar().modulate.a = 0.0  # barre invisible : on fait défiler en glissant
 	log_label.add_theme_font_size_override("normal_font_size", 20)
 	log_label.add_theme_stylebox_override("normal", UI.make_panel_style(Color("12131c")))
 	layout.add_child(log_label)
@@ -161,9 +162,7 @@ func _show_result(report: Dictionary) -> void:
 	controls.queue_free()
 
 	# Le journal et les fenêtres de fin se partagent la place ; les fenêtres défilent si besoin.
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
