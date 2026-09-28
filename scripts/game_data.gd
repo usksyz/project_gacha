@@ -71,8 +71,38 @@ const HERO_POOL := [
 	{"name": "Bram", "rarity": 1, "class": "Chevalier"},
 ]
 
+## Nombre maximum de héros dans une équipe de combat.
+const TEAM_SIZE := 4
+
+## Un boss garde tous les étages de la Tour multiples de ce nombre (10, 20, 30...).
+const BOSS_EVERY := 10
+
+## Les ennemis deviennent plus forts à chaque étage (0.1 = +10 % par étage).
+const ENEMY_BONUS_PER_FLOOR := 0.1
+
+## Monstres ordinaires de la Tour (statistiques à l'étage 1).
+## Leur « classe » décide de leur façon de combattre, exactement comme pour les héros.
+const ENEMY_TYPES := [
+	{"name": "Gobelin", "class": "Assassin", "hp": 55, "atk": 14, "def": 4, "spd": 13},
+	{"name": "Loup noir", "class": "Guerrier", "hp": 70, "atk": 15, "def": 5, "spd": 11},
+	{"name": "Squelette archer", "class": "Archer", "hp": 50, "atk": 16, "def": 4, "spd": 10},
+	{"name": "Golem de pierre", "class": "Chevalier", "hp": 110, "atk": 10, "def": 12, "spd": 5},
+	{"name": "Sorcier gobelin", "class": "Mage", "hp": 45, "atk": 18, "def": 3, "spd": 8},
+	{"name": "Chaman", "class": "Soigneur", "hp": 60, "atk": 9, "def": 5, "spd": 9},
+]
+
+## Boss qui gardent les étages multiples de BOSS_EVERY.
+const BOSS_TYPES := [
+	{"name": "Minotaure", "class": "Guerrier", "hp": 300, "atk": 28, "def": 12, "spd": 9},
+	{"name": "Liche", "class": "Mage", "hp": 220, "atk": 32, "def": 8, "spd": 10},
+	{"name": "Hydre", "class": "Chevalier", "hp": 400, "atk": 22, "def": 16, "spd": 6},
+]
+
 var gems := 3000
 var pity_counter := 0
+
+## Prochain étage de la Tour à conquérir.
+var tower_floor := 1
 
 ## Tous les héros invoqués. Chaque invocation crée un héros unique :
 ## deux « Aldric » sont deux individus différents, avec leurs propres statistiques
@@ -145,6 +175,68 @@ func _create_hero(rarity: int) -> Dictionary:
 	}
 	next_hero_id += 1
 	return hero
+
+
+## Héros encore en vie (ceux qui peuvent combattre).
+func alive_heroes() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in roster:
+		if hero["alive"]:
+			result.append(hero)
+	return result
+
+
+func is_boss_floor(floor_number: int) -> bool:
+	return floor_number % BOSS_EVERY == 0
+
+
+## Gemmes gagnées en conquérant un étage (le triple pour un étage de boss).
+func tower_reward(floor_number: int) -> int:
+	var reward := 50 + floor_number * 10
+	if is_boss_floor(floor_number):
+		reward *= 3
+	return reward
+
+
+## Crée les ennemis d'un étage de la Tour : de plus en plus nombreux (4 au maximum)
+## et de plus en plus forts. Un étage de boss contient le boss et 2 monstres.
+func tower_enemies(floor_number: int) -> Array[Dictionary]:
+	var enemies: Array[Dictionary] = []
+	var monster_count := mini(1 + ceili(floor_number / 3.0), 4)
+	if is_boss_floor(floor_number):
+		enemies.append(_create_enemy(BOSS_TYPES.pick_random(), floor_number))
+		monster_count = 2
+	for i in monster_count:
+		enemies.append(_create_enemy(ENEMY_TYPES.pick_random(), floor_number))
+	return enemies
+
+
+## Applique le résultat d'un combat de la Tour :
+## les héros tombés meurent pour toujours ; en cas de victoire, on gagne des gemmes
+## et on passe à l'étage suivant. Renvoie le nombre de gemmes gagnées.
+func finish_tower_battle(battle: Battle) -> int:
+	for fighter in battle.heroes:
+		if fighter["hp"] <= 0:
+			fighter["source"]["alive"] = false
+	if not battle.victory:
+		return 0
+	var reward := tower_reward(tower_floor)
+	tower_floor += 1
+	add_gems(reward)
+	return reward
+
+
+## Crée un ennemi à partir d'un modèle, renforcé selon l'étage.
+## La vitesse ne change pas, pour que l'ordre d'action reste lisible.
+func _create_enemy(template: Dictionary, floor_number: int) -> Dictionary:
+	var multiplier := 1.0 + (floor_number - 1) * ENEMY_BONUS_PER_FLOOR
+	var stats := {}
+	for stat in ["hp", "atk", "def", "spd"]:
+		var value: float = template[stat]
+		if stat != "spd":
+			value *= multiplier
+		stats[stat] = roundi(value * randf_range(0.9, 1.1))
+	return {"name": template["name"], "class": template["class"], "stats": stats}
 
 
 ## Calcule les statistiques d'un nouveau héros : base de sa classe, bonus de rareté,

@@ -19,13 +19,16 @@ Les noms et l'univers doivent rester originaux (pas de noms issus de l'œuvre).
 - `scripts/ui.gd` : classe `UI`, fonctions communes pour créer labels, boutons, cartes de héros.
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée), `summon_screen.gd`,
-  `collection_screen.gd`, `dungeons_screen.gd`.
+  `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, choix de l'équipe, combat).
+- `scripts/battle.gd` : classe `Battle`, combat automatique calculé d'un coup (règles et
+  particularités de chaque classe) ; `scripts/battle_view.gd` : classe `BattleView`, rejoue le combat.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Feuille de route
 1. Gacha (écran d'invocation) : fait
 2. Hub (cité circulaire) + barre de menus : fait
 3. Collection + fiche de héros : fait
-4. Donjons : la Tour (étages), donjons journaliers (XP, ressources, or) ; combat auto, mort permanente
+4. Donjons : la Tour (étages, boss tous les 10, combat auto, mort permanente) : fait ;
+   reste les donjons journaliers (XP et montée de niveau, ressources, or)
 5. Quartiers de la cité : terrain d'entraînement, armurerie, laboratoire, synthèse...
 6. Sauvegarde
