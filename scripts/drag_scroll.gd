@@ -14,13 +14,14 @@ extends Node
 const DRAG_THRESHOLD := 12.0
 
 ## Freinage de l'élan (plus c'est grand, plus la liste s'arrête vite).
-const FRICTION := 4.0
+## 2 est proche du freinage des listes sur Android et iPhone.
+const FRICTION := 2.0
 
 ## En dessous de cette vitesse (pixels par seconde), l'élan s'arrête.
 const MIN_SPEED := 30.0
 
 ## Vitesse maximale de l'élan (pixels par seconde).
-const MAX_SPEED := 2500.0
+const MAX_SPEED := 5000.0
 
 ## La vitesse de l'élan est mesurée sur la fin du geste (en millisecondes).
 const VELOCITY_WINDOW := 100
