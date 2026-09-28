@@ -36,6 +36,13 @@ jobs:
           mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mv templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
 
+      # Réécrit scripts/build_info.gd : « 15012ab du 28/09/2026 à 14:03 » (heure de Paris).
+      - name: Inscrire le numéro de version
+        run: |
+          VERSION="$(git rev-parse --short HEAD) du $(TZ=Europe/Paris date '+%d/%m/%Y à %H:%M')"
+          sed -i "s|^const VERSION := .*|const VERSION := \"$VERSION\"|" scripts/build_info.gd
+          grep "const VERSION" scripts/build_info.gd
+
       - name: Exporter le jeu
         run: |
           mkdir -p build/web

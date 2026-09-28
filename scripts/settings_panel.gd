@@ -73,7 +73,7 @@ func _ready() -> void:
 	reset_button.custom_minimum_size.y = 80
 	reset_button.add_theme_color_override("font_color", DANGER_COLOR)
 	content.add_child(reset_button)
-	var about := UI.make_label("Projet Gacha — prototype fait avec Godot 4", 20)
+	var about := UI.make_label("Projet Gacha — fait avec Godot 4\nVersion : %s" % BuildInfo.VERSION, 20)
 	about.modulate = Color(1, 1, 1, 0.5)
 	about.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(about)

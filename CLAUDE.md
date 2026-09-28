@@ -20,6 +20,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   répondre en français, expliquer simplement, garder un code lisible et commenté en français.
 - Le projet est travaillé depuis un PC et depuis un téléphone (sessions Claude Code dans le cloud).
 - Chaque push sur `main` publie la version web sur GitHub Pages (`.github/workflows/deploy-web.yml`).
+  La publication réécrit `scripts/build_info.gd` (commit + date), affiché en bas des paramètres :
+  pratique pour vérifier que le téléphone n'affiche pas une ancienne version (cache d'environ 10 min).
 
 ## Structure
 - `scenes/main.tscn` + `scripts/main.gd` : scène de départ ; barre du haut (or, gemmes),
