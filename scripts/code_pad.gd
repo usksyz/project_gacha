@@ -1,18 +1,18 @@
 class_name CodePad
 extends Control
-## Clavier des codes secrets, à l'ancienne : on tape les lettres sur une grille.
+## Fenêtre des codes secrets : un champ de texte où l'on tape le code
+## avec le clavier de l'appareil (celui du téléphone, ou du PC).
 ## S'affiche par-dessus l'écran ; on l'ouvre avec open().
 
-## Nombre maximum de lettres dans un code secret.
+## Nombre maximum de caractères dans un code secret.
 const CODE_MAX_LENGTH := 12
 
-var display: Label
+var input: LineEdit
 var result: Label
-var typed_code := ""
 
 
 func _ready() -> void:
-	# Occupe tout l'écran (bords compris, car le clavier est déjà ajouté à l'écran à ce moment-là).
+	# Occupe tout l'écran (bords compris, car la fenêtre est déjà ajoutée à l'écran à ce moment-là).
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	visible = false
 
@@ -22,36 +22,33 @@ func _ready() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	# La fenêtre est placée en haut, pour rester visible au-dessus du clavier du téléphone.
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	for side in ["left", "right", "top"]:
+		margin.add_theme_constant_override("margin_" + side, 40)
+	add_child(margin)
 
 	var window := UI.make_system_window("Code secret", ["Tape un code :"])
-	window.custom_minimum_size.x = 640
-	center.add_child(window)
+	margin.add_child(window)
 	var content: VBoxContainer = window.get_child(0)
 	content.add_theme_constant_override("separation", 12)
 
-	display = UI.make_label("", 40)
-	display.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	display.add_theme_color_override("font_color", Color("f5b82e"))
-	content.add_child(display)
-
-	var letters := GridContainer.new()
-	letters.columns = 7
-	letters.add_theme_constant_override("h_separation", 6)
-	letters.add_theme_constant_override("v_separation", 6)
-	content.add_child(letters)
-	for i in 26:
-		var letter := char(65 + i)  # 65 = code de la lettre A
-		var key := UI.make_button(letter, func(): _type_letter(letter), 26)
-		key.custom_minimum_size = Vector2(80, 70)
-		letters.add_child(key)
+	input = LineEdit.new()
+	input.max_length = CODE_MAX_LENGTH
+	input.placeholder_text = "Ton code"
+	input.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	input.custom_minimum_size.y = 80
+	input.add_theme_font_size_override("font_size", 36)
+	input.add_theme_color_override("font_color", Color("f5b82e"))
+	# Appuyer sur « Entrée » (ou « OK » sur le téléphone) valide le code.
+	input.text_submitted.connect(func(_text): _submit_code())
+	content.add_child(input)
 
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	content.add_child(buttons)
-	for action in [["Effacer", _erase_letter], ["Fermer", func(): visible = false], ["Valider", _submit_code]]:
+	for action in [["Fermer", close], ["Valider", _submit_code]]:
 		var button := UI.make_button(action[0], action[1], 24)
 		button.custom_minimum_size.y = 80
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -64,32 +61,23 @@ func _ready() -> void:
 
 
 func open() -> void:
-	typed_code = ""
+	input.text = ""
 	result.text = ""
-	_refresh()
 	visible = true
+	# Donner le focus au champ fait apparaître le clavier du téléphone.
+	input.grab_focus()
 
 
-func _type_letter(letter: String) -> void:
-	if typed_code.length() < CODE_MAX_LENGTH:
-		typed_code += letter
-		_refresh()
-
-
-func _erase_letter() -> void:
-	typed_code = typed_code.left(-1)
-	_refresh()
-
-
-func _refresh() -> void:
-	display.text = typed_code if typed_code != "" else "_ _ _"
+func close() -> void:
+	input.release_focus()  # range le clavier du téléphone
+	visible = false
 
 
 func _submit_code() -> void:
-	var hero := GameData.redeem_code(typed_code)
+	var hero := GameData.redeem_code(input.text)
 	if hero.is_empty():
 		result.text = "Code invalide... ou déjà utilisé."
 	else:
 		result.text = "Code accepté ! %s (%s) rejoint ta cité." % [hero["name"], UI.rarity_text(hero["rarity"])]
-	typed_code = ""
-	_refresh()
+	input.text = ""
+	input.grab_focus()

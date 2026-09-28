@@ -30,8 +30,11 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran,
   vitesse de combat), enregistrés dans `user://parametres.cfg`.
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
-  secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : clavier des codes secrets (aussi sur la
+  secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : saisie des codes secrets (aussi sur la
   Place publique du hub).
+- Saisie de texte : toujours un `LineEdit` avec le clavier de l'appareil (téléphone ou PC), jamais un
+  clavier refait dans le jeu ; `html/experimental_virtual_keyboard=true` dans `export_presets.cfg`
+  fait apparaître le clavier du téléphone dans la version web.
 - `scripts/ui.gd` : classe `UI`, fonctions communes (labels, boutons, cartes de héros, fenêtres système).
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
