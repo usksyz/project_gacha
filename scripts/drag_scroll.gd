@@ -7,9 +7,8 @@ extends Node
 ## Chargé automatiquement (« autoload ») : toutes les ScrollContainer et RichTextLabel
 ## du jeu en profitent, sans rien ajouter dans les écrans.
 ##
-## Astuce : pour que le bouton sous le doigt ne s'active pas après un glissement,
-## on déplace les événements de la souris très loin de l'écran ; le bouton croit
-## alors que le doigt est parti ailleurs.
+## Pour que le bouton sous le doigt (une carte de héros...) ne s'active pas après un
+## glissement, on annule son appui dès que le glissement commence.
 
 ## Distance (en pixels) à parcourir avant qu'un appui devienne un glissement.
 const DRAG_THRESHOLD := 12.0
@@ -20,6 +19,12 @@ const FRICTION := 4.0
 ## En dessous de cette vitesse (pixels par seconde), l'élan s'arrête.
 const MIN_SPEED := 30.0
 
+## Vitesse maximale de l'élan (pixels par seconde).
+const MAX_SPEED := 2500.0
+
+## La vitesse de l'élan est mesurée sur la fin du geste (en millisecondes).
+const VELOCITY_WINDOW := 100
+
 const FAR_AWAY := Vector2(-100000, -100000)
 
 var pressing := false
@@ -27,9 +32,12 @@ var dragging := false
 var press_position := Vector2.ZERO
 ## La zone qui défile (trouvée au moment de l'appui).
 var target: Control = null
+## Le bouton sous le doigt au moment de l'appui (ou null).
+var pressed_button: BaseButton = null
 ## Vitesse de l'élan, en pixels par seconde.
 var velocity := 0.0
-var last_motion_time := 0
+## Derniers déplacements du doigt : [instant en millisecondes, distance en pixels].
+var recent_moves: Array = []
 
 
 func _input(event: InputEvent) -> void:
@@ -39,14 +47,15 @@ func _input(event: InputEvent) -> void:
 			dragging = false
 			press_position = event.position
 			velocity = 0.0
-			target = _scrollable_at(event.position)
+			recent_moves.clear()
+			var touched := _control_at_point(event.position)
+			target = _scrollable_parent(touched)
+			pressed_button = _button_parent(touched)
 		else:
 			pressing = false
 			if dragging:
 				dragging = false
-				# Doigt resté immobile avant de lâcher : pas d'élan.
-				if Time.get_ticks_msec() - last_motion_time > 100:
-					velocity = 0.0
+				velocity = _release_velocity()
 				_hide_from_buttons(event)
 
 	elif event is InputEventMouseMotion and pressing and target != null:
@@ -54,14 +63,35 @@ func _input(event: InputEvent) -> void:
 			if event.position.distance_to(press_position) < DRAG_THRESHOLD:
 				return  # petit tremblement du doigt : c'est encore un simple appui
 			dragging = true
-			last_motion_time = Time.get_ticks_msec()
+			_cancel_button_press()
 		_scroll_by(-event.relative.y)
-		# Vitesse du doigt, lissée pour éviter les à-coups.
-		var now := Time.get_ticks_msec()
-		var seconds := maxf((now - last_motion_time) / 1000.0, 0.001)
-		velocity = lerpf(velocity, -event.relative.y / seconds, 0.4)
-		last_motion_time = now
+		recent_moves.append([Time.get_ticks_msec(), -event.relative.y])
 		_hide_from_buttons(event)
+
+
+## Annule l'appui du bouton sous le doigt : le désactiver remet à zéro son état
+## « enfoncé », et on le réactive aussitôt. Il ne se déclenchera donc pas quand on lâche.
+func _cancel_button_press() -> void:
+	if is_instance_valid(pressed_button) and not pressed_button.disabled:
+		pressed_button.disabled = true
+		pressed_button.disabled = false
+	pressed_button = null
+
+
+## Vitesse du doigt au moment où il lâche : la distance parcourue pendant les
+## 100 dernières millisecondes, divisée par ce temps. Si le doigt s'était arrêté
+## avant de lâcher, il n'y a pas d'élan.
+func _release_velocity() -> float:
+	var now := Time.get_ticks_msec()
+	var distance := 0.0
+	var oldest := now
+	for move in recent_moves:
+		if now - move[0] <= VELOCITY_WINDOW:
+			distance += move[1]
+			oldest = mini(oldest, move[0])
+	# Au moins 1/60 de seconde, pour ne pas diviser par (presque) zéro.
+	var seconds := maxf((now - oldest) / 1000.0, 1.0 / 60.0)
+	return clampf(distance / seconds, -MAX_SPEED, MAX_SPEED)
 
 
 ## Élan après avoir lâché : la liste continue de défiler en ralentissant.
@@ -82,8 +112,8 @@ func _scroll_by(amount: float) -> void:
 		target.get_v_scroll_bar().value += amount
 
 
-## Envoie l'événement « très loin » : les boutons ne se déclenchent pas,
-## et la ScrollContainer ne fait pas défiler une deuxième fois de son côté.
+## Envoie l'événement « très loin », pour que rien d'autre ne réagisse au glissement
+## (la ScrollContainer ne fait pas défiler une deuxième fois de son côté).
 func _hide_from_buttons(event: InputEventMouse) -> void:
 	event.position = FAR_AWAY
 	event.global_position = FAR_AWAY
@@ -91,18 +121,30 @@ func _hide_from_buttons(event: InputEventMouse) -> void:
 		event.relative = Vector2.ZERO
 
 
-## Trouve la zone qui défile sous le doigt : on cherche l'élément d'interface touché
-## (celui du dessus), puis on remonte ses parents jusqu'à une zone qui peut défiler.
-func _scrollable_at(point: Vector2) -> Control:
-	var node: Node = null
+## L'élément d'interface touché à cet endroit (celui du dessus), ou null.
+func _control_at_point(point: Vector2) -> Control:
 	var children := get_tree().root.get_children()
 	for i in range(children.size() - 1, -1, -1):
 		if children[i] is Control:
-			node = _control_at(children[i], point)
-			if node != null:
-				break
+			var found := _control_at(children[i], point)
+			if found != null:
+				return found
+	return null
+
+
+## Remonte les parents de « node » jusqu'à une zone qui peut défiler (ou null).
+func _scrollable_parent(node: Node) -> Control:
 	while node is Control:
 		if (node is ScrollContainer or node is RichTextLabel) and _can_scroll(node):
+			return node
+		node = node.get_parent()
+	return null
+
+
+## Remonte les parents de « node » jusqu'à un bouton (ou null).
+func _button_parent(node: Node) -> BaseButton:
+	while node is Control:
+		if node is BaseButton:
 			return node
 		node = node.get_parent()
 	return null
