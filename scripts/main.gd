@@ -50,8 +50,9 @@ func _ready() -> void:
 		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 		content.add_child(screen)
 
-	GameData.gems_changed.connect(func(_amount): _refresh_gems())
-	_refresh_gems()
+	GameData.gems_changed.connect(func(_amount): _refresh_money())
+	GameData.gold_changed.connect(func(_amount): _refresh_money())
+	_refresh_money()
 	show_screen("hub")
 
 
@@ -66,8 +67,8 @@ func show_screen(screen_name: String) -> void:
 		screen.on_shown()
 
 
-func _refresh_gems() -> void:
-	gems_label.text = "%d gemmes" % GameData.gems
+func _refresh_money() -> void:
+	gems_label.text = "%d or   %d gemmes" % [GameData.gold, GameData.gems]
 
 
 func _build_top_bar() -> Control:

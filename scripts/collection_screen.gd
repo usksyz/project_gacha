@@ -3,13 +3,6 @@ extends Control
 ## Collection : tous les héros possédés, triés par rareté.
 ## Appuyer sur un héros ouvre sa fiche détaillée.
 
-const STAT_NAMES := {
-	"hp": "Points de vie",
-	"atk": "Attaque",
-	"def": "Défense",
-	"spd": "Vitesse",
-}
-
 var count_label: Label
 var empty_label: Label
 var grid: GridContainer
@@ -119,21 +112,42 @@ func _show_detail(hero: Dictionary) -> void:
 
 	var level_text := "Niveau %d / %d" % [hero["level"], GameData.MAX_LEVEL[hero["rarity"]]]
 	content.add_child(UI.make_label(level_text, 26))
+	var xp_text := "Niveau maximum atteint"
+	if not GameData.is_max_level(hero):
+		xp_text = "Expérience : %d / %d" % [hero["xp"], GameData.xp_to_next(hero["level"])]
+	var xp_label := UI.make_label(xp_text, 22)
+	xp_label.modulate = Color(1, 1, 1, 0.7)
+	content.add_child(xp_label)
 
 	var stats := GridContainer.new()
 	stats.columns = 2
 	stats.add_theme_constant_override("h_separation", 32)
 	stats.add_theme_constant_override("v_separation", 8)
 	content.add_child(stats)
-	for stat in STAT_NAMES:
-		var stat_name := UI.make_label(STAT_NAMES[stat], 26)
+	for stat in GameData.STAT_NAMES:
+		var stat_name := UI.make_label(GameData.STAT_NAMES[stat], 26)
 		stat_name.modulate = Color(1, 1, 1, 0.7)
 		stat_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats.add_child(stat_name)
 		stats.add_child(UI.make_label(str(hero["stats"][stat]), 26))
 
-	var status := UI.make_label("En vie" if hero["alive"] else "Mort", 26)
-	status.add_theme_color_override("font_color", Color("4caf6a") if hero["alive"] else Color("e05252"))
+	var skills := []
+	for skill in hero["skills"]:
+		skills.append("%s (%s, niv. %d)" % [skill["name"], skill["rank"], skill["level"]])
+	var skills_label := UI.make_label("Compétences : " + ("aucune" if skills.is_empty() else ", ".join(skills)), 22)
+	skills_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(skills_label)
+
+	var status_text := "En vie"
+	var status_color := Color("4caf6a")
+	if hero["immortal"]:
+		status_text = "Immortel"
+		status_color = Color("f5b82e")
+	elif not hero["alive"]:
+		status_text = "Mort"
+		status_color = Color("e05252")
+	var status := UI.make_label(status_text, 26)
+	status.add_theme_color_override("font_color", status_color)
 	content.add_child(status)
 
 	var close := UI.make_button("Fermer", func(): detail_overlay.visible = false)

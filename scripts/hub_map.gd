@@ -30,8 +30,9 @@ const ZONES := [
 		"info": "Là où vivent tes héros."},
 ]
 
-const PLAZA := {"name": "Place publique", "label": "Place\npublique", "color": Color("a89868"), "target": "",
-	"info": "Le cœur de la cité, où se croisent les héros. (Bientôt)"}
+## La place ouvre le clavier des codes secrets (voir HubScreen).
+const PLAZA := {"name": "Place publique", "label": "Place\npublique", "color": Color("a89868"), "target": "code",
+	"info": "Le cœur de la cité. Une vieille stèle attend qu'on y grave un mot de passe..."}
 
 var zone_buttons: Array[Button] = []
 var plaza_button: Button

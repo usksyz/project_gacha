@@ -9,11 +9,14 @@ extends RefCounted
 ## Règles :
 ## - à chaque tour, tous les combattants vivants agissent, du plus rapide au plus lent ;
 ## - dégâts = attaque - la moitié de la défense de la cible (au moins 1) ;
+## - la dextérité donne une petite chance de coup critique (dégâts x1.5) ;
+## - un héros immortel (héros secret) tombé à 0 est seulement « à terre » ;
 ## - chaque classe a sa particularité :
+##     Novice    : attaque simple
 ##     Guerrier  : frappe fort (dégâts x1.2)
 ##     Chevalier : attire les coups (les ennemis le visent 3 fois plus souvent)
 ##     Mage      : frappe tous les ennemis à la fois (dégâts x0.6 sur chacun)
-##     Archer    : 30 % de chances de coup critique (dégâts x2)
+##     Archer    : +25 % de chances de coup critique, et ses critiques font x2
 ##     Assassin  : vise toujours l'ennemi qui a le moins de points de vie
 ##     Soigneur  : soigne l'allié le plus blessé (attaque si personne n'est blessé)
 
@@ -55,20 +58,34 @@ func run() -> void:
 	_log("Le combat s'éternise : ton équipe bat en retraite.")
 
 
-## Un « combattant » : une copie des statistiques et ses points de vie actuels.
+## Le héros qui a le plus contribué (dégâts + soins), ou "" s'il n'y a aucun héros.
+func mvp() -> String:
+	var best: Dictionary = {}
+	for fighter in heroes:
+		if best.is_empty() or fighter["contribution"] > best["contribution"]:
+			best = fighter
+	return "" if best.is_empty() else best["name"]
+
+
+## Un « combattant » : ses valeurs de combat et ses points de vie actuels.
 ## « source » garde le héros (ou l'ennemi) d'origine, pour le marquer mort après le combat.
 func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
-	var stats: Dictionary = source["stats"]
+	var stats := GameData.combat_stats(source)
 	return {
 		"name": source["name"],
 		"class": source["class"],
+		"level": source["level"],
 		"is_hero": is_hero,
+		"immortal": source.get("immortal", false),
 		"source": source,
 		"hp": stats["hp"],
 		"max_hp": stats["hp"],
 		"atk": stats["atk"],
 		"def": stats["def"],
 		"spd": stats["spd"],
+		"crit": stats["crit"],
+		"contribution": 0,  # dégâts infligés + soins donnés, pour désigner le MVP
+		"killer": "",       # cause de la mort, s'il tombe
 	}
 
 
@@ -96,9 +113,9 @@ func _act(fighter: Dictionary) -> void:
 			for target in targets:
 				hits.append("%s -%d" % [target["name"], _damage(fighter, target, 0.6)])
 			_log("%s lance un sort de zone : %s" % [fighter["name"], ", ".join(hits)])
-			_check_deaths(targets)
+			_check_deaths(targets, fighter)
 		"Archer":
-			var critical := randf() < 0.3
+			var critical: bool = randf() < fighter["crit"] + 0.25
 			_attack(fighter, _random_target(foes), 2.0 if critical else 1.0, critical)
 		"Assassin":
 			_attack(fighter, _weakest(foes))
@@ -109,7 +126,8 @@ func _act(fighter: Dictionary) -> void:
 			else:
 				_heal(fighter, wounded)
 		_:
-			_attack(fighter, _random_target(foes))
+			var critical: bool = randf() < fighter["crit"]
+			_attack(fighter, _random_target(foes), 1.5 if critical else 1.0, critical)
 
 
 func _attack(attacker: Dictionary, target: Dictionary, power := 1.0, critical := false) -> void:
@@ -118,14 +136,15 @@ func _attack(attacker: Dictionary, target: Dictionary, power := 1.0, critical :=
 	if critical:
 		text = "Coup critique ! " + text
 	_log(text)
-	_check_deaths([target])
+	_check_deaths([target], attacker)
 
 
 ## Retire des points de vie à la cible et renvoie les dégâts infligés.
 func _damage(attacker: Dictionary, target: Dictionary, power: float) -> int:
 	var raw: float = attacker["atk"] * power * randf_range(0.9, 1.1) - target["def"] * 0.5
-	var amount := maxi(1, roundi(raw))
-	target["hp"] = maxi(0, target["hp"] - amount)
+	var amount := mini(maxi(1, roundi(raw)), target["hp"])
+	target["hp"] -= amount
+	attacker["contribution"] += amount
 	return amount
 
 
@@ -133,17 +152,23 @@ func _heal(healer: Dictionary, target: Dictionary) -> void:
 	var amount := roundi(healer["atk"] * 2.0 * randf_range(0.9, 1.1))
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
+	healer["contribution"] += amount
 	_log("%s soigne %s : +%d" % [healer["name"], target["name"], amount])
 
 
-## Annonce les combattants qui viennent de tomber à 0 point de vie.
-func _check_deaths(targets: Array) -> void:
+## Annonce les combattants qui viennent de tomber à 0 point de vie,
+## et note la cause de la mort des héros.
+func _check_deaths(targets: Array, attacker: Dictionary) -> void:
 	for target in targets:
-		if target["hp"] <= 0:
-			if target["is_hero"]:
-				_log("%s tombe au combat !" % target["name"])
-			else:
-				_log("%s est vaincu." % target["name"])
+		if target["hp"] > 0:
+			continue
+		if not target["is_hero"]:
+			_log("%s est vaincu." % target["name"])
+		elif target["immortal"]:
+			_log("%s est à terre, mais se relèvera." % target["name"])
+		else:
+			target["killer"] = "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]]
+			_log("%s tombe au combat !" % target["name"])
 
 
 ## Choisit une cible au hasard. Un Chevalier compte pour 3 : il est visé 3 fois plus souvent.

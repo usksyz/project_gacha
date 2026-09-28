@@ -5,8 +5,11 @@ extends Control
 
 signal closed
 
-## Temps entre deux actions affichées, en secondes.
-const STEP_DELAY := 0.4
+## Temps entre deux actions affichées, en secondes (à vitesse x1).
+const STEP_DELAY := 0.5
+
+## Vitesses proposées par le bouton d'accélération.
+const SPEEDS := [1, 2, 4]
 
 const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
@@ -17,7 +20,9 @@ var bars: Array[ProgressBar] = []  # une barre de vie par combattant (héros, pu
 var hp_labels: Array[Label] = []
 var rows: Array[Control] = []
 var log_label: RichTextLabel
-var skip_button: Button
+var controls: HBoxContainer
+var speed_button: Button
+var speed_index := 0
 var skipping := false
 
 
@@ -33,17 +38,19 @@ func _ready() -> void:
 	margin.add_child(layout)
 
 
-## Lance l'affichage du combat. « reward » = gemmes gagnées (0 en cas de défaite).
-func play(new_battle: Battle, title: String, reward: int) -> void:
+## Lance l'affichage du combat. « report » = le rapport de GameData.finish_tower_battle.
+func play(new_battle: Battle, title: String, report: Dictionary) -> void:
 	battle = new_battle
 	skipping = false
 	_build(title)
 
-	for event in battle.events:
+	for event in new_battle.events:
 		_show_event(event)
 		if not skipping:
-			await get_tree().create_timer(STEP_DELAY).timeout
-	_show_result(reward)
+			await get_tree().create_timer(STEP_DELAY / SPEEDS[speed_index]).timeout
+		if battle != new_battle:
+			return  # un autre combat a commencé entre-temps : on arrête de rejouer celui-ci
+	_show_result(report)
 
 
 func _build(title: String) -> void:
@@ -72,9 +79,23 @@ func _build(title: String) -> void:
 	log_label.add_theme_stylebox_override("normal", UI.make_panel_style(Color("12131c")))
 	layout.add_child(log_label)
 
-	skip_button = UI.make_button("Passer l'animation", func(): skipping = true)
-	skip_button.custom_minimum_size.y = 80
-	layout.add_child(skip_button)
+	# Boutons du bas : accélération (la vitesse choisie est gardée d'un combat à l'autre) et fin directe.
+	controls = HBoxContainer.new()
+	controls.add_theme_constant_override("separation", 16)
+	layout.add_child(controls)
+	speed_button = UI.make_button("", _next_speed)
+	speed_button.custom_minimum_size = Vector2(200, 80)
+	controls.add_child(speed_button)
+	_next_speed(0)
+	var skip_button := UI.make_button("Passer", func(): skipping = true)
+	skip_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	controls.add_child(skip_button)
+
+
+## Passe à la vitesse suivante (x1 → x2 → x4 → x1). « step » = 0 pour juste afficher la vitesse.
+func _next_speed(step := 1) -> void:
+	speed_index = (speed_index + step) % SPEEDS.size()
+	speed_button.text = "Vitesse x%d" % SPEEDS[speed_index]
 
 
 func _build_team_column(team_name: String, fighters: Array, color: Color) -> Control:
@@ -92,7 +113,7 @@ func _build_team_column(team_name: String, fighters: Array, color: Color) -> Con
 
 		var line := HBoxContainer.new()
 		row.add_child(line)
-		var name_label := UI.make_label(fighter["name"], 20)
+		var name_label := UI.make_label("%s  niv. %d" % [fighter["name"], fighter["level"]], 20)
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.clip_text = true
 		line.add_child(name_label)
@@ -134,35 +155,40 @@ func _set_hp(index: int, hp: int) -> void:
 	rows[index].modulate = Color(1, 1, 1) if hp > 0 else Color(0.4, 0.4, 0.4)
 
 
-## Remplace le bouton « Passer » par le résultat du combat.
-func _show_result(reward: int) -> void:
-	skip_button.queue_free()
+## Remplace les boutons du bas par les fenêtres de fin de combat :
+## une fenêtre rouge par héros mort, puis le résultat (récompenses, niveaux, MVP).
+func _show_result(report: Dictionary) -> void:
+	controls.queue_free()
 
+	# Le journal et les fenêtres de fin se partagent la place ; les fenêtres défilent si besoin.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layout.add_child(scroll)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	layout.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 12)
+	scroll.add_child(box)
 
-	var result := UI.make_label("Victoire !" if battle.victory else "Défaite", 40)
-	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	result.add_theme_color_override("font_color", Color("f5b82e") if battle.victory else ENEMY_COLOR)
-	box.add_child(result)
+	for death in report["dead"]:
+		var hero: Dictionary = death["hero"]
+		box.add_child(UI.make_system_window("Un héros est tombé", [
+			"%s (%s) a quitté ce monde pour toujours." % [hero["name"], UI.rarity_text(hero["rarity"])],
+			"Cause : %s." % death["cause"],
+		], true))
 
-	if reward > 0:
-		var reward_label := UI.make_label("+%d gemmes" % reward, 28)
-		reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		box.add_child(reward_label)
-
-	var dead := []
-	for fighter in battle.heroes:
-		if fighter["hp"] <= 0:
-			dead.append(fighter["name"])
-	var losses := "Aucune perte." if dead.is_empty() else "Morts au combat : " + ", ".join(dead)
-	var losses_label := UI.make_label(losses, 24)
-	losses_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	losses_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	if not dead.is_empty():
-		losses_label.add_theme_color_override("font_color", ENEMY_COLOR)
-	box.add_child(losses_label)
+	var lines := []
+	if report["victory"]:
+		lines.append("+%d or   +%d gemmes" % [report["gold"], report["gems"]])
+	else:
+		lines.append("Les survivants sont ramenés à la cité.")
+	lines.append("+%d expérience pour chaque survivant" % report["xp"])
+	for level_up in report["level_ups"]:
+		var hero: Dictionary = level_up["hero"]
+		lines.append("%s passe au niveau %d !" % [hero["name"], hero["level"]])
+	if report["mvp"] != "":
+		lines.append("MVP : %s" % report["mvp"])
+	box.add_child(UI.make_system_window("Étage conquis !" if report["victory"] else "Défaite", lines))
 
 	var continue_button := UI.make_button("Continuer", func(): closed.emit())
 	continue_button.custom_minimum_size.y = 90

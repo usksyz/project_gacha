@@ -1,19 +1,17 @@
 class_name DungeonsScreen
 extends Control
-## Donjons : la Tour (combats automatiques, étage par étage) et les donjons journaliers (à venir).
+## Donjons : la Tour (combats automatiques, étage par étage) et le donjon journalier (à venir).
 ## L'écran a trois « pages » : la liste des donjons, le choix de l'équipe, et le combat.
 
-const DAILY_MODES := [
-	{"name": "Donjon d'expérience", "info": "Donjon journalier : fais gagner de l'expérience à tes héros."},
-	{"name": "Donjon de ressources", "info": "Donjon journalier : récolte des matériaux pour la cité."},
-	{"name": "Donjon d'or", "info": "Donjon journalier : amasse de l'or."},
-]
+## Étage à franchir pour débloquer le donjon journalier.
+const DAILY_UNLOCK_FLOOR := 5
 
 var list_page: Control
 var team_page: Control
 var battle_view: BattleView
 
 var floor_label: Label
+var daily_label: Label
 var team_title: Label
 var enemies_box: VBoxContainer
 var pick_label: Label
@@ -49,6 +47,10 @@ func _show_page(page: Control) -> void:
 		other.visible = other == page
 	if page == list_page:
 		floor_label.text = "Étage actuel : %d" % GameData.tower_floor
+		if GameData.tower_floor > DAILY_UNLOCK_FLOOR:
+			daily_label.text = "Débloqué ! (bientôt disponible)"
+		else:
+			daily_label.text = "Verrouillé : franchis l'étage %d" % DAILY_UNLOCK_FLOOR
 
 
 # --- Page 1 : liste des donjons ---
@@ -60,7 +62,7 @@ func _build_list_page() -> Control:
 	margin.add_child(layout)
 
 	var tower := _make_card(layout, "La Tour",
-		"Grimpe les étages un par un. Chaque étage est plus dangereux que le précédent. Un boss garde tous les 10 étages.")
+		"Grimpe les étages un par un. Chaque étage est plus dangereux que le précédent. Un boss garde tous les %d étages." % GameData.BOSS_EVERY)
 	floor_label = UI.make_label("", 26)
 	floor_label.add_theme_color_override("font_color", Color("f5b82e"))
 	tower.add_child(floor_label)
@@ -68,11 +70,11 @@ func _build_list_page() -> Control:
 	enter.custom_minimum_size.y = 80
 	tower.add_child(enter)
 
-	for mode in DAILY_MODES:
-		var content := _make_card(layout, mode["name"], mode["info"])
-		var soon := UI.make_label("Bientôt", 22)
-		soon.add_theme_color_override("font_color", Color("f5b82e"))
-		content.add_child(soon)
+	var daily := _make_card(layout, "Donjon journalier",
+		"Un donjon qui change chaque jour : tes héros y récoltent des matériaux rares.")
+	daily_label = UI.make_label("", 22)
+	daily_label.add_theme_color_override("font_color", Color("f5b82e"))
+	daily.add_child(daily_label)
 	return margin
 
 
@@ -163,12 +165,13 @@ func _open_tower() -> void:
 
 	for child in enemies_box.get_children():
 		child.queue_free()
-	var header := UI.make_label("Ennemis (récompense : %d gemmes)" % GameData.tower_reward(floor_number), 22)
+	var rewards := GameData.tower_rewards(floor_number)
+	var header := UI.make_label("Récompense : %d or, %d gemmes" % [rewards["gold"], rewards["gems"]], 22)
 	header.modulate = Color(1, 1, 1, 0.7)
 	enemies_box.add_child(header)
 	for enemy in floor_enemies:
-		var stats: Dictionary = enemy["stats"]
-		var text := "%s (%s) — PV %d, ATQ %d" % [enemy["name"], enemy["class"], stats["hp"], stats["atk"]]
+		var text := "%s niv. %d (%s) — PV %d" % [enemy["name"], enemy["level"], enemy["class"],
+			GameData.combat_stats(enemy)["hp"]]
 		enemies_box.add_child(UI.make_label(text, 22))
 
 	_refresh_team()
@@ -226,10 +229,10 @@ func _start_fight() -> void:
 	battle.run()
 	# Le résultat est appliqué tout de suite : quitter l'écran pendant l'animation
 	# ne permet pas d'éviter la mort d'un héros.
-	var reward := GameData.finish_tower_battle(battle)
+	var report := GameData.finish_tower_battle(battle)
 
 	_show_page(battle_view)
-	battle_view.play(battle, "La Tour — Étage %d" % floor_number, reward)
+	battle_view.play(battle, "La Tour — Étage %d" % floor_number, report)
 
 
 func _make_margin() -> MarginContainer:

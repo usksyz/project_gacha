@@ -39,6 +39,33 @@ static func set_button_style(button: Button, normal: StyleBox, pressed: StyleBox
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
+## Fenêtre « système » : fond sombre, bordure violette, titre centré en majuscules.
+## « danger » = variante rouge, pour les alertes graves (mort d'un héros...).
+## Chaque ligne de « lines » devient un texte centré.
+static func make_system_window(title: String, lines: Array, danger := false) -> PanelContainer:
+	var accent := Color("e05252") if danger else Color("9b6be0")
+	var panel := PanelContainer.new()
+	var style := make_panel_style(Color("15121f"), accent, 3)
+	style.set_content_margin_all(20)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 6)
+	panel.add_child(content)
+	var title_label := make_label(title.to_upper(), 26)
+	title_label.add_theme_color_override("font_color", accent.lightened(0.3))
+	content.add_child(title_label)
+	for line in lines:
+		var label := make_label(line, 22)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if danger:
+			label.add_theme_color_override("font_color", accent.lightened(0.4))
+		content.add_child(label)
+	for label in content.get_children():
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return panel
+
+
 static func rarity_text(rarity: int) -> String:
 	return "%d étoile%s" % [rarity, "s" if rarity > 1 else ""]
 
@@ -68,6 +95,7 @@ static func make_hero_card(hero: Dictionary) -> Button:
 	var hero_class := make_label(hero["class"], 14)
 	hero_class.modulate = Color(1, 1, 1, 0.7)
 	content.add_child(hero_class)
+	content.add_child(make_label("Niv. %d" % hero["level"], 14))
 
 	for label in content.get_children():
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
