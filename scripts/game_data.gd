@@ -161,6 +161,18 @@ var used_codes: Array[String] = []
 
 
 func _ready() -> void:
+	reset_game()
+
+
+## Remet la partie à zéro (au lancement, et depuis les paramètres : « Recommencer la partie »).
+func reset_game() -> void:
+	gems = 3000
+	gold = 0
+	pity_counter = 0
+	tower_floor = 1
+	roster.clear()
+	next_hero_id = 1
+	used_codes.clear()
 	# Han est là dès le début de la partie.
 	roster.append(_create_secret_hero("Han"))
 

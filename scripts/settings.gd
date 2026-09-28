@@ -1,0 +1,81 @@
+extends Node
+## Paramètres du joueur (son, vibrations, vitesse de combat...).
+## Chargé automatiquement au lancement (« autoload ») : accessible partout en écrivant Settings.
+## Les réglages sont enregistrés sur l'appareil, dans un petit fichier, et relus au lancement.
+
+const FILE_PATH := "user://parametres.cfg"
+
+## Volumes, de 0 à 100 (%).
+var music_volume := 80
+var sfx_volume := 80
+var vibrations := true
+var fullscreen := false
+## Vitesse de combat : index dans BattleView.SPEEDS (0 = x1, 1 = x2, 2 = x4).
+var battle_speed_index := 0
+
+
+func _ready() -> void:
+	# Deux « bus » audio : la musique et les effets ont chacun leur volume.
+	for bus_name in ["Musique", "Effets"]:
+		if AudioServer.get_bus_index(bus_name) == -1:
+			var index := AudioServer.bus_count
+			AudioServer.add_bus(index)
+			AudioServer.set_bus_name(index, bus_name)
+			AudioServer.set_bus_send(index, "Master")
+	load_settings()
+	_apply_volumes()
+	# Sur le web, le navigateur n'autorise le plein écran qu'après un appui du joueur.
+	if fullscreen and not OS.has_feature("web"):
+		apply_fullscreen()
+
+
+## Enregistre un réglage sur l'appareil et l'applique tout de suite.
+func change(setting: String, value: Variant) -> void:
+	set(setting, value)
+	_apply_volumes()
+	if setting == "fullscreen":
+		apply_fullscreen()
+	save_settings()
+
+
+## Fait vibrer le téléphone (si les vibrations sont activées). « duration » en millisecondes.
+func vibrate(duration: int) -> void:
+	if vibrations:
+		Input.vibrate_handheld(duration)
+
+
+func apply_fullscreen() -> void:
+	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
+	DisplayServer.window_set_mode(mode)
+
+
+func _apply_volumes() -> void:
+	_set_bus_volume("Musique", music_volume)
+	_set_bus_volume("Effets", sfx_volume)
+
+
+func _set_bus_volume(bus_name: String, percent: int) -> void:
+	var index := AudioServer.get_bus_index(bus_name)
+	AudioServer.set_bus_mute(index, percent == 0)
+	AudioServer.set_bus_volume_db(index, linear_to_db(percent / 100.0))
+
+
+func save_settings() -> void:
+	var file := ConfigFile.new()
+	file.set_value("son", "musique", music_volume)
+	file.set_value("son", "effets", sfx_volume)
+	file.set_value("jeu", "vibrations", vibrations)
+	file.set_value("jeu", "plein_ecran", fullscreen)
+	file.set_value("jeu", "vitesse_combat", battle_speed_index)
+	file.save(FILE_PATH)
+
+
+func load_settings() -> void:
+	var file := ConfigFile.new()
+	if file.load(FILE_PATH) != OK:
+		return  # premier lancement : on garde les valeurs par défaut
+	music_volume = file.get_value("son", "musique", music_volume)
+	sfx_volume = file.get_value("son", "effets", sfx_volume)
+	vibrations = file.get_value("jeu", "vibrations", vibrations)
+	fullscreen = file.get_value("jeu", "plein_ecran", fullscreen)
+	battle_speed_index = file.get_value("jeu", "vitesse_combat", battle_speed_index)

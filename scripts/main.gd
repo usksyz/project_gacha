@@ -18,6 +18,7 @@ var screens := {}
 var nav_buttons := {}
 var title_label: Label
 var gems_label: Label
+var settings_panel: SettingsPanel
 
 
 func _ready() -> void:
@@ -49,6 +50,10 @@ func _ready() -> void:
 	for screen in screens.values():
 		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 		content.add_child(screen)
+
+	# Les paramètres s'affichent par-dessus tout le reste.
+	settings_panel = SettingsPanel.new()
+	add_child(settings_panel)
 
 	GameData.gems_changed.connect(func(_amount): _refresh_money())
 	GameData.gold_changed.connect(func(_amount): _refresh_money())
@@ -86,11 +91,37 @@ func _build_top_bar() -> Control:
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title_label)
-	gems_label = UI.make_label("", 28)
+	gems_label = UI.make_label("", 24)
 	gems_label.add_theme_color_override("font_color", ACCENT_COLOR)
 	gems_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(gems_label)
+
+	# Bouton des paramètres : une roue dentée.
+	var settings_button := UI.make_button("", func(): settings_panel.open())
+	settings_button.custom_minimum_size = Vector2(72, 72)
+	settings_button.flat = true
+	var gear := GearIcon.new()
+	gear.set_anchors_preset(Control.PRESET_FULL_RECT)
+	gear.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	settings_button.add_child(gear)
+	row.add_child(settings_button)
 	return bar
+
+
+## Icône de roue dentée, dessinée avec des formes simples :
+## 8 dents (des rectangles tournés), un disque, et un trou au milieu.
+class GearIcon extends Control:
+	const COLOR := Color("c9cbd6")
+
+	func _draw() -> void:
+		var center := size / 2
+		var radius := minf(size.x, size.y) * 0.24
+		for i in 8:
+			draw_set_transform(center, i * TAU / 8)
+			draw_rect(Rect2(-radius * 0.28, -radius * 1.4, radius * 0.56, radius * 0.8), COLOR)
+		draw_set_transform(Vector2.ZERO)
+		draw_circle(center, radius, COLOR)
+		draw_circle(center, radius * 0.42, BAR_COLOR)
 
 
 func _build_nav_bar() -> Control:

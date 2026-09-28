@@ -13,7 +13,7 @@ concernée avant de coder, et signaler les écarts plutôt que trancher seul.
 Noms : les mécaniques peuvent copier Pick Me Up, mais les noms et l'univers restent originaux.
 Seule exception : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron...), clins d'œil au manhwa.
 Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent par code secret
-(clavier de la Place publique, dans le hub). Ils sont définis dans `SECRET_HEROES` (`game_data.gd`).
+(Paramètres > Codes secrets, ou la Place publique du hub). Ils sont définis dans `SECRET_HEROES` (`game_data.gd`).
 
 ## Contexte
 - Le porteur du projet débute en programmation de jeux (bases de Python au lycée) :
@@ -27,6 +27,11 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - `scripts/game_data.gd` : autoload `GameData`, données et règles (invocation, fiche de héros :
   force/intelligence/santé/dextérité, niveaux et expérience, croissance cachée, héros secrets,
   ennemis et récompenses de la Tour).
+- `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran,
+  vitesse de combat), enregistrés dans `user://parametres.cfg`.
+- `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
+  secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : clavier des codes secrets (aussi sur la
+  Place publique du hub).
 - `scripts/ui.gd` : classe `UI`, fonctions communes (labels, boutons, cartes de héros, fenêtres système).
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),

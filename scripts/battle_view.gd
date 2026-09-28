@@ -22,7 +22,6 @@ var rows: Array[Control] = []
 var log_label: RichTextLabel
 var controls: HBoxContainer
 var speed_button: Button
-var speed_index := 0
 var skipping := false
 
 
@@ -47,7 +46,7 @@ func play(new_battle: Battle, title: String, report: Dictionary) -> void:
 	for event in new_battle.events:
 		_show_event(event)
 		if not skipping:
-			await get_tree().create_timer(STEP_DELAY / SPEEDS[speed_index]).timeout
+			await get_tree().create_timer(STEP_DELAY / SPEEDS[Settings.battle_speed_index]).timeout
 		if battle != new_battle:
 			return  # un autre combat a commencé entre-temps : on arrête de rejouer celui-ci
 	_show_result(report)
@@ -79,7 +78,7 @@ func _build(title: String) -> void:
 	log_label.add_theme_stylebox_override("normal", UI.make_panel_style(Color("12131c")))
 	layout.add_child(log_label)
 
-	# Boutons du bas : accélération (la vitesse choisie est gardée d'un combat à l'autre) et fin directe.
+	# Boutons du bas : accélération (la vitesse choisie est enregistrée dans les paramètres) et fin directe.
 	controls = HBoxContainer.new()
 	controls.add_theme_constant_override("separation", 16)
 	layout.add_child(controls)
@@ -94,8 +93,9 @@ func _build(title: String) -> void:
 
 ## Passe à la vitesse suivante (x1 → x2 → x4 → x1). « step » = 0 pour juste afficher la vitesse.
 func _next_speed(step := 1) -> void:
-	speed_index = (speed_index + step) % SPEEDS.size()
-	speed_button.text = "Vitesse x%d" % SPEEDS[speed_index]
+	if step != 0:
+		Settings.change("battle_speed_index", (Settings.battle_speed_index + step) % SPEEDS.size())
+	speed_button.text = "Vitesse x%d" % SPEEDS[Settings.battle_speed_index]
 
 
 func _build_team_column(team_name: String, fighters: Array, color: Color) -> Control:
@@ -170,6 +170,8 @@ func _show_result(report: Dictionary) -> void:
 	box.add_theme_constant_override("separation", 12)
 	scroll.add_child(box)
 
+	if not report["dead"].is_empty():
+		Settings.vibrate(400)
 	for death in report["dead"]:
 		var hero: Dictionary = death["hero"]
 		box.add_child(UI.make_system_window("Un héros est tombé", [
