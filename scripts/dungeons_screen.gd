@@ -1,19 +1,29 @@
 class_name DungeonsScreen
 extends Control
-## Donjons : la Tour (combats automatiques, étage par étage) et le donjon journalier (à venir).
-## L'écran a quatre « pages » : la liste des donjons, l'annonce de la quête de l'étage,
-## le choix de l'équipe, et le combat.
+## Donjons : la Tour (combats en temps réel, étage par étage) et le donjon journalier (à venir).
+## L'écran a cinq « pages » : la liste des donjons, la composition des équipes à l'avance,
+## l'annonce de la quête de l'étage, le choix de l'équipe, et le combat.
 
 ## Temps entre deux fenêtres d'avertissement, en secondes.
 const WARNING_DELAY := 0.7
 
 var list_page: Control
+var teams_page: Control
 var announce_page: Control
 var team_page: Control
 var battle_view: BattleView
 
 var announce_box: VBoxContainer
 var announce_button: Button
+
+## Page de composition : équipe en cours de modification (0 = Équipe 1), ses onglets,
+## ses places, et la grille des héros.
+var edited_team := 0
+var team_tabs: HBoxContainer
+var team_slots: HBoxContainer
+var team_hint: Label
+var compose_grid: GridContainer
+var presets_box: HBoxContainer
 
 ## Quête de l'étage qu'on s'apprête à affronter.
 var floor_quest: Dictionary = {}
@@ -35,14 +45,19 @@ var selected_ids: Array[int] = []
 
 func _ready() -> void:
 	list_page = _build_list_page()
+	teams_page = _build_teams_page()
 	announce_page = _build_announce_page()
 	team_page = _build_team_page()
 	battle_view = BattleView.new()
 	battle_view.closed.connect(func(): _show_page(list_page))
-	for page in [list_page, announce_page, team_page, battle_view]:
+	for page in _pages():
 		page.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(page)
 	_show_page(list_page)
+
+
+func _pages() -> Array:
+	return [list_page, teams_page, announce_page, team_page, battle_view]
 
 
 func on_shown() -> void:
@@ -52,7 +67,7 @@ func on_shown() -> void:
 
 
 func _show_page(page: Control) -> void:
-	for other in [list_page, announce_page, team_page, battle_view]:
+	for other in _pages():
 		other.visible = other == page
 	if page == list_page:
 		var quest := GameData.floor_quest(GameData.tower_floor)
@@ -79,6 +94,9 @@ func _build_list_page() -> Control:
 	var enter := UI.make_button("Entrer dans la Tour", _open_tower)
 	enter.custom_minimum_size.y = 80
 	tower.add_child(enter)
+	var compose := UI.make_button("Composer les équipes", _open_teams, 24)
+	compose.custom_minimum_size.y = 70
+	tower.add_child(compose)
 
 	var daily := _make_card(layout, "Donjon journalier",
 		"Un donjon qui change chaque jour : tes héros y récoltent des matériaux rares.")
@@ -106,6 +124,113 @@ func _make_card(parent: Control, title: String, info: String) -> VBoxContainer:
 	info_label.modulate = Color(1, 1, 1, 0.7)
 	content.add_child(info_label)
 	return content
+
+
+# --- Composition des équipes à l'avance ---
+
+func _build_teams_page() -> Control:
+	var margin := _make_margin()
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 12)
+	margin.add_child(layout)
+
+	var title := UI.make_label("Composition des équipes", 36)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	layout.add_child(title)
+
+	# Onglets : Équipe 1, Équipe 2, Équipe 3.
+	team_tabs = HBoxContainer.new()
+	team_tabs.add_theme_constant_override("separation", 8)
+	layout.add_child(team_tabs)
+
+	# Les places de l'équipe choisie : une carte par héros, ou une place libre.
+	var slots_panel := PanelContainer.new()
+	slots_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b")))
+	layout.add_child(slots_panel)
+	var slots_center := CenterContainer.new()
+	slots_panel.add_child(slots_center)
+	team_slots = HBoxContainer.new()
+	team_slots.add_theme_constant_override("separation", 8)
+	slots_center.add_child(team_slots)
+
+	team_hint = UI.make_label("", 22)
+	team_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(team_hint)
+
+	var scroll := UI.make_scroll()
+	layout.add_child(scroll)
+	var centered := CenterContainer.new()
+	centered.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(centered)
+	compose_grid = GridContainer.new()
+	compose_grid.columns = 5
+	compose_grid.add_theme_constant_override("h_separation", 8)
+	compose_grid.add_theme_constant_override("v_separation", 8)
+	centered.add_child(compose_grid)
+
+	var back := UI.make_button("Terminé", func(): _show_page(list_page))
+	back.custom_minimum_size.y = 90
+	layout.add_child(back)
+	return margin
+
+
+func _open_teams() -> void:
+	edited_team = 0
+	_refresh_teams_page()
+	_show_page(teams_page)
+
+
+func _refresh_teams_page() -> void:
+	for box in [team_tabs, team_slots]:
+		for child in box.get_children():
+			box.remove_child(child)
+			child.queue_free()
+
+	for index in GameData.TEAM_COUNT:
+		var tab := UI.make_button("Équipe %d" % (index + 1), _select_team.bind(index), 24)
+		tab.custom_minimum_size.y = 70
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if index == edited_team:
+			tab.add_theme_color_override("font_color", Color("f5b82e"))
+			tab.add_theme_color_override("font_hover_color", Color("f5b82e"))
+		tab.modulate = Color.WHITE if index == edited_team else Color(1, 1, 1, 0.6)
+		team_tabs.add_child(tab)
+
+	var members := GameData.team_members(edited_team)
+	for hero in members:
+		var card := UI.make_hero_card(hero)
+		card.custom_minimum_size = Vector2(108, 150)
+		card.pressed.connect(_toggle_team_member.bind(hero["id"]))  # toucher une carte la retire
+		team_slots.add_child(card)
+	for i in GameData.TEAM_SIZE - members.size():
+		var empty := PanelContainer.new()
+		empty.custom_minimum_size = Vector2(108, 150)
+		empty.add_theme_stylebox_override("panel", UI.make_panel_style(Color("1b1d2a"), Color("3a3f55"), 2))
+		var plus := UI.make_label("+", 40)
+		plus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		plus.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		plus.modulate = Color(1, 1, 1, 0.3)
+		empty.add_child(plus)
+		team_slots.add_child(empty)
+
+	var member_ids := members.map(func(hero): return hero["id"])
+	_fill_hero_grid(compose_grid, _sorted_heroes(), member_ids, _toggle_team_member)
+	team_hint.text = "Équipe %d : %d/%d héros. Touche un héros pour l'ajouter ou le retirer. Tout est enregistré." \
+		% [edited_team + 1, members.size(), GameData.TEAM_SIZE]
+
+
+func _select_team(index: int) -> void:
+	edited_team = index
+	_refresh_teams_page.call_deferred()
+
+
+func _toggle_team_member(hero_id: int) -> void:
+	if not GameData.toggle_team_member(edited_team, hero_id):
+		team_hint.text = "L'équipe %d est complète (%d héros). Retire d'abord un héros." \
+			% [edited_team + 1, GameData.TEAM_SIZE]
+		return
+	# « call_deferred » : on reconstruit juste après, pas pendant l'appui sur la carte.
+	_refresh_teams_page.call_deferred()
 
 
 # --- Page 2 : annonce de la quête ---
@@ -194,6 +319,11 @@ func _build_team_page() -> Control:
 	pick_label = UI.make_label("", 24)
 	layout.add_child(pick_label)
 
+	# Un bouton par équipe composée à l'avance : elle est choisie d'un seul toucher.
+	presets_box = HBoxContainer.new()
+	presets_box.add_theme_constant_override("separation", 8)
+	layout.add_child(presets_box)
+
 	no_hero_label = UI.make_label("Aucun héros en vie.\nVa en invoquer dans la Salle d'invocation !", 24)
 	no_hero_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(no_hero_label)
@@ -267,31 +397,59 @@ func _enemy_summary() -> Array:
 
 
 func _refresh_team() -> void:
-	for child in heroes_grid.get_children():
-		heroes_grid.remove_child(child)
-		child.queue_free()
+	var heroes := _sorted_heroes()
+	_fill_hero_grid(heroes_grid, heroes, selected_ids, _toggle_hero)
 
-	# Tri : les plus rares d'abord, puis dans l'ordre d'invocation.
+	# Boutons des équipes composées à l'avance (grisés si l'équipe est vide).
+	for child in presets_box.get_children():
+		presets_box.remove_child(child)
+		child.queue_free()
+	for index in GameData.TEAM_COUNT:
+		var members := GameData.team_members(index)
+		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()], _use_team.bind(index), 22)
+		button.custom_minimum_size.y = 70
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.disabled = members.is_empty()
+		presets_box.add_child(button)
+
+	no_hero_label.visible = heroes.is_empty()
+	pick_label.text = "Choisis une équipe, ou jusqu'à %d héros :" % GameData.TEAM_SIZE
+	fight_button.text = "Combattre (%d/%d)" % [selected_ids.size(), GameData.TEAM_SIZE]
+	fight_button.disabled = selected_ids.is_empty()
+
+
+## Choisit d'un coup les héros (encore en vie) d'une équipe composée à l'avance.
+func _use_team(index: int) -> void:
+	selected_ids.clear()
+	for hero in GameData.team_members(index):
+		selected_ids.append(hero["id"])
+	_refresh_team.call_deferred()
+
+
+## Les héros en vie, les plus rares d'abord, puis dans l'ordre d'invocation.
+func _sorted_heroes() -> Array[Dictionary]:
 	var heroes := GameData.alive_heroes()
 	heroes.sort_custom(func(a, b):
 		if a["rarity"] != b["rarity"]:
 			return a["rarity"] > b["rarity"]
 		return a["id"] < b["id"])
+	return heroes
 
+
+## Remplit une grille de cartes de héros. Les héros de « chosen_ids » ont une épaisse
+## bordure blanche ; toucher une carte appelle « on_press » avec le numéro du héros.
+func _fill_hero_grid(grid: GridContainer, heroes: Array[Dictionary], chosen_ids: Array, on_press: Callable) -> void:
+	for child in grid.get_children():
+		grid.remove_child(child)
+		child.queue_free()
 	for hero in heroes:
 		var card := UI.make_hero_card(hero)
-		if hero["id"] in selected_ids:
-			# Un héros choisi a une épaisse bordure blanche.
+		if hero["id"] in chosen_ids:
 			var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
 			var style := UI.make_panel_style(color.darkened(0.2), Color.WHITE, 8)
 			UI.set_button_style(card, style, style)
-		card.pressed.connect(_toggle_hero.bind(hero["id"]))
-		heroes_grid.add_child(card)
-
-	no_hero_label.visible = heroes.is_empty()
-	pick_label.text = "Choisis jusqu'à %d héros :" % GameData.TEAM_SIZE
-	fight_button.text = "Combattre (%d/%d)" % [selected_ids.size(), GameData.TEAM_SIZE]
-	fight_button.disabled = selected_ids.is_empty()
+		card.pressed.connect(on_press.bind(hero["id"]))
+		grid.add_child(card)
 
 
 ## Ajoute ou retire un héros de l'équipe.

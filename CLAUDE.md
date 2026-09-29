@@ -45,8 +45,11 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - `scripts/ui.gd` : classe `UI`, fonctions communes (labels, boutons, cartes de héros, fenêtres système).
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
-  `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, annonce de la
-  quête de l'étage, choix de l'équipe, combat).
+  `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, composition des
+  équipes à l'avance, annonce de la quête de l'étage, choix de l'équipe, combat).
+- Équipes composées à l'avance : `GameData.teams` (`TEAM_COUNT` = 3 équipes de `TEAM_SIZE` héros,
+  sauvegardées ; un héros mort les quitte). Donjons > « Composer les équipes » pour les modifier ;
+  avant un étage, un bouton par équipe la sélectionne d'un toucher.
 - `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
   de 0,1 s (`start()` puis `step()`) : grille avec décor, recherche de chemin `AStarGrid2D`, ligne de
   vue pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres

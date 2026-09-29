@@ -167,6 +167,9 @@ func new_skill(skill_name: String) -> Dictionary:
 ## Nombre maximum de héros dans une équipe de combat.
 const TEAM_SIZE := 5
 
+## Nombre d'équipes que le joueur peut composer à l'avance.
+const TEAM_COUNT := 3
+
 ## Un boss garde tous les étages multiples de ce nombre (5, 10, 15...).
 const BOSS_EVERY := 5
 
@@ -239,6 +242,9 @@ var next_hero_id := 1
 ## Codes secrets déjà utilisés.
 var used_codes: Array[String] = []
 
+## Équipes composées à l'avance : TEAM_COUNT listes de numéros (id) de héros, dans l'ordre choisi.
+var teams: Array = []
+
 ## Combat de la Tour en cours (vide s'il n'y en a pas) : {"floor", "team": [id des héros],
 ## "enemies": [...], "quest": {...}}. Il est sauvegardé dès le début du combat : si le jeu est fermé
 ## en plein combat, les héros se débrouillent seuls et le combat est terminé au lancement suivant.
@@ -272,6 +278,7 @@ func _new_game() -> void:
 	roster.clear()
 	next_hero_id = 1
 	used_codes.clear()
+	teams = _empty_teams()
 	pending_battle = {}
 	absence_report = {}
 	# Han est là dès le début de la partie.
@@ -304,6 +311,7 @@ func save_game() -> void:
 	file.set_value("partie", "prochain_id", next_hero_id)
 	file.set_value("partie", "codes_utilises", used_codes)
 	file.set_value("partie", "heros", roster)
+	file.set_value("partie", "equipes", teams)
 	file.set_value("partie", "combat_en_cours", pending_battle)
 	file.save(SAVE_PATH)
 
@@ -321,6 +329,9 @@ func load_game() -> bool:
 	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
 	used_codes.assign(file.get_value("partie", "codes_utilises", []))
 	roster.assign(file.get_value("partie", "heros", []))
+	teams = file.get_value("partie", "equipes", _empty_teams())
+	while teams.size() < TEAM_COUNT:
+		teams.append([])
 	pending_battle = file.get_value("partie", "combat_en_cours", {})
 	return not roster.is_empty()
 
@@ -329,6 +340,47 @@ func load_game() -> bool:
 func delete_save() -> void:
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
+
+
+# ---------------------------------------------------------------------------
+# Équipes composées à l'avance
+# ---------------------------------------------------------------------------
+
+func _empty_teams() -> Array:
+	var result := []
+	for i in TEAM_COUNT:
+		result.append([])
+	return result
+
+
+## Les héros encore en vie d'une équipe (numéro 0 pour l'Équipe 1), dans l'ordre choisi.
+func team_members(index: int) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero_id in teams[index]:
+		for hero in roster:
+			if hero["id"] == hero_id and hero["alive"]:
+				result.append(hero)
+	return result
+
+
+## Ajoute un héros à une équipe, ou l'en retire s'il y est déjà.
+## Renvoie faux si l'équipe est déjà complète.
+func toggle_team_member(index: int, hero_id: int) -> bool:
+	var members: Array = teams[index]
+	if hero_id in members:
+		members.erase(hero_id)
+	elif team_members(index).size() >= TEAM_SIZE:
+		return false
+	else:
+		members.append(hero_id)
+	save_game()
+	return true
+
+
+## Un héros mort quitte toutes les équipes.
+func _remove_from_teams(hero_id: int) -> void:
+	for members in teams:
+		members.erase(hero_id)
 
 
 # ---------------------------------------------------------------------------
@@ -707,6 +759,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	for fighter in battle.heroes:
 		if fighter["hp"] <= 0 and not fighter["immortal"]:
 			fighter["source"]["alive"] = false
+			_remove_from_teams(fighter["source"]["id"])
 			# La cause est gardée sur la fiche du héros (et donc dans la sauvegarde).
 			fighter["source"]["death_cause"] = fighter["killer"]
 			report["dead"].append({"hero": fighter["source"], "cause": fighter["killer"]})
