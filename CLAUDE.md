@@ -64,6 +64,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   renforts, survie à la horde tous les 5 étages (niveau caché), défense de la cité tous les 10 étages
   (remparts, triple avertissement), limite de tours, annonce du donjon journalier après l'étage 5 : fait.
   Au combat, 6 ennemis au plus à la fois, les autres arrivent en renfort.
+  Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
+  impossible au niveau de départ). C'est un palier réservé aux héros équipés, avec des compétences
+  et de l'expérience : ne pas l'adoucir sans lui demander.
   Reste : matériaux gradés, glisser-déposer, équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation de héros faite (mages rares). Reste : tirage d'armes, arsenal.
