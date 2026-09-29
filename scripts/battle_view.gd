@@ -19,12 +19,14 @@ const STYLE_COLORS := {
 	"bleed": Color("e07070"),    # saignement, hémorragie
 	"awaken": Color("c9a2ff"),   # éveil des compétences
 	"berserk": Color("ff4040"),  # mode Berserk
+	"reinforce": Color("f5b82e"),  # renforts ennemis, remparts
 }
 
 var battle: Battle
 var layout: VBoxContainer
 var bars: Array[ProgressBar] = []  # une barre de vie par combattant (héros, puis ennemis)
 var hp_labels: Array[Label] = []
+var name_labels: Array[Label] = []
 var rows: Array[Control] = []
 var log_label: RichTextLabel
 var controls: HBoxContainer
@@ -65,6 +67,7 @@ func _build(title: String) -> void:
 		child.queue_free()
 	bars.clear()
 	hp_labels.clear()
+	name_labels.clear()
 	rows.clear()
 
 	var title_label := UI.make_label(title, 40)
@@ -121,7 +124,8 @@ func _build_team_column(team_name: String, fighters: Array, color: Color) -> Con
 
 		var line := HBoxContainer.new()
 		row.add_child(line)
-		var name_label := UI.make_label("%s  niv. %d" % [fighter["name"], fighter["level"]], 20)
+		var name_label := UI.make_label(_fighter_title(fighter["name"], fighter["level"], fighter["hidden_level"]), 20)
+		name_labels.append(name_label)
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.clip_text = true
 		line.add_child(name_label)
@@ -143,6 +147,11 @@ func _build_team_column(team_name: String, fighters: Array, color: Color) -> Con
 	return column
 
 
+## « Gobelin A  niv. 3 », ou « niv. ? » quand le niveau est caché (quête de survie).
+func _fighter_title(fighter_name: String, level: int, hidden_level: bool) -> String:
+	return "%s  niv. %s" % [fighter_name, "?" if hidden_level else str(level)]
+
+
 func _bar_style(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
@@ -151,6 +160,11 @@ func _bar_style(color: Color) -> StyleBoxFlat:
 
 
 func _show_event(event: Dictionary) -> void:
+	# Renforts : un nouvel ennemi prend la place d'un ennemi tombé.
+	for arrival in event.get("arrivals", []):
+		var index: int = arrival["index"]
+		name_labels[index].text = _fighter_title(arrival["name"], arrival["level"], battle.quest["hidden_level"])
+		bars[index].max_value = arrival["max_hp"]
 	var style: String = event.get("style", "")
 	if style in STYLE_COLORS:
 		log_label.push_color(STYLE_COLORS[style])
@@ -193,6 +207,8 @@ func _show_result(report: Dictionary) -> void:
 			"Cause : %s." % death["cause"],
 		], true))
 
+	if not report["notices"].is_empty():
+		box.add_child(UI.make_system_window("Félicitations !", report["notices"]))
 	if not report["skills"].is_empty():
 		box.add_child(UI.make_system_window("Éveil des compétences !", report["skills"]))
 

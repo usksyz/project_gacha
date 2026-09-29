@@ -170,6 +170,28 @@ const TEAM_SIZE := 5
 ## Un boss garde tous les étages multiples de ce nombre (5, 10, 15...).
 const BOSS_EVERY := 5
 
+## Étage à franchir pour débloquer le donjon journalier.
+const DAILY_UNLOCK_FLOOR := 5
+
+## Types de quêtes d'étage : nom affiché et objectif.
+## Extermination, subjugation, annihilation : tuer tous les ennemis (l'annihilation ajoute des renforts).
+## Survie et défense : tenir jusqu'à la fin du compte à rebours, face à une horde.
+const QUEST_TYPES := {
+	"extermination": {"name": "Extermination", "objective": "Éliminer tous les ennemis."},
+	"subjugation": {"name": "Subjugation", "objective": "Éliminer tous les ennemis."},
+	"annihilation": {"name": "Annihilation", "objective": "Éliminer tous les ennemis, renforts compris."},
+	"survival": {"name": "Survie", "objective": "Survivre à la horde jusqu'à la fin du compte à rebours."},
+	"defense": {"name": "Défense", "objective": "Empêcher la cité de tomber jusqu'à la fin du compte à rebours."},
+}
+
+## Limite de temps, en tours de combat : pour tuer tous les ennemis, ou à tenir (survie, défense).
+const KILL_QUEST_ROUNDS := 25
+const SURVIVAL_ROUNDS := 12
+
+## Solidité des remparts d'une quête de défense : chaque ennemi encore debout
+## à la fin d'un tour leur retire 1 point. À 0, la cité tombe.
+const DEFENSE_WALLS := 75
+
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
 
@@ -525,10 +547,37 @@ func tower_rewards(floor_number: int) -> Dictionary:
 	}
 
 
-## Crée les ennemis d'un étage : de plus en plus nombreux (6 au maximum), de plus en plus
-## forts, et de nouveaux monstres apparaissent en montant. Sur un étage de boss,
+## Quête d'un étage : son type, son objectif et ses règles.
+## Étage 1 : extermination ; étage 2 : subjugation ; ensuite annihilation ;
+## tous les 5 étages : survie face à une horde (niveau des ennemis caché) ;
+## tous les 10 étages : défense de la cité, annoncée par trois avertissements.
+func floor_quest(floor_number: int) -> Dictionary:
+	var type := "annihilation"
+	if floor_number % 10 == 0:
+		type = "defense"
+	elif floor_number % 5 == 0:
+		type = "survival"
+	elif floor_number == 1:
+		type = "extermination"
+	elif floor_number == 2:
+		type = "subjugation"
+	var quest: Dictionary = QUEST_TYPES[type].duplicate()
+	quest["type"] = type
+	quest["lasting"] = type in ["survival", "defense"]  # il faut tenir, pas tout tuer
+	quest["rounds"] = SURVIVAL_ROUNDS if quest["lasting"] else KILL_QUEST_ROUNDS
+	quest["warnings"] = 3 if type == "defense" else 0
+	quest["hidden_level"] = type == "survival"
+	quest["walls"] = DEFENSE_WALLS if type == "defense" else 0
+	return quest
+
+
+## Crée les ennemis d'un étage : de plus en plus nombreux, de plus en plus forts,
+## et de nouveaux monstres apparaissent en montant. Sur un étage de boss,
 ## le boss prend la place de 2 monstres (il en reste toujours au moins 2 pour l'escorter).
+## Au combat, 6 ennemis au plus se battent en même temps : les autres arrivent en renfort
+## (annihilation : quelques-uns ; survie et défense : toute une horde).
 func tower_enemies(floor_number: int) -> Array[Dictionary]:
+	var quest := floor_quest(floor_number)
 	var level := floor_enemy_level(floor_number)
 	var enemies: Array[Dictionary] = []
 	var monster_count := mini(2 + floor_number / 2, 6)
@@ -536,6 +585,13 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 		var boss_index := mini(floor_number / BOSS_EVERY - 1, BOSS_TYPES.size() - 1)
 		enemies.append(_create_enemy(BOSS_TYPES[boss_index], level + 2))
 		monster_count = maxi(2, monster_count - 2)
+	match quest["type"]:
+		"annihilation":
+			monster_count += floor_number / 3
+		"survival":
+			monster_count += 4 + floor_number / 2
+		"defense":
+			monster_count += 4 + floor_number / 2
 	var known_types := ENEMY_TYPES.slice(0, mini(1 + floor_number / 2, ENEMY_TYPES.size()))
 	for i in monster_count:
 		enemies.append(_create_enemy(known_types.pick_random(), level))
@@ -552,7 +608,9 @@ func _create_enemy(template: Dictionary, level: int) -> Dictionary:
 		if stat != "dex":  # la vitesse change peu, pour que l'ordre d'action reste lisible
 			value *= multiplier
 		stats[stat] = maxi(1, roundi(value * randf_range(0.9, 1.1)))
-	return {"name": template["name"], "class": template["class"], "level": level, "stats": stats}
+	# « base_name » garde le nom sans lettre (Gobelin), pour regrouper les ennemis à l'affichage.
+	return {"name": template["name"], "base_name": template["name"], "class": template["class"],
+		"level": level, "stats": stats}
 
 
 ## Ajoute une lettre aux ennemis qui portent le même nom (Gobelin A, Gobelin B...),
@@ -584,8 +642,12 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"dead": [],       # [{"hero": ..., "cause": ...}]
 		"level_ups": [],  # [{"hero": ..., "levels": ...}]
 		"skills": [],     # compétences apprises ou améliorées pendant le combat (textes)
+		"notices": [],    # annonces spéciales (déblocages...)
 		"mvp": battle.mvp(),
 	}
+	if battle.victory and tower_floor == DAILY_UNLOCK_FLOOR:
+		report["notices"].append("Félicitations, Maître ! Vous avez franchi le %de étage. Le donjon journalier est débloqué." % DAILY_UNLOCK_FLOOR)
+		report["notices"].append("Conseil : rassemblez des matériaux et renforcez vos héros avant de monter plus haut.")
 	for fighter in battle.heroes:
 		if fighter["hp"] <= 0 and not fighter["immortal"]:
 			fighter["source"]["alive"] = false

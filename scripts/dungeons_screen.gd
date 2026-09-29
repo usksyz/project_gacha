@@ -1,14 +1,22 @@
 class_name DungeonsScreen
 extends Control
 ## Donjons : la Tour (combats automatiques, étage par étage) et le donjon journalier (à venir).
-## L'écran a trois « pages » : la liste des donjons, le choix de l'équipe, et le combat.
+## L'écran a quatre « pages » : la liste des donjons, l'annonce de la quête de l'étage,
+## le choix de l'équipe, et le combat.
 
-## Étage à franchir pour débloquer le donjon journalier.
-const DAILY_UNLOCK_FLOOR := 5
+## Temps entre deux fenêtres d'avertissement, en secondes.
+const WARNING_DELAY := 0.7
 
 var list_page: Control
+var announce_page: Control
 var team_page: Control
 var battle_view: BattleView
+
+var announce_box: VBoxContainer
+var announce_button: Button
+
+## Quête de l'étage qu'on s'apprête à affronter.
+var floor_quest: Dictionary = {}
 
 var floor_label: Label
 var daily_label: Label
@@ -27,10 +35,11 @@ var selected_ids: Array[int] = []
 
 func _ready() -> void:
 	list_page = _build_list_page()
+	announce_page = _build_announce_page()
 	team_page = _build_team_page()
 	battle_view = BattleView.new()
 	battle_view.closed.connect(func(): _show_page(list_page))
-	for page in [list_page, team_page, battle_view]:
+	for page in [list_page, announce_page, team_page, battle_view]:
 		page.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(page)
 	_show_page(list_page)
@@ -43,14 +52,15 @@ func on_shown() -> void:
 
 
 func _show_page(page: Control) -> void:
-	for other in [list_page, team_page, battle_view]:
+	for other in [list_page, announce_page, team_page, battle_view]:
 		other.visible = other == page
 	if page == list_page:
-		floor_label.text = "Étage actuel : %d" % GameData.tower_floor
-		if GameData.tower_floor > DAILY_UNLOCK_FLOOR:
+		var quest := GameData.floor_quest(GameData.tower_floor)
+		floor_label.text = "Étage actuel : %d (%s)" % [GameData.tower_floor, quest["name"]]
+		if GameData.tower_floor > GameData.DAILY_UNLOCK_FLOOR:
 			daily_label.text = "Débloqué ! (bientôt disponible)"
 		else:
-			daily_label.text = "Verrouillé : franchis l'étage %d" % DAILY_UNLOCK_FLOOR
+			daily_label.text = "Verrouillé : franchis l'étage %d" % GameData.DAILY_UNLOCK_FLOOR
 
 
 # --- Page 1 : liste des donjons ---
@@ -98,7 +108,67 @@ func _make_card(parent: Control, title: String, info: String) -> VBoxContainer:
 	return content
 
 
-# --- Page 2 : choix de l'équipe ---
+# --- Page 2 : annonce de la quête ---
+
+func _build_announce_page() -> Control:
+	var margin := _make_margin()
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 16)
+	margin.add_child(layout)
+
+	var scroll := UI.make_scroll()
+	layout.add_child(scroll)
+	announce_box = VBoxContainer.new()
+	announce_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	announce_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	announce_box.add_theme_constant_override("separation", 16)
+	scroll.add_child(announce_box)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	layout.add_child(buttons)
+	var back := UI.make_button("Retour", func(): _show_page(list_page))
+	back.custom_minimum_size = Vector2(200, 90)
+	buttons.add_child(back)
+	announce_button = UI.make_button("Former l'équipe", func(): _show_page(team_page))
+	announce_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(announce_button)
+	return margin
+
+
+## Affiche l'annonce de l'étage : d'abord les avertissements (une fenêtre rouge après l'autre),
+## puis la fenêtre de la quête.
+func _play_announce(floor_number: int) -> void:
+	for child in announce_box.get_children():
+		announce_box.remove_child(child)
+		child.queue_free()
+	announce_button.disabled = true
+
+	for i in floor_quest["warnings"]:
+		announce_box.add_child(UI.make_system_window("Avertissement !", [
+			"Cette quête est d'une difficulté extrême."], true))
+		Settings.vibrate(200)
+		await get_tree().create_timer(WARNING_DELAY).timeout
+		if not announce_page.visible:
+			return  # le joueur est reparti entre-temps
+
+	var lines := [
+		"Quête : %s" % floor_quest["name"],
+		"Objectif : %s" % floor_quest["objective"],
+	]
+	if floor_quest["lasting"]:
+		lines.append("Compte à rebours : %d tours à tenir." % floor_quest["rounds"])
+	else:
+		lines.append("Limite de temps : %d tours." % floor_quest["rounds"])
+	if floor_quest["walls"] > 0:
+		lines.append("Remparts de la cité : %d." % floor_quest["walls"])
+	if GameData.is_boss_floor(floor_number):
+		lines.append("Un boss garde cet étage.")
+	announce_box.add_child(UI.make_system_window("Étage %d" % floor_number, lines))
+	announce_button.disabled = false
+
+
+# --- Page 3 : choix de l'équipe ---
 
 func _build_team_page() -> Control:
 	var margin := _make_margin()
@@ -154,10 +224,11 @@ func _build_team_page() -> Control:
 ## Prépare l'étage actuel (ennemis) et affiche le choix de l'équipe.
 func _open_tower() -> void:
 	var floor_number := GameData.tower_floor
+	floor_quest = GameData.floor_quest(floor_number)
 	floor_enemies = GameData.tower_enemies(floor_number)
 	selected_ids.clear()
 
-	team_title.text = "Étage %d" % floor_number
+	team_title.text = "Étage %d — %s" % [floor_number, floor_quest["name"]]
 	if GameData.is_boss_floor(floor_number):
 		team_title.text += " — Boss !"
 
@@ -167,13 +238,32 @@ func _open_tower() -> void:
 	var header := UI.make_label("Récompense : %d or, %d gemmes" % [rewards["gold"], rewards["gems"]], 22)
 	header.modulate = Color(1, 1, 1, 0.7)
 	enemies_box.add_child(header)
-	for enemy in floor_enemies:
-		var text := "%s niv. %d (%s) — PV %d" % [enemy["name"], enemy["level"], enemy["class"],
-			GameData.combat_stats(enemy)["hp"]]
+	for text in _enemy_summary():
 		enemies_box.add_child(UI.make_label(text, 22))
 
 	_refresh_team()
-	_show_page(team_page)
+	_show_page(announce_page)
+	_play_announce(floor_number)
+
+
+## Liste des ennemis regroupés par type : « Gobelin niv. 3 (Assassin) x4 ».
+## En quête de survie, le niveau est caché : « niv. ? ».
+func _enemy_summary() -> Array:
+	var counts := {}
+	var examples := {}
+	for enemy in floor_enemies:
+		var key: String = enemy["base_name"]
+		counts[key] = counts.get(key, 0) + 1
+		examples[key] = enemy
+	var lines := []
+	for key in counts:
+		var enemy: Dictionary = examples[key]
+		var level: String = "?" if floor_quest["hidden_level"] else str(enemy["level"])
+		var text := "%s niv. %s (%s)" % [key, level, enemy["class"]]
+		if counts[key] > 1:
+			text += " x%d" % counts[key]
+		lines.append(text)
+	return lines
 
 
 func _refresh_team() -> void:
@@ -223,14 +313,14 @@ func _start_fight() -> void:
 			team.append(hero)
 
 	var floor_number := GameData.tower_floor
-	var battle := Battle.new(team, floor_enemies)
+	var battle := Battle.new(team, floor_enemies, floor_quest)
 	battle.run()
 	# Le résultat est appliqué tout de suite : quitter l'écran pendant l'animation
 	# ne permet pas d'éviter la mort d'un héros.
 	var report := GameData.finish_tower_battle(battle)
 
 	_show_page(battle_view)
-	battle_view.play(battle, "La Tour — Étage %d" % floor_number, report)
+	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]], report)
 
 
 func _make_margin() -> MarginContainer:

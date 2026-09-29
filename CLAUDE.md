@@ -45,7 +45,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - `scripts/ui.gd` : classe `UI`, fonctions communes (labels, boutons, cartes de héros, fenêtres système).
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
-  `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, choix de l'équipe, combat).
+  `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, annonce de la
+  quête de l'étage, choix de l'équipe, combat).
 - `scripts/battle.gd` : classe `Battle`, combat automatique calculé d'un coup (règles et
   particularités de chaque classe) ; `scripts/battle_view.gd` : classe `BattleView`, rejoue le combat.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
@@ -59,7 +60,12 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   Reste : fusion de compétences, rangs de compétence, compétences d'arme et d'entraînement,
   Berserk affiché sur la fiche, mana, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
-  Reste : quêtes d'étage (types, limite de temps, survie), matériaux gradés, glisser-déposer.
+  Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec
+  renforts, survie à la horde tous les 5 étages (niveau caché), défense de la cité tous les 10 étages
+  (remparts, triple avertissement), limite de tours, annonce du donjon journalier après l'étage 5 : fait.
+  Au combat, 6 ennemis au plus à la fois, les autres arrivent en renfort.
+  Reste : matériaux gradés, glisser-déposer, équipes de 3 et quêtes à deux équipes,
+  autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation de héros faite (mages rares). Reste : tirage d'armes, arsenal.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

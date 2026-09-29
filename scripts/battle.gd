@@ -30,8 +30,18 @@ extends RefCounted
 ## - un héros qui a saigné et termine le combat debout peut apprendre Résistance à la douleur.
 ## Les effets des compétences sont décrits dans GameData.SKILLS.
 
-## Au-delà de ce nombre de tours, l'équipe abandonne (le combat compte comme perdu).
-const MAX_ROUNDS := 30
+## Quête (voir GameData.floor_quest) :
+## - quêtes pour tuer tous les ennemis : passé la limite de tours, l'équipe abandonne (défaite) ;
+## - survie et défense : il faut tenir jusqu'à la fin de la limite de tours ;
+##   en défense, chaque ennemi debout à la fin d'un tour abîme les remparts de la cité.
+## 6 ennemis au plus se battent en même temps : les autres attendent en renfort
+## et prennent la place des ennemis tombés, au début du tour suivant.
+
+## Nombre d'ennemis qui combattent en même temps.
+const ENEMY_SLOTS := 6
+
+## Quête utilisée quand on n'en donne pas : tuer tous les ennemis en 30 tours au plus.
+const DEFAULT_QUEST := {"type": "extermination", "lasting": false, "rounds": 30, "hidden_level": false, "walls": 0}
 
 ## Un coup qui retire au moins cette part de la vie maximum fait saigner (0.35 = 35 %).
 const BLEED_HIT := 0.35
@@ -59,12 +69,20 @@ const BERSERK_HP := 0.3
 const DODGE_PER_LEVEL := 0.03
 const CALM_PER_LEVEL := 0.04
 
+var quest: Dictionary
 var heroes: Array[Dictionary] = []
+## Les ennemis qui combattent (ENEMY_SLOTS au plus). Un renfort remplace un ennemi tombé à sa place.
 var enemies: Array[Dictionary] = []
+## Les ennemis qui attendent d'entrer en renfort.
+var reserve: Array = []
+## Remparts de la cité (quête de défense seulement).
+var walls := 0
 
 ## Chaque événement : {"text": ce qui s'est passé, "hp": points de vie de tout le monde après,
-## "style": "" ou un genre d'événement ("bleed", "awaken", "berserk") pour le colorer à l'écran}.
+## "style": "" ou un genre d'événement ("bleed", "awaken", "berserk", "reinforce") pour le colorer à l'écran}.
 ## L'ordre des points de vie est : les héros, puis les ennemis.
+## Un événement de renforts a aussi « arrivals » : [{"index", "name", "level", "max_hp"}]
+## (index = position dans la liste des points de vie), pour que l'écran change les noms.
 var events: Array[Dictionary] = []
 
 var victory := false
@@ -74,11 +92,16 @@ var victory := false
 var _pending: Array = []
 
 
-func _init(team: Array, foes: Array) -> void:
+func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
+	quest = floor_quest
+	walls = quest["walls"]
 	for hero in team:
 		heroes.append(_make_fighter(hero, true))
 	for enemy in foes:
-		enemies.append(_make_fighter(enemy, false))
+		if enemies.size() < ENEMY_SLOTS:
+			enemies.append(_make_fighter(enemy, false))
+		else:
+			reserve.append(enemy)
 
 
 ## Joue tout le combat.
@@ -88,22 +111,61 @@ func run() -> void:
 
 
 func _fight() -> void:
-	for round_number in range(1, MAX_ROUNDS + 1):
-		_log("— Tour %d —" % round_number)
+	var rounds: int = quest["rounds"]
+	for round_number in range(1, rounds + 1):
+		_call_reinforcements()
+		if quest["lasting"]:
+			_log("— Tour %d — encore %d à tenir" % [round_number, rounds - round_number + 1])
+		else:
+			_log("— Tour %d / %d —" % [round_number, rounds])
 		for fighter in _turn_order():
 			if fighter["hp"] <= 0:
 				continue  # mis K.O. plus tôt dans ce tour
 			_bleed_tick(fighter)
 			if fighter["hp"] > 0:
 				_act(fighter)
-			if _alive(enemies).is_empty():
+			if _alive(enemies).is_empty() and reserve.is_empty():
 				victory = true
-				_log("Victoire !")
+				_log("Victoire ! Il ne reste plus un seul ennemi.")
 				return
 			if _alive(heroes).is_empty():
 				_log("Défaite... toute l'équipe est tombée.")
 				return
-	_log("Le combat s'éternise : ton équipe bat en retraite.")
+			if _alive(enemies).is_empty():
+				break  # la vague est tombée : les renforts arrivent au tour suivant
+		if walls > 0:
+			var attackers := _alive(enemies).size()
+			walls = maxi(0, walls - attackers)
+			if attackers > 0:
+				_log("Les ennemis frappent les remparts : -%d (reste %d/%d)." % [attackers, walls, quest["walls"]], "reinforce")
+			if walls == 0:
+				_log("Les remparts cèdent : la cité est tombée !")
+				return
+	if quest["lasting"]:
+		victory = true
+		_log("Le compte à rebours est terminé : ton équipe a tenu bon ! Victoire !")
+	else:
+		_log("Le temps est écoulé : ton équipe bat en retraite.")
+
+
+## Au début d'un tour, les ennemis en réserve prennent la place des ennemis tombés.
+func _call_reinforcements() -> void:
+	var arrivals := []
+	for i in enemies.size():
+		if enemies[i]["hp"] > 0 or reserve.is_empty():
+			continue
+		var fighter := _make_fighter(reserve.pop_front(), false)
+		enemies[i] = fighter
+		arrivals.append({"index": heroes.size() + i, "name": fighter["name"], "level": fighter["level"],
+			"max_hp": fighter["max_hp"]})
+	if arrivals.is_empty():
+		return
+	var names := arrivals.map(func(a): return a["name"])
+	var text := "Des renforts arrivent : %s." % ", ".join(names)
+	if not reserve.is_empty():
+		text += " (%d encore en approche)" % reserve.size()
+	_add_event(text, "reinforce")
+	events[-1]["arrivals"] = arrivals
 
 
 ## Le héros qui a le plus contribué (dégâts + soins), ou "" s'il n'y a aucun héros.
@@ -127,6 +189,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"level": source["level"],
 		"stars": "★".repeat(source.get("rarity", 1)),
 		"is_hero": is_hero,
+		"hidden_level": not is_hero and quest["hidden_level"],  # niveau affiché « ? »
 		"immortal": source.get("immortal", false),
 		"source": source,
 		"skills": source.get("skills", []).duplicate(true),
