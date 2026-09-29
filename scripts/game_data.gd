@@ -184,13 +184,17 @@ const QUEST_TYPES := {
 	"defense": {"name": "Défense", "objective": "Empêcher la cité de tomber jusqu'à la fin du compte à rebours."},
 }
 
-## Limite de temps, en tours de combat : pour tuer tous les ennemis, ou à tenir (survie, défense).
-const KILL_QUEST_ROUNDS := 25
-const SURVIVAL_ROUNDS := 12
+## Limite de temps, en secondes de combat : pour tuer tous les ennemis, ou à tenir (survie, défense).
+const KILL_QUEST_SECONDS := 90
+const SURVIVAL_SECONDS := 60
 
-## Solidité des remparts d'une quête de défense : chaque ennemi encore debout
-## à la fin d'un tour leur retire 1 point. À 0, la cité tombe.
+## Solidité des remparts d'une quête de défense : chaque coup d'un ennemi arrivé
+## au pied des remparts leur retire 1 point. À 0, la cité tombe.
 const DEFENSE_WALLS := 75
+
+## Palier : tous les BOSS_EVERY étages, la difficulté monte d'un cran.
+## Les ennemis de l'étage de boss et de tous les étages suivants gagnent ce nombre de niveaux en plus.
+const TIER_BONUS_LEVELS := 2
 
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
@@ -326,6 +330,12 @@ func add_gold(amount: int) -> void:
 	gold += amount
 	gold_changed.emit(gold)
 	save_game()
+
+
+## Met à jour l'affichage de l'or et des gemmes (après un combat).
+func show_money() -> void:
+	gold_changed.emit(gold)
+	gems_changed.emit(gems)
 
 
 # ---------------------------------------------------------------------------
@@ -531,8 +541,15 @@ func is_boss_floor(floor_number: int) -> bool:
 
 
 ## Niveau des monstres d'un étage (étage 1 : gobelins de niveau 3).
+## À chaque palier (étage 5, 10...), les monstres gagnent TIER_BONUS_LEVELS niveaux de plus :
+## l'étage de boss est un mur à franchir, et les étages suivants restent à ce nouveau cran.
 func floor_enemy_level(floor_number: int) -> int:
-	return floor_number + 2
+	return floor_number + 2 + floor_tier(floor_number) * TIER_BONUS_LEVELS
+
+
+## Numéro du palier d'un étage : 0 pour les étages 1 à 4, 1 pour 5 à 9, 2 pour 10 à 14...
+func floor_tier(floor_number: int) -> int:
+	return floor_number / BOSS_EVERY
 
 
 ## Récompenses d'un étage : de l'or (5 000 à l'étage 1, 10 000 à l'étage 4...),
@@ -564,7 +581,7 @@ func floor_quest(floor_number: int) -> Dictionary:
 	var quest: Dictionary = QUEST_TYPES[type].duplicate()
 	quest["type"] = type
 	quest["lasting"] = type in ["survival", "defense"]  # il faut tenir, pas tout tuer
-	quest["rounds"] = SURVIVAL_ROUNDS if quest["lasting"] else KILL_QUEST_ROUNDS
+	quest["seconds"] = SURVIVAL_SECONDS if quest["lasting"] else KILL_QUEST_SECONDS
 	quest["warnings"] = 3 if type == "defense" else 0
 	quest["hidden_level"] = type == "survival"
 	quest["walls"] = DEFENSE_WALLS if type == "defense" else 0
@@ -584,6 +601,7 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 	if is_boss_floor(floor_number):
 		var boss_index := mini(floor_number / BOSS_EVERY - 1, BOSS_TYPES.size() - 1)
 		enemies.append(_create_enemy(BOSS_TYPES[boss_index], level + 2))
+		enemies[0]["boss"] = true
 		monster_count = maxi(2, monster_count - 2)
 	match quest["type"]:
 		"annihilation":
@@ -659,8 +677,11 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	if battle.victory:
 		report.merge(rewards, true)
 		tower_floor += 1
-		add_gold(rewards["gold"])
-		add_gems(rewards["gems"])
+		# Les récompenses sont gagnées tout de suite (et sauvegardées plus bas), mais
+		# l'affichage en haut de l'écran ne change qu'à la fin du combat, pour ne pas
+		# dévoiler la victoire : c'est l'écran de combat qui appelle show_money().
+		gold += rewards["gold"]
+		gems += rewards["gems"]
 	else:
 		report["xp"] = rewards["xp"] / 2
 

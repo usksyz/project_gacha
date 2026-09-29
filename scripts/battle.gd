@@ -1,56 +1,98 @@
 class_name Battle
 extends RefCounted
-## Combat automatique entre l'équipe du joueur et des ennemis.
+## Combat en temps réel, vu du dessus.
 ##
-## Le combat est calculé en entier, d'un seul coup, par run() : chaque action est notée
-## dans « events ». L'écran de combat (BattleView) rejoue ensuite ces événements
-## un par un pour que le joueur puisse suivre.
+## Le combat est calculé en entier, d'un seul coup, par run() : on fait avancer le temps
+## par petits pas (TICK), et à chaque pas on enregistre la position et la vie de chacun
+## dans « frames ». L'écran de combat (BattleView) rejoue ensuite ce film, avec pause
+## et accélération. Comme le résultat est connu dès le départ, quitter le jeu pendant
+## le combat ne change rien : il « continue » sans le joueur.
 ##
-## Règles :
-## - à chaque tour, tous les combattants vivants agissent, du plus rapide au plus lent ;
-## - dégâts = attaque - la moitié de la défense de la cible (au moins 1) ;
-## - la dextérité donne une petite chance de coup critique (dégâts x1.5) ;
-## - un héros immortel (héros secret) tombé à 0 est seulement « à terre » ;
+## Le champ de bataille est une grille : chaque case est libre ou bloquée par le décor
+## (rochers, murs, maisons). Les combattants se déplacent librement entre les cases libres,
+## contournent le décor (recherche de chemin), et les tireurs ont besoin de voir leur cible.
+##
+## Comportements :
+## - les ennemis foncent sur les héros (en défense : sur les remparts, sauf si un héros est tout près) ;
+## - les héros tiennent leur position et attaquent les ennemis qui s'approchent ;
 ## - chaque classe a sa particularité :
-##     Novice    : attaque simple
+##     Novice    : attaque simple au corps à corps
 ##     Guerrier  : frappe fort (dégâts x1.2)
-##     Chevalier : attire les coups (les ennemis le visent 3 fois plus souvent)
-##     Mage      : frappe tous les ennemis à la fois (dégâts x0.6 sur chacun)
-##     Archer    : +25 % de chances de coup critique, et ses critiques font x2
-##     Assassin  : vise toujours l'ennemi qui a le moins de points de vie
-##     Soigneur  : soigne l'allié le plus blessé (attaque si personne n'est blessé)
+##     Chevalier : attire les coups (les ennemis proches le visent en priorité)
+##     Mage      : sort à distance qui touche aussi les ennemis autour de la cible (dégâts x0.7)
+##     Archer    : tire à distance, +25 % de chances de coup critique, et ses critiques font x2
+##     Assassin  : vise l'ennemi qui a le moins de points de vie
+##     Soigneur  : soigne à distance l'allié le plus blessé (attaque si personne n'est blessé)
+##   Les tireurs (Archer, Mage, Soigneur) reculent quand un ennemi arrive au contact.
 ##
 ## États et compétences (les chiffres sont des propositions, à ajuster) :
 ## - saignement : un coup critique, ou un coup qui retire beaucoup de vie d'un coup,
-##   fait saigner la cible, qui perd de la vie au début de ses tours suivants ;
+##   fait saigner la cible, qui perd de la vie à intervalles réguliers ;
 ##   blessée à nouveau pendant qu'elle saigne, elle fait une hémorragie (plus grave) ;
 ## - éveil des compétences : un héros qui passe sous 25 % de sa vie peut s'éveiller,
 ##   une fois par combat : ses compétences gagnent plusieurs niveaux d'un coup,
 ##   et il peut en apprendre une nouvelle ;
 ## - un héros qui a saigné et termine le combat debout peut apprendre Résistance à la douleur.
 ## Les effets des compétences sont décrits dans GameData.SKILLS.
-
+##
 ## Quête (voir GameData.floor_quest) :
-## - quêtes pour tuer tous les ennemis : passé la limite de tours, l'équipe abandonne (défaite) ;
-## - survie et défense : il faut tenir jusqu'à la fin de la limite de tours ;
-##   en défense, chaque ennemi debout à la fin d'un tour abîme les remparts de la cité.
-## 6 ennemis au plus se battent en même temps : les autres attendent en renfort
-## et prennent la place des ennemis tombés, au début du tour suivant.
+## - quêtes pour tuer tous les ennemis : passé la limite de temps, l'équipe bat en retraite (défaite) ;
+## - survie et défense : il faut tenir jusqu'à la fin du compte à rebours ;
+##   en défense, les ennemis qui atteignent les remparts les frappent. À 0, la cité tombe.
+## ENEMY_SLOTS ennemis au plus sont sur le terrain en même temps : les autres arrivent
+## en renfort par le haut de la carte quand un ennemi tombe.
 
-## Nombre d'ennemis qui combattent en même temps.
+# --- Temps ---
+
+## Durée d'un pas de simulation, en secondes (10 pas par seconde).
+const TICK := 0.1
+
+# --- Champ de bataille ---
+
+## Taille de la grille, en cases (largeur, hauteur). Les héros partent du bas, les ennemis du haut.
+const GRID_W := 18
+const GRID_H := 20
+
+## Nombre d'ennemis sur le terrain en même temps, et délai avant l'arrivée d'un renfort.
 const ENEMY_SLOTS := 6
+const REINFORCE_DELAY := 2.0
 
-## Quête utilisée quand on n'en donne pas : tuer tous les ennemis en 30 tours au plus.
-const DEFAULT_QUEST := {"type": "extermination", "lasting": false, "rounds": 30, "hidden_level": false, "walls": 0}
+## Quête utilisée quand on n'en donne pas : tuer tous les ennemis en 90 secondes au plus.
+const DEFAULT_QUEST := {"type": "extermination", "lasting": false, "seconds": 90, "hidden_level": false, "walls": 0}
+
+# --- Déplacements et attaques ---
+
+## Portées, en cases : corps à corps, tir (arc, sort, soin), rayon de l'explosion d'un sort.
+const MELEE_RANGE := 1.0
+const RANGED_RANGE := 5.5
+const SPELL_RADIUS := 1.6
+## Les héros restent à leur poste tant qu'aucun ennemi n'est plus près que ça (en cases).
+const ENGAGE_DISTANCE := 7.0
+## Un chevalier attire les ennemis qui sont à moins de cette distance de lui.
+const TAUNT_DISTANCE := 3.5
+## Pour se répartir les cibles : une cible déjà attaquée par un allié compte comme
+## si elle était plus loin de ce nombre de cases (par allié).
+const CROWD_PENALTY := 1.5
+## Vitesse de déplacement (cases par seconde) : de base, plus un bonus par point de dextérité.
+const BASE_SPEED := 1.6
+const SPEED_PER_DEX := 0.04
+## Temps entre deux attaques (secondes) pour 15 de dextérité : plus rapide avec plus de dextérité.
+const BASE_ATTACK_TIME := 1.2
+## Les chemins sont recalculés à cet intervalle (secondes).
+const PATH_REFRESH := 0.5
+## Distance minimale entre deux combattants (ils se poussent un peu pour ne pas se chevaucher).
+const PERSONAL_SPACE := 0.75
+
+# --- États ---
 
 ## Un coup qui retire au moins cette part de la vie maximum fait saigner (0.35 = 35 %).
 const BLEED_HIT := 0.35
-## Saignement : part de la vie maximum perdue à chaque tour, et nombre de tours.
+## Saignement : part de la vie maximum perdue à chaque fois, nombre de fois, intervalle (secondes).
 const BLEED_DAMAGE := 0.05
-const BLEED_TURNS := 3
-## Hémorragie : la même chose, en plus grave.
+const BLEED_TICKS := 3
 const HEAVY_BLEED_DAMAGE := 0.1
-const HEAVY_BLEED_TURNS := 4
+const HEAVY_BLEED_TICKS := 4
+const BLEED_INTERVAL := 1.5
 ## Réduction des saignements par niveau de Résistance à la douleur (au plus 80 %).
 const PAIN_RESIST_PER_LEVEL := 0.1
 ## Chance d'apprendre (ou d'améliorer) Résistance à la douleur après avoir saigné.
@@ -69,27 +111,45 @@ const BERSERK_HP := 0.3
 const DODGE_PER_LEVEL := 0.03
 const CALM_PER_LEVEL := 0.04
 
+# --- Ce que le combat produit ---
+
 var quest: Dictionary
+
+## Tous les combattants : les héros, puis les ennemis (renforts compris, absents au départ).
+## Leur position dans cette liste est leur numéro (« id »).
+var units: Array[Dictionary] = []
 var heroes: Array[Dictionary] = []
-## Les ennemis qui combattent (ENEMY_SLOTS au plus). Un renfort remplace un ennemi tombé à sa place.
 var enemies: Array[Dictionary] = []
-## Les ennemis qui attendent d'entrer en renfort.
-var reserve: Array = []
+
+## Cases bloquées par le décor, et les morceaux de décor à dessiner :
+## [{"rect": Rect2i, "kind": "rock" / "wall" / "house" / "rampart"}].
+var obstacles: Array[Dictionary] = []
+
 ## Remparts de la cité (quête de défense seulement).
 var walls := 0
 
-## Chaque événement : {"text": ce qui s'est passé, "hp": points de vie de tout le monde après,
-## "style": "" ou un genre d'événement ("bleed", "awaken", "berserk", "reinforce") pour le colorer à l'écran}.
-## L'ordre des points de vie est : les héros, puis les ennemis.
-## Un événement de renforts a aussi « arrivals » : [{"index", "name", "level", "max_hp"}]
-## (index = position dans la liste des points de vie), pour que l'écran change les noms.
+## Le film du combat : une image par pas de temps. Chaque image est une liste de 4 nombres
+## par combattant : x, y, vie, drapeaux (1 = présent sur le terrain, 2 = saigne, 4 = Berserk).
+var frames: Array[PackedFloat32Array] = []
+## Remparts restants à chaque image (défense).
+var wall_frames: PackedInt32Array = []
+
+## Journal : {"t": moment (secondes), "text": ..., "style": "" ou "bleed", "awaken", "berserk", "reinforce"}.
 var events: Array[Dictionary] = []
 
-var victory := false
+## Effets à dessiner : {"t", "kind": "hit" / "arrow" / "spell" / "heal", "from": id, "to": id,
+## "text": « -12 », « esquive ! », « +20 »..., "crit": bool}.
+var effects: Array[Dictionary] = []
 
-## Messages en attente : ce qui arrive pendant un coup (saignement, éveil...) est annoncé
-## juste après la ligne qui décrit ce coup.
-var _pending: Array = []
+var victory := false
+## Durée totale du combat, en secondes.
+var duration := 0.0
+
+var _time := 0.0
+var _grid := AStarGrid2D.new()
+var _finished := false
+## Moment où chaque place d'ennemi s'est libérée (pour faire venir un renfort après un délai).
+var _free_since := {}
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
@@ -98,74 +158,30 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 	for hero in team:
 		heroes.append(_make_fighter(hero, true))
 	for enemy in foes:
-		if enemies.size() < ENEMY_SLOTS:
-			enemies.append(_make_fighter(enemy, false))
-		else:
-			reserve.append(enemy)
+		enemies.append(_make_fighter(enemy, false))
+	units.append_array(heroes)
+	units.append_array(enemies)
+	for i in units.size():
+		units[i]["id"] = i
 
 
 ## Joue tout le combat.
 func run() -> void:
-	_fight()
-	_after_fight()
-
-
-func _fight() -> void:
-	var rounds: int = quest["rounds"]
-	for round_number in range(1, rounds + 1):
-		_call_reinforcements()
+	_build_map()
+	_place_units()
+	var limit: float = quest["seconds"]
+	while _time < limit and not _finished:
+		_step()
+		_record()
+		_time += TICK
+	if not _finished:
 		if quest["lasting"]:
-			_log("— Tour %d — encore %d à tenir" % [round_number, rounds - round_number + 1])
+			victory = true
+			_log("Le compte à rebours est terminé : ton équipe a tenu bon ! Victoire !")
 		else:
-			_log("— Tour %d / %d —" % [round_number, rounds])
-		for fighter in _turn_order():
-			if fighter["hp"] <= 0:
-				continue  # mis K.O. plus tôt dans ce tour
-			_bleed_tick(fighter)
-			if fighter["hp"] > 0:
-				_act(fighter)
-			if _alive(enemies).is_empty() and reserve.is_empty():
-				victory = true
-				_log("Victoire ! Il ne reste plus un seul ennemi.")
-				return
-			if _alive(heroes).is_empty():
-				_log("Défaite... toute l'équipe est tombée.")
-				return
-			if _alive(enemies).is_empty():
-				break  # la vague est tombée : les renforts arrivent au tour suivant
-		if walls > 0:
-			var attackers := _alive(enemies).size()
-			walls = maxi(0, walls - attackers)
-			if attackers > 0:
-				_log("Les ennemis frappent les remparts : -%d (reste %d/%d)." % [attackers, walls, quest["walls"]], "reinforce")
-			if walls == 0:
-				_log("Les remparts cèdent : la cité est tombée !")
-				return
-	if quest["lasting"]:
-		victory = true
-		_log("Le compte à rebours est terminé : ton équipe a tenu bon ! Victoire !")
-	else:
-		_log("Le temps est écoulé : ton équipe bat en retraite.")
-
-
-## Au début d'un tour, les ennemis en réserve prennent la place des ennemis tombés.
-func _call_reinforcements() -> void:
-	var arrivals := []
-	for i in enemies.size():
-		if enemies[i]["hp"] > 0 or reserve.is_empty():
-			continue
-		var fighter := _make_fighter(reserve.pop_front(), false)
-		enemies[i] = fighter
-		arrivals.append({"index": heroes.size() + i, "name": fighter["name"], "level": fighter["level"],
-			"max_hp": fighter["max_hp"]})
-	if arrivals.is_empty():
-		return
-	var names := arrivals.map(func(a): return a["name"])
-	var text := "Des renforts arrivent : %s." % ", ".join(names)
-	if not reserve.is_empty():
-		text += " (%d encore en approche)" % reserve.size()
-	_add_event(text, "reinforce")
-	events[-1]["arrivals"] = arrivals
+			_log("Le temps est écoulé : ton équipe bat en retraite.")
+	duration = _time
+	_after_fight()
 
 
 ## Le héros qui a le plus contribué (dégâts + soins), ou "" s'il n'y a aucun héros.
@@ -177,18 +193,21 @@ func mvp() -> String:
 	return "" if best.is_empty() else best["name"]
 
 
-## Un « combattant » : ses valeurs de combat et ses points de vie actuels.
+## Un « combattant » : ses valeurs de combat, sa position et ses points de vie actuels.
 ## « source » garde le héros (ou l'ennemi) d'origine, pour le marquer mort après le combat.
 ## Les compétences sont une copie : elles ne sont recopiées sur le héros qu'à la fin
 ## (GameData.finish_tower_battle), et seulement s'il a survécu.
 func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	var stats := GameData.combat_stats(source)
+	var fighter_class: String = source["class"]
 	return {
 		"name": source["name"],
-		"class": source["class"],
+		"class": fighter_class,
 		"level": source["level"],
+		"rarity": source.get("rarity", 1),
 		"stars": "★".repeat(source.get("rarity", 1)),
 		"is_hero": is_hero,
+		"boss": source.get("boss", false),
 		"hidden_level": not is_hero and quest["hidden_level"],  # niveau affiché « ? »
 		"immortal": source.get("immortal", false),
 		"source": source,
@@ -199,10 +218,17 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"def": stats["def"],
 		"spd": stats["spd"],
 		"crit": stats["crit"],
+		"ranged": fighter_class in ["Archer", "Mage", "Soigneur"],
+		"present": false,          # sur le terrain (les renforts arrivent plus tard)
+		"pos": Vector2.ZERO,       # position, en cases (0.5 = milieu de la première case)
+		"post": Vector2.ZERO,      # poste que le héros tient
+		"path": PackedVector2Array(),
+		"path_timer": 0.0,
+		"cooldown": randf_range(0.2, 0.8),  # temps avant la prochaine attaque
 		"contribution": 0,  # dégâts infligés + soins donnés, pour désigner le MVP
 		"killer": "",       # cause de la mort, s'il tombe
-		# Saignement en cours : tours restants, vie perdue par tour, hémorragie ou non, qui l'a causé.
-		"bleed": {"turns": 0, "amount": 0, "heavy": false, "cause": ""},
+		# Saignement en cours : fois restantes, temps avant la prochaine, vie perdue, hémorragie ou non, cause.
+		"bleed": {"ticks": 0, "timer": 0.0, "amount": 0, "heavy": false, "cause": ""},
 		"has_bled": false,         # a saigné pendant ce combat (pour Résistance à la douleur)
 		"awakening_tried": false,  # l'éveil n'est tenté qu'une fois par combat
 		"berserk": false,          # en rage (compétence Berserk)
@@ -210,59 +236,380 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	}
 
 
-## Ordre d'action du tour : du plus rapide au plus lent.
-## On ajoute un petit nombre au hasard pour départager les égalités.
-func _turn_order() -> Array:
-	var order := _alive(heroes) + _alive(enemies)
-	for fighter in order:
-		fighter["initiative"] = fighter["spd"] + randf()
-	order.sort_custom(func(a, b): return a["initiative"] > b["initiative"])
-	return order
+# ---------------------------------------------------------------------------
+# Champ de bataille
+# ---------------------------------------------------------------------------
+
+## Crée le décor : des rochers et des murs au milieu de la carte (des maisons alignées
+## en ruelles pour les quêtes de survie), et les remparts de la cité en bas pour la défense.
+## On vérifie toujours qu'un chemin relie le haut et le bas de la carte.
+func _build_map() -> void:
+	_grid.region = Rect2i(0, 0, GRID_W, GRID_H)
+	_grid.cell_size = Vector2.ONE
+	_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	_grid.update()
+
+	if quest["walls"] > 0:
+		_add_obstacle(Rect2i(0, GRID_H - 1, GRID_W, 1), "rampart")
+
+	if quest["type"] == "survival":
+		# Des pâtés de maisons séparés par des ruelles.
+		for row in [6, 10]:
+			var x := randi_range(0, 2)
+			while x < GRID_W - 2:
+				var width := randi_range(2, 4)
+				_try_obstacle(Rect2i(x, row + randi_range(0, 1), mini(width, GRID_W - x), 3), "house")
+				x += width + randi_range(2, 3)
+	var pieces := randi_range(6, 9)
+	for i in pieces:
+		var horizontal := randf() < 0.5
+		var size := Vector2i(randi_range(2, 4), 1) if horizontal else Vector2i(1, randi_range(2, 3))
+		if randf() < 0.4:
+			size = Vector2i(randi_range(1, 2), randi_range(1, 2))
+		var cell := Vector2i(randi_range(0, GRID_W - size.x), randi_range(5, GRID_H - 8))
+		_try_obstacle(Rect2i(cell, size), "rock" if size.x == size.y else "wall")
 
 
-## Le combattant fait son action, selon sa classe.
-func _act(fighter: Dictionary) -> void:
-	var allies: Array[Dictionary] = heroes if fighter["is_hero"] else enemies
-	var foes: Array[Dictionary] = enemies if fighter["is_hero"] else heroes
+## Ajoute un morceau de décor s'il ne coupe pas la carte en deux ; sinon on l'enlève.
+func _try_obstacle(rect: Rect2i, kind: String) -> void:
+	_add_obstacle(rect, kind)
+	var top := Vector2i(GRID_W / 2, 1)
+	var bottom := Vector2i(GRID_W / 2, GRID_H - 4)
+	if _grid.get_id_path(top, bottom).is_empty():
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				_grid.set_point_solid(Vector2i(x, y), false)
+		obstacles.pop_back()
 
-	match fighter["class"]:
-		"Guerrier":
-			_attack(fighter, _random_target(foes), 1.2)
-		"Mage":
-			var targets := _alive(foes)
-			var hits := []
-			for target in targets:
-				hits.append("%s %s" % [target["name"], _hit_text(_damage(fighter, target, 0.6))])
-			_log("%s lance un sort de zone : %s" % [fighter["name"], ", ".join(hits)])
-			_check_deaths(targets, fighter)
-		"Archer":
-			var critical: bool = randf() < fighter["crit"] + 0.25
-			_attack(fighter, _random_target(foes), 2.0 if critical else 1.0, critical)
-		"Assassin":
-			_attack(fighter, _weakest(foes))
-		"Soigneur":
-			var wounded := _most_wounded(allies)
-			if wounded.is_empty():
-				_attack(fighter, _random_target(foes))
+
+func _add_obstacle(rect: Rect2i, kind: String) -> void:
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			_grid.set_point_solid(Vector2i(x, y), true)
+	obstacles.append({"rect": rect, "kind": kind})
+
+
+## Place les héros en formation en bas (les tireurs derrière), et les premiers ennemis en haut.
+func _place_units() -> void:
+	var front: Array[Dictionary] = []
+	var back: Array[Dictionary] = []
+	for hero in heroes:
+		(back if hero["ranged"] else front).append(hero)
+	var front_row := GRID_H - 5 if quest["walls"] > 0 else GRID_H - 6
+	_place_row(front, front_row)
+	_place_row(back, front_row + 2)
+	for hero in heroes:
+		hero["post"] = hero["pos"]
+
+	for i in mini(ENEMY_SLOTS, enemies.size()):
+		_spawn_enemy(enemies[i], randi_range(1, 3))
+
+
+## Aligne des combattants sur une ligne, centrés, sur des cases libres.
+func _place_row(fighters: Array[Dictionary], row: int) -> void:
+	for i in fighters.size():
+		var x := GRID_W / 2 + (i - fighters.size() / 2) * 2
+		fighters[i]["pos"] = _free_cell_near(Vector2i(clampi(x, 0, GRID_W - 1), row))
+		fighters[i]["present"] = true
+
+
+## Fait entrer un ennemi sur le terrain, sur une case libre de la ligne donnée.
+func _spawn_enemy(enemy: Dictionary, row: int) -> void:
+	enemy["pos"] = _free_cell_near(Vector2i(randi_range(1, GRID_W - 2), row))
+	enemy["present"] = true
+
+
+## La case libre la plus proche d'une case donnée (son centre).
+func _free_cell_near(cell: Vector2i) -> Vector2:
+	for radius in range(0, 6):
+		for dx in range(-radius, radius + 1):
+			for dy in range(-radius, radius + 1):
+				var c := cell + Vector2i(dx, dy)
+				if _grid.is_in_boundsv(c) and not _grid.is_point_solid(c) and not _occupied(c):
+					return Vector2(c) + Vector2(0.5, 0.5)
+	return Vector2(cell) + Vector2(0.5, 0.5)
+
+
+func _occupied(cell: Vector2i) -> bool:
+	for unit in units:
+		if unit["present"] and Vector2i(unit["pos"]) == cell:
+			return true
+	return false
+
+
+func _cell_of(pos: Vector2) -> Vector2i:
+	return Vector2i(clampi(int(pos.x), 0, GRID_W - 1), clampi(int(pos.y), 0, GRID_H - 1))
+
+
+func _is_blocked(pos: Vector2) -> bool:
+	var cell := Vector2i(floori(pos.x), floori(pos.y))
+	return not _grid.is_in_boundsv(cell) or _grid.is_point_solid(cell)
+
+
+## Vrai si rien dans le décor ne cache « to » depuis « from » (pour les tirs et les sorts).
+func _line_of_sight(from: Vector2, to: Vector2) -> bool:
+	var steps := int(from.distance_to(to) / 0.3) + 1
+	for i in range(1, steps):
+		if _is_blocked(from.lerp(to, float(i) / steps)):
+			return false
+	return true
+
+
+# ---------------------------------------------------------------------------
+# Un pas de temps
+# ---------------------------------------------------------------------------
+
+func _step() -> void:
+	_call_reinforcements()
+	var order := _alive(units)
+	order.shuffle()
+	for unit in order:
+		if unit["hp"] <= 0:
+			continue  # tombé plus tôt pendant ce pas
+		_bleed_tick(unit)
+		if unit["hp"] > 0:
+			unit["cooldown"] -= TICK
+			_think(unit)
+		if _check_end():
+			return
+	_separate()
+
+
+## Au besoin, un ennemi en réserve entre par le haut de la carte à la place d'un ennemi tombé.
+func _call_reinforcements() -> void:
+	var on_field := 0
+	for enemy in enemies:
+		if enemy["present"] and enemy["hp"] > 0:
+			on_field += 1
+	var waiting := _reserve()
+	if waiting.is_empty() or on_field >= ENEMY_SLOTS:
+		_free_since.clear()
+		return
+	var free_places := ENEMY_SLOTS - on_field
+	for place in free_places:
+		if not _free_since.has(place):
+			_free_since[place] = _time
+	var arrivals := []
+	for place in _free_since.keys():
+		if _time - _free_since[place] >= REINFORCE_DELAY and not waiting.is_empty():
+			var enemy: Dictionary = waiting.pop_front()
+			_spawn_enemy(enemy, 0)
+			arrivals.append(enemy["name"])
+			_free_since.erase(place)
+	if not arrivals.is_empty():
+		var text := "Des renforts arrivent : %s." % ", ".join(arrivals)
+		if not waiting.is_empty():
+			text += " (%d encore en approche)" % waiting.size()
+		_log(text, "reinforce")
+
+
+## Les ennemis qui ne sont pas encore entrés sur le terrain.
+func _reserve() -> Array:
+	return enemies.filter(func(e): return not e["present"])
+
+
+## Fin du combat ? (victoire, défaite, cité tombée)
+func _check_end() -> bool:
+	if _finished:
+		return true
+	if _alive(enemies).is_empty() and _reserve().is_empty():
+		victory = true
+		_log("Victoire ! Il ne reste plus un seul ennemi.")
+	elif _alive(heroes).is_empty():
+		_log("Défaite... toute l'équipe est tombée.")
+	elif quest["walls"] > 0 and walls <= 0:
+		_log("Les remparts cèdent : la cité est tombée !")
+	else:
+		return false
+	_finished = true
+	return true
+
+
+## Ce que fait un combattant pendant ce pas : choisir sa cible, s'en approcher, frapper, reculer...
+func _think(unit: Dictionary) -> void:
+	var foes := _alive(enemies if unit["is_hero"] else heroes)
+	var allies := _alive(heroes if unit["is_hero"] else enemies)
+
+	# Soigneur : un allié blessé passe avant tout.
+	if unit["class"] == "Soigneur":
+		var wounded := _most_wounded(allies)
+		if not wounded.is_empty():
+			if _in_reach(unit, wounded, RANGED_RANGE):
+				_try_heal(unit, wounded)
 			else:
-				_heal(fighter, wounded)
+				_move_towards(unit, wounded["pos"])
+			return
+
+	# Défense : un ennemi va aux remparts, sauf si un héros lui barre la route.
+	if not unit["is_hero"] and quest["walls"] > 0:
+		var nearest := _nearest(unit, foes)
+		if nearest.is_empty() or unit["pos"].distance_to(nearest["pos"]) > 2.5:
+			if unit["pos"].y >= GRID_H - 2.2:
+				if unit["cooldown"] <= 0:
+					unit["cooldown"] = _attack_time(unit)
+					walls = maxi(0, walls - 1)
+			else:
+				_move_towards(unit, Vector2(unit["pos"].x, GRID_H - 1.5))
+			return
+
+	if foes.is_empty():
+		return
+	var target := _choose_target(unit, foes, allies)
+	unit["target_id"] = target["id"]
+
+	# Un héros tient son poste tant que les ennemis sont loin.
+	if unit["is_hero"] and unit["pos"].distance_to(target["pos"]) > ENGAGE_DISTANCE:
+		if unit["pos"].distance_to(unit["post"]) > 0.3:
+			_move_towards(unit, unit["post"])
+		return
+
+	if unit["ranged"]:
+		# Un tireur recule quand un ennemi arrive au contact.
+		var closest := _nearest(unit, foes)
+		if unit["pos"].distance_to(closest["pos"]) < 1.6:
+			_step_away(unit, closest["pos"])
+		if _in_reach(unit, target, RANGED_RANGE):
+			_try_attack(unit, target, foes)
+		else:
+			_move_towards(unit, target["pos"])
+	else:
+		if _in_reach(unit, target, MELEE_RANGE):
+			_try_attack(unit, target, foes)
+		else:
+			_move_towards(unit, target["pos"])
+
+
+## Le choix de la cible, selon la classe. Sinon : l'adversaire le plus proche,
+## en évitant ceux que plusieurs alliés attaquent déjà (pour ne pas tous s'agglutiner).
+func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
+	if unit["class"] == "Assassin":
+		return _weakest(foes)
+	# Un chevalier proche attire les coups.
+	for foe in foes:
+		if foe["class"] == "Chevalier" and unit["pos"].distance_to(foe["pos"]) <= TAUNT_DISTANCE:
+			return foe
+	var result: Dictionary = {}
+	var best := INF
+	for foe in foes:
+		var crowd := 0
+		for ally in allies:
+			if ally["id"] != unit["id"] and ally.get("target_id", -1) == foe["id"]:
+				crowd += 1
+		var score: float = unit["pos"].distance_to(foe["pos"]) + crowd * CROWD_PENALTY
+		if score < best:
+			best = score
+			result = foe
+	return result
+
+
+## Assez près (et, pour un tir, sans décor entre les deux) ?
+func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
+	var distance: float = unit["pos"].distance_to(target["pos"])
+	if distance > reach + 0.05:
+		return false
+	return reach <= MELEE_RANGE or _line_of_sight(unit["pos"], target["pos"])
+
+
+func _attack_time(unit: Dictionary) -> float:
+	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"]))
+
+
+func _move_speed(unit: Dictionary) -> float:
+	var speed: float = BASE_SPEED + unit["spd"] * SPEED_PER_DEX
+	return speed * (0.8 if unit["boss"] else 1.0)
+
+
+## Avance vers un point en suivant un chemin qui contourne le décor.
+func _move_towards(unit: Dictionary, goal: Vector2) -> void:
+	unit["path_timer"] -= TICK
+	if unit["path"].is_empty() or unit["path_timer"] <= 0:
+		unit["path_timer"] = PATH_REFRESH
+		var ids := _grid.get_id_path(_cell_of(unit["pos"]), _cell_of(goal), true)
+		var path := PackedVector2Array()
+		for i in range(1, ids.size()):
+			path.append(Vector2(ids[i]) + Vector2(0.5, 0.5))
+		if not path.is_empty():
+			path[path.size() - 1] = goal if not _is_blocked(goal) else path[path.size() - 1]
+		unit["path"] = path
+	var step := _move_speed(unit) * TICK
+	var path: PackedVector2Array = unit["path"]
+	while step > 0 and not path.is_empty():
+		var next: Vector2 = path[0]
+		var distance: float = unit["pos"].distance_to(next)
+		if distance <= step:
+			unit["pos"] = next
+			path.remove_at(0)
+			step -= distance
+		else:
+			unit["pos"] += (next - unit["pos"]).normalized() * step
+			step = 0
+	unit["path"] = path
+
+
+## Recule d'un pas, à l'opposé d'une menace, si la place est libre.
+func _step_away(unit: Dictionary, threat: Vector2) -> void:
+	var direction: Vector2 = (unit["pos"] - threat).normalized()
+	var next: Vector2 = unit["pos"] + direction * _move_speed(unit) * TICK
+	if not _is_blocked(next):
+		unit["pos"] = next
+		unit["path"] = PackedVector2Array()
+
+
+## Les combattants trop proches se poussent un peu, sans entrer dans le décor.
+func _separate() -> void:
+	var present := _alive(units)
+	for i in present.size():
+		for j in range(i + 1, present.size()):
+			var a: Dictionary = present[i]
+			var b: Dictionary = present[j]
+			var offset: Vector2 = b["pos"] - a["pos"]
+			var distance := offset.length()
+			if distance >= PERSONAL_SPACE:
+				continue
+			if distance < 0.01:
+				offset = Vector2(randf_range(-1, 1), randf_range(-1, 1))
+			var push := offset.normalized() * (PERSONAL_SPACE - distance) * 0.5
+			if not _is_blocked(a["pos"] - push):
+				a["pos"] -= push
+			if not _is_blocked(b["pos"] + push):
+				b["pos"] += push
+
+
+# ---------------------------------------------------------------------------
+# Attaques et soins
+# ---------------------------------------------------------------------------
+
+func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
+	if attacker["cooldown"] > 0:
+		return
+	attacker["cooldown"] = _attack_time(attacker)
+	match attacker["class"]:
+		"Guerrier":
+			_hit(attacker, target, 1.2, false, "hit")
+		"Mage":
+			# Le sort touche la cible et tous les ennemis autour d'elle.
+			for foe in foes:
+				if foe["pos"].distance_to(target["pos"]) <= SPELL_RADIUS:
+					_hit(attacker, foe, 0.7, false, "spell")
+		"Archer":
+			var critical: bool = randf() < attacker["crit"] + 0.25
+			_hit(attacker, target, 2.0 if critical else 1.0, critical, "arrow")
+		"Assassin":
+			_hit(attacker, target, 1.0, false, "hit")
+		"Soigneur":
+			_hit(attacker, target, 1.0, false, "spell")
 		_:
-			var critical: bool = randf() < fighter["crit"]
-			_attack(fighter, _random_target(foes), 1.5 if critical else 1.0, critical)
+			var critical: bool = randf() < attacker["crit"]
+			_hit(attacker, target, 1.5 if critical else 1.0, critical, "hit")
 
 
-func _attack(attacker: Dictionary, target: Dictionary, power := 1.0, critical := false) -> void:
+## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.
+func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool, kind: String) -> void:
 	var amount := _damage(attacker, target, power, critical)
-	var text := "%s frappe %s : %s" % [attacker["name"], target["name"], _hit_text(amount)]
-	if critical and amount >= 0:
-		text = "Coup critique ! " + text
-	_log(text)
-	_check_deaths([target], attacker)
-
-
-## Texte d'un coup : « -12 », ou « esquive ! » (dégâts de -1).
-func _hit_text(amount: int) -> String:
-	return "esquive !" if amount < 0 else "-%d" % amount
+	var text := "esquive !" if amount < 0 else "-%d" % amount
+	_effect(kind, attacker, target, text, critical and amount >= 0)
+	if target["hp"] <= 0 and target["killer"] == "":
+		_announce_fall(target, "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]])
 
 
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
@@ -284,12 +631,15 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	return amount
 
 
-func _heal(healer: Dictionary, target: Dictionary) -> void:
+func _try_heal(healer: Dictionary, target: Dictionary) -> void:
+	if healer["cooldown"] > 0:
+		return
+	healer["cooldown"] = _attack_time(healer)
 	var amount := roundi(healer["atk"] * 2.0 * randf_range(0.9, 1.1))
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
 	healer["contribution"] += amount
-	_log("%s soigne %s : +%d" % [healer["name"], target["name"], amount])
+	_effect("heal", healer, target, "+%d" % amount, false)
 
 
 # ---------------------------------------------------------------------------
@@ -299,9 +649,10 @@ func _heal(healer: Dictionary, target: Dictionary) -> void:
 ## La cible se met à saigner. Si elle saignait déjà, c'est une hémorragie.
 func _start_bleed(attacker: Dictionary, target: Dictionary) -> void:
 	var bleed: Dictionary = target["bleed"]
-	var heavy: bool = bleed["turns"] > 0
+	var heavy: bool = bleed["ticks"] > 0
 	bleed["heavy"] = heavy
-	bleed["turns"] = HEAVY_BLEED_TURNS if heavy else BLEED_TURNS
+	bleed["ticks"] = HEAVY_BLEED_TICKS if heavy else BLEED_TICKS
+	bleed["timer"] = BLEED_INTERVAL
 	bleed["amount"] = maxi(1, roundi(target["max_hp"] * (HEAVY_BLEED_DAMAGE if heavy else BLEED_DAMAGE)))
 	bleed["cause"] = "%s causé%s par %s (niv. %d)" % [
 		"d'une hémorragie" if heavy else "d'un saignement", "e" if heavy else "",
@@ -309,30 +660,32 @@ func _start_bleed(attacker: Dictionary, target: Dictionary) -> void:
 	target["has_bled"] = true
 	var who := _name_with_stars(target)
 	if heavy:
-		_queue("%s fait une hémorragie ! Sa vie s'écoule à grande vitesse." % who, "bleed")
+		_log("%s fait une hémorragie ! Sa vie s'écoule à grande vitesse." % who, "bleed")
 	else:
-		_queue("%s saigne et va perdre de la santé à intervalles réguliers." % who, "bleed")
+		_log("%s saigne et va perdre de la santé à intervalles réguliers." % who, "bleed")
 
 
-## Au début de son tour, un combattant qui saigne perd de la vie.
-func _bleed_tick(fighter: Dictionary) -> void:
-	var bleed: Dictionary = fighter["bleed"]
-	if bleed["turns"] <= 0:
+## Un combattant qui saigne perd de la vie à intervalles réguliers.
+func _bleed_tick(unit: Dictionary) -> void:
+	var bleed: Dictionary = unit["bleed"]
+	if bleed["ticks"] <= 0:
 		return
-	bleed["turns"] -= 1
+	bleed["timer"] -= TICK
+	if bleed["timer"] > 0:
+		return
+	bleed["timer"] = BLEED_INTERVAL
+	bleed["ticks"] -= 1
 	# Résistance à la douleur : les blessures guérissent plus vite.
-	var resist := minf(0.8, GameData.skill_level(fighter["skills"], "Résistance à la douleur") * PAIN_RESIST_PER_LEVEL)
-	var amount := mini(maxi(1, roundi(bleed["amount"] * (1.0 - resist))), fighter["hp"])
-	fighter["hp"] -= amount
-	if fighter["hp"] > 0:
-		_check_critical_state(fighter)
-	var word := "hémorragie" if bleed["heavy"] else "saignement"
-	_log("%s perd %d PV (%s)." % [fighter["name"], amount, word], "bleed")
-	if fighter["hp"] <= 0:
-		_announce_fall(fighter, "mort " + bleed["cause"])
-	elif bleed["turns"] == 0:
+	var resist := minf(0.8, GameData.skill_level(unit["skills"], "Résistance à la douleur") * PAIN_RESIST_PER_LEVEL)
+	var amount := mini(maxi(1, roundi(bleed["amount"] * (1.0 - resist))), unit["hp"])
+	unit["hp"] -= amount
+	_effect("bleed", unit, unit, "-%d" % amount, false)
+	if unit["hp"] <= 0:
+		_announce_fall(unit, "mort " + bleed["cause"])
+		return
+	_check_critical_state(unit)
+	if bleed["ticks"] == 0:
 		bleed["heavy"] = false
-		_log("%s ne saigne plus." % fighter["name"])
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +727,7 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 
 	if news.is_empty():
 		return  # toutes ses compétences sont déjà au maximum
-	_queue("Éveil des compétences ! %s : %s." % [_name_with_stars(fighter), ", ".join(news)], "awaken")
+	_log("Éveil des compétences ! %s : %s." % [_name_with_stars(fighter), ", ".join(news)], "awaken")
 	for line in news:
 		fighter["skill_news"].append("%s — %s" % [fighter["name"], line])
 
@@ -390,7 +743,7 @@ func _enter_berserk(fighter: Dictionary) -> void:
 	fighter["def"] += roundi(bonus / 2.0)
 	fighter["spd"] += bonus
 	fighter["crit"] += bonus / 200.0
-	_queue("%s est entré en mode Berserk ! Une pression écrasante envahit le champ de bataille." \
+	_log("%s est entré en mode Berserk ! Une pression écrasante envahit le champ de bataille." \
 		% _name_with_stars(fighter), "berserk")
 
 
@@ -422,19 +775,12 @@ func _after_fight() -> void:
 # Chutes, cibles, journal
 # ---------------------------------------------------------------------------
 
-## Annonce les combattants qui viennent de tomber à 0 point de vie,
-## et note la cause de la mort des héros.
-func _check_deaths(targets: Array, attacker: Dictionary) -> void:
-	for target in targets:
-		if target["hp"] <= 0 and target["killer"] == "":
-			_announce_fall(target, "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]])
-
-
 func _announce_fall(fighter: Dictionary, cause: String) -> void:
 	if not fighter["is_hero"]:
 		fighter["killer"] = cause
 		_log("%s est vaincu." % fighter["name"])
 	elif fighter["immortal"]:
+		fighter["killer"] = cause  # noté seulement pour ne pas l'annoncer deux fois
 		_log("%s est à terre, mais se relèvera." % fighter["name"])
 	else:
 		fighter["killer"] = cause
@@ -448,38 +794,32 @@ func _name_with_stars(fighter: Dictionary) -> String:
 	return "%s (%s)" % [fighter["name"], fighter["stars"]]
 
 
-## Choisit une cible au hasard. Un Chevalier compte pour 3 : il est visé 3 fois plus souvent.
-func _random_target(foes: Array) -> Dictionary:
-	var targets := _alive(foes)
-	var total := 0
-	for target in targets:
-		total += _threat(target)
-	var roll := randi() % total
-	for target in targets:
-		roll -= _threat(target)
-		if roll < 0:
-			return target
-	return targets[-1]
-
-
-func _threat(fighter: Dictionary) -> int:
-	return 3 if fighter["class"] == "Chevalier" else 1
+## L'adversaire vivant le plus proche.
+func _nearest(unit: Dictionary, foes: Array) -> Dictionary:
+	var result: Dictionary = {}
+	var best := INF
+	for foe in foes:
+		var distance: float = unit["pos"].distance_to(foe["pos"])
+		if distance < best:
+			best = distance
+			result = foe
+	return result
 
 
 ## L'adversaire vivant qui a le moins de points de vie.
 func _weakest(foes: Array) -> Dictionary:
 	var result: Dictionary = {}
-	for target in _alive(foes):
+	for target in foes:
 		if result.is_empty() or target["hp"] < result["hp"]:
 			result = target
 	return result
 
 
-## L'allié vivant le plus blessé (en proportion), ou {} si personne n'est blessé.
+## L'allié vivant le plus blessé (en proportion, sous 90 % de sa vie), ou {} si personne ne l'est.
 func _most_wounded(allies: Array) -> Dictionary:
 	var result: Dictionary = {}
-	var lowest_ratio := 1.0
-	for ally in _alive(allies):
+	var lowest_ratio := 0.9
+	for ally in allies:
 		var ratio: float = float(ally["hp"]) / ally["max_hp"]
 		if ratio < lowest_ratio:
 			lowest_ratio = ratio
@@ -487,27 +827,35 @@ func _most_wounded(allies: Array) -> Dictionary:
 	return result
 
 
+## Les combattants présents sur le terrain et encore debout.
 func _alive(fighters: Array) -> Array:
-	return fighters.filter(func(f): return f["hp"] > 0)
+	return fighters.filter(func(f): return f["present"] and f["hp"] > 0)
 
 
-## Note un événement, avec les points de vie de tout le monde à ce moment-là,
-## puis les messages en attente (saignement, éveil...) causés par ce qui vient d'arriver.
 func _log(text: String, style := "") -> void:
-	_add_event(text, style)
-	var waiting := _pending
-	_pending = []
-	for message in waiting:
-		_add_event(message[0], message[1])
+	events.append({"t": _time, "text": text, "style": style})
 
 
-## Met un message en attente : il sera noté juste après le prochain événement.
-func _queue(text: String, style: String) -> void:
-	_pending.append([text, style])
+func _effect(kind: String, from: Dictionary, to: Dictionary, text: String, crit: bool) -> void:
+	effects.append({"t": _time, "kind": kind, "from": from["id"], "to": to["id"], "text": text, "crit": crit})
 
 
-func _add_event(text: String, style: String) -> void:
-	var hp := []
-	for fighter in heroes + enemies:
-		hp.append(fighter["hp"])
-	events.append({"text": text, "hp": hp, "style": style})
+## Enregistre une image du film : position, vie et état de chacun.
+func _record() -> void:
+	var frame := PackedFloat32Array()
+	frame.resize(units.size() * 4)
+	for i in units.size():
+		var unit: Dictionary = units[i]
+		var flags := 0
+		if unit["present"]:
+			flags |= 1
+		if unit["bleed"]["ticks"] > 0:
+			flags |= 2
+		if unit["berserk"]:
+			flags |= 4
+		frame[i * 4] = unit["pos"].x
+		frame[i * 4 + 1] = unit["pos"].y
+		frame[i * 4 + 2] = unit["hp"]
+		frame[i * 4 + 3] = flags
+	frames.append(frame)
+	wall_frames.append(walls)

@@ -157,13 +157,13 @@ func _play_announce(floor_number: int) -> void:
 		"Objectif : %s" % floor_quest["objective"],
 	]
 	if floor_quest["lasting"]:
-		lines.append("Compte à rebours : %d tours à tenir." % floor_quest["rounds"])
+		lines.append("Compte à rebours : %d secondes à tenir." % floor_quest["seconds"])
 	else:
-		lines.append("Limite de temps : %d tours." % floor_quest["rounds"])
+		lines.append("Limite de temps : %d secondes." % floor_quest["seconds"])
 	if floor_quest["walls"] > 0:
 		lines.append("Remparts de la cité : %d." % floor_quest["walls"])
 	if GameData.is_boss_floor(floor_number):
-		lines.append("Un boss garde cet étage.")
+		lines.append("Un boss garde cet étage. Palier : la difficulté monte d'un cran, prépare-toi bien.")
 	announce_box.add_child(UI.make_system_window("Étage %d" % floor_number, lines))
 	announce_button.disabled = false
 

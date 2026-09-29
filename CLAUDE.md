@@ -47,8 +47,17 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
   `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, annonce de la
   quête de l'étage, choix de l'équipe, combat).
-- `scripts/battle.gd` : classe `Battle`, combat automatique calculé d'un coup (règles et
-  particularités de chaque classe) ; `scripts/battle_view.gd` : classe `BattleView`, rejoue le combat.
+- `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, calculé d'un coup par
+  petits pas de 0,1 s (grille avec décor, recherche de chemin `AStarGrid2D`, ligne de vue pour les
+  tirs, particularités de chaque classe, saignement, éveil, renforts, remparts). Le résultat est
+  appliqué dès le début du combat : quitter le jeu ne change rien, le combat « continue ».
+  `scripts/battle_view.gd` : classe `BattleView`, rejoue le film du combat (pions, coups, chiffres),
+  avec pause, vitesse x1/x2/x4 et « Passer ».
+- Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
+  personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. Le joueur regarde (pause,
+  accélération) ; plus tard, il aidera par des consignes données depuis la salle d'opération, que les
+  héros qui participent au combat apprendront peu à peu. Vue du dessus pour l'instant, vue
+  isométrique 3D plus tard.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Avancement (phases du cahier des charges)
@@ -64,6 +73,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   renforts, survie à la horde tous les 5 étages (niveau caché), défense de la cité tous les 10 étages
   (remparts, triple avertissement), limite de tours, annonce du donjon journalier après l'étage 5 : fait.
   Au combat, 6 ennemis au plus à la fois, les autres arrivent en renfort.
+  Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
+  (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
   impossible au niveau de départ). C'est un palier réservé aux héros équipés, avec des compétences
   et de l'expérience : ne pas l'adoucir sans lui demander.
