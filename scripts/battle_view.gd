@@ -6,7 +6,7 @@ extends Control
 ## toucher un héros pour le choisir, puis toucher un endroit pour l'y envoyer
 ## (se mettre à couvert, reculer, relayer un blessé), ou toucher un ennemi pour qu'il l'attaque.
 ## Le combat continue même si on change d'onglet ; on peut le mettre en pause
-## (et donner des ordres pendant la pause).
+## (mais pas donner d'ordres pendant la pause : les ordres se donnent dans le feu de l'action).
 
 signal closed
 
@@ -129,7 +129,9 @@ func _build(title: String) -> void:
 func _toggle_pause() -> void:
 	paused = not paused
 	pause_button.text = "Reprendre" if paused else "Pause"
+	selected_id = -1  # pas d'ordre pendant la pause
 	_update_hint()
+	arena.queue_redraw()
 
 
 ## Le combat avance en direct, même si l'écran est caché (autre onglet), sauf en pause.
@@ -191,11 +193,11 @@ func _show_event(event: Dictionary) -> void:
 # ---------------------------------------------------------------------------
 
 func _update_hint() -> void:
-	if selected_id >= 0:
+	if paused:
+		hint_label.text = "Pause. Les ordres reprendront avec le combat."
+	elif selected_id >= 0:
 		hint_label.text = "%s : touche un endroit pour l'y envoyer, ou un ennemi à attaquer." \
 			% battle.units[selected_id]["name"]
-	elif paused:
-		hint_label.text = "Pause. Tu peux donner des ordres avant de reprendre."
 	else:
 		hint_label.text = "Touche un héros pour le guider."
 
@@ -203,8 +205,8 @@ func _update_hint() -> void:
 func _on_arena_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if battle == null or battle.finished:
-		return
+	if battle == null or battle.finished or paused:
+		return  # pas d'ordre pendant la pause
 	var map_pos: Vector2 = (event.position - _origin()) / _cell_size()
 	var touched := _unit_at(map_pos)
 

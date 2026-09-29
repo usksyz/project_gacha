@@ -52,7 +52,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   vue pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
   du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres.
   `scripts/battle_view.gd` : classe `BattleView`, affiche le combat en direct (pions, coups,
-  chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause.
+  chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause
+  (aucun ordre pendant la pause, choix du porteur du projet).
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
