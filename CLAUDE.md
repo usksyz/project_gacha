@@ -47,9 +47,10 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
   `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, composition des
   équipes à l'avance, annonce de la quête de l'étage, choix de l'équipe, combat).
-- Équipes composées à l'avance : `GameData.teams` (`TEAM_COUNT` = 3 équipes de `TEAM_SIZE` héros,
-  sauvegardées ; un héros mort les quitte). Donjons > « Composer les équipes » pour les modifier ;
-  avant un étage, un bouton par équipe la sélectionne d'un toucher.
+- Équipes composées à l'avance : `GameData.teams` (`TEAM_COUNT` = 3 équipes, sauvegardées ; un héros
+  mort les quitte). Taille d'une équipe de combat, choix du porteur du projet : 1 héros au minimum,
+  5 au maximum (`TEAM_SIZE`), même si le cahier montre des équipes de 3. Donjons > « Composer les
+  équipes » pour les modifier ; avant un étage, un bouton par équipe la sélectionne d'un toucher.
 - `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
   de 0,1 s (`start()` puis `step()`) : grille avec décor, recherche de chemin `AStarGrid2D`, ligne de
   vue pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
