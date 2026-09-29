@@ -53,8 +53,11 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 ## Avancement (phases du cahier des charges)
 - Phase 1 (héros et combat) : fiche à 4 stats, classe Novice, niveaux/XP, plafond par étoile,
   croissance cachée et talents cachés des 1 étoile, combat auto, mort définitive avec cause : fait.
-  Reste : compétences (gain en combat, fusion, conditions de déblocage), états (saignement),
-  éveil, mana.
+  Saignement/hémorragie, éveil des compétences en situation critique, premières compétences
+  (Résistance à la douleur, Mouvement souple, Calme, Berserk ; Calme et Berserk incompatibles sauf
+  pour Han) : fait, chiffres provisoires dans `battle.gd` et `GameData.SKILLS`.
+  Reste : fusion de compétences, rangs de compétence, compétences d'arme et d'entraînement,
+  Berserk affiché sur la fiche, mana, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Reste : quêtes d'étage (types, limite de temps, survie), matériaux gradés, glisser-déposer.
 - Phase 3 (gacha) : invocation de héros faite (mages rares). Reste : tirage d'armes, arsenal.

@@ -129,12 +129,14 @@ func _show_detail(hero: Dictionary) -> void:
 		stats.add_child(stat_name)
 		stats.add_child(UI.make_label(str(hero["stats"][stat]), 26))
 
-	var skills := []
+	# Compétences : nom, rang et niveau, puis ce qu'elle fait (en plus petit).
+	content.add_child(UI.make_label("Compétences :" if not hero["skills"].is_empty() else "Compétences : aucune", 22))
 	for skill in hero["skills"]:
-		skills.append("%s (%s, niv. %d)" % [skill["name"], skill["rank"], skill["level"]])
-	var skills_label := UI.make_label("Compétences : " + ("aucune" if skills.is_empty() else ", ".join(skills)), 22)
-	skills_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(skills_label)
+		content.add_child(UI.make_label("%s (%s, niv. %d)" % [skill["name"], skill["rank"], skill["level"]], 22))
+		var description := UI.make_label(GameData.SKILLS.get(skill["name"], ""), 18)
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		description.modulate = Color(1, 1, 1, 0.6)
+		content.add_child(description)
 
 	var status_text := "En vie"
 	var status_color := Color("4caf6a")

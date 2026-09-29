@@ -14,6 +14,13 @@ const SPEEDS := [1, 2, 4]
 const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
 
+## Couleur des lignes spéciales du journal, selon leur « style » (voir Battle.events).
+const STYLE_COLORS := {
+	"bleed": Color("e07070"),    # saignement, hémorragie
+	"awaken": Color("c9a2ff"),   # éveil des compétences
+	"berserk": Color("ff4040"),  # mode Berserk
+}
+
 var battle: Battle
 var layout: VBoxContainer
 var bars: Array[ProgressBar] = []  # une barre de vie par combattant (héros, puis ennemis)
@@ -144,7 +151,15 @@ func _bar_style(color: Color) -> StyleBoxFlat:
 
 
 func _show_event(event: Dictionary) -> void:
-	log_label.add_text(event["text"] + "\n")
+	var style: String = event.get("style", "")
+	if style in STYLE_COLORS:
+		log_label.push_color(STYLE_COLORS[style])
+		log_label.add_text(event["text"] + "\n")
+		log_label.pop()
+	else:
+		log_label.add_text(event["text"] + "\n")
+	if (style == "berserk" or style == "awaken") and not skipping:
+		Settings.vibrate(150)
 	for i in bars.size():
 		_set_hp(i, event["hp"][i])
 
@@ -177,6 +192,9 @@ func _show_result(report: Dictionary) -> void:
 			"%s (%s) a quitté ce monde pour toujours." % [hero["name"], UI.rarity_text(hero["rarity"])],
 			"Cause : %s." % death["cause"],
 		], true))
+
+	if not report["skills"].is_empty():
+		box.add_child(UI.make_system_window("Éveil des compétences !", report["skills"]))
 
 	var lines := []
 	if report["victory"]:

@@ -107,6 +107,60 @@ const SECRET_HEROES := {
 }
 
 # ---------------------------------------------------------------------------
+# Compétences
+# ---------------------------------------------------------------------------
+# Une compétence, sur la fiche d'un héros : {"name": ..., "rank": "Débutant", "level": 1}.
+# Les héros les gagnent en combat (voir battle.gd) : par l'éveil en situation critique,
+# ou en survivant à un saignement. Les chiffres sont des propositions, à ajuster.
+
+## Ce que fait chaque compétence (affiché sur la fiche du héros).
+const SKILLS := {
+	"Résistance à la douleur": "Les blessures guérissent plus vite : saignements réduits de 10 % par niveau.",
+	"Mouvement souple": "Esquive : 3 % de chances par niveau d'éviter complètement un coup.",
+	"Calme": "Garde son sang-froid : sous la moitié de sa vie, subit 4 % de dégâts en moins par niveau.",
+	"Berserk": "Aux portes de la mort (moins de 30 % de vie), entre en rage : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant).",
+	"Maîtrise de l'arc": "Compétence d'arme : son effet viendra avec l'arsenal.",
+}
+
+## Niveau maximum d'une compétence (les rangs au-delà de Débutant viendront plus tard).
+const SKILL_MAX_LEVEL := 10
+
+## Compétences qui ne peuvent pas être réunies sur un même héros (sauf Han, voir can_learn_skill).
+const INCOMPATIBLE_SKILLS := [["Calme", "Berserk"]]
+
+## Compétences qu'un héros peut apprendre lors d'un éveil en situation critique.
+const AWAKENING_SKILLS := ["Calme", "Mouvement souple", "Berserk"]
+
+
+## Niveau d'une compétence dans une liste de compétences (0 si le héros ne l'a pas).
+func skill_level(skills: Array, skill_name: String) -> int:
+	for skill in skills:
+		if skill["name"] == skill_name:
+			return skill["level"]
+	return 0
+
+
+## Vrai si le héros peut apprendre cette compétence : il ne l'a pas encore,
+## et elle n'est pas incompatible avec une des siennes. Han fait exception :
+## il peut réunir Calme et Berserk (un « bug » du système, dans le manhwa).
+func can_learn_skill(hero: Dictionary, skills: Array, skill_name: String) -> bool:
+	if skill_level(skills, skill_name) > 0:
+		return false
+	if hero.get("secret", false) and hero["name"] == "Han":
+		return true
+	for pair in INCOMPATIBLE_SKILLS:
+		if skill_name in pair:
+			for other in pair:
+				if other != skill_name and skill_level(skills, other) > 0:
+					return false
+	return true
+
+
+func new_skill(skill_name: String) -> Dictionary:
+	return {"name": skill_name, "rank": "Débutant", "level": 1}
+
+
+# ---------------------------------------------------------------------------
 # La Tour
 # ---------------------------------------------------------------------------
 
@@ -529,6 +583,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"xp": 0,
 		"dead": [],       # [{"hero": ..., "cause": ...}]
 		"level_ups": [],  # [{"hero": ..., "levels": ...}]
+		"skills": [],     # compétences apprises ou améliorées pendant le combat (textes)
 		"mvp": battle.mvp(),
 	}
 	for fighter in battle.heroes:
@@ -550,6 +605,9 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	for fighter in battle.heroes:
 		var hero: Dictionary = fighter["source"]
 		if hero["alive"]:
+			# Les compétences gagnées pendant le combat sont gardées par les survivants.
+			hero["skills"] = fighter["skills"]
+			report["skills"].append_array(fighter["skill_news"])
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
