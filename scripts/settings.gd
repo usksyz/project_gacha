@@ -1,5 +1,5 @@
 extends Node
-## Paramètres du joueur (son, vibrations, vitesse de combat...).
+## Paramètres du joueur (son, vibrations, plein écran...).
 ## Chargé automatiquement au lancement (« autoload ») : accessible partout en écrivant Settings.
 ## Les réglages sont enregistrés sur l'appareil, dans un petit fichier, et relus au lancement.
 
@@ -10,8 +10,6 @@ var music_volume := 80
 var sfx_volume := 80
 var vibrations := true
 var fullscreen := false
-## Vitesse de combat : index dans BattleView.SPEEDS (0 = x1, 1 = x2, 2 = x4).
-var battle_speed_index := 0
 
 
 func _ready() -> void:
@@ -66,7 +64,6 @@ func save_settings() -> void:
 	file.set_value("son", "effets", sfx_volume)
 	file.set_value("jeu", "vibrations", vibrations)
 	file.set_value("jeu", "plein_ecran", fullscreen)
-	file.set_value("jeu", "vitesse_combat", battle_speed_index)
 	file.save(FILE_PATH)
 
 
@@ -78,4 +75,3 @@ func load_settings() -> void:
 	sfx_volume = file.get_value("son", "effets", sfx_volume)
 	vibrations = file.get_value("jeu", "vibrations", vibrations)
 	fullscreen = file.get_value("jeu", "plein_ecran", fullscreen)
-	battle_speed_index = file.get_value("jeu", "vitesse_combat", battle_speed_index)

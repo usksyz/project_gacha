@@ -1,16 +1,18 @@
 class_name BattleView
 extends Control
-## Écran de combat : rejoue, vu du dessus, un combat déjà calculé par Battle.
-## En haut le titre et le chrono, au milieu le champ de bataille, en bas le journal
-## et les boutons (pause, vitesse, passer). À la fin, les fenêtres de résultat.
+## Écran de combat, en direct et vu du dessus.
+## En haut le titre et le chrono, au milieu le champ de bataille, en bas le journal et la pause.
+## Pas d'accélération ni de « passer » : on vit le combat. On peut guider ses héros :
+## toucher un héros pour le choisir, puis toucher un endroit pour l'y envoyer
+## (se mettre à couvert, reculer, relayer un blessé), ou toucher un ennemi pour qu'il l'attaque.
+## Le combat continue même si on change d'onglet ; on peut le mettre en pause
+## (et donner des ordres pendant la pause).
 
 signal closed
 
-## Vitesses proposées par le bouton d'accélération.
-const SPEEDS := [1, 2, 4]
-
 const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
+const ORDER_COLOR := Color("f5d142")
 const GROUND_COLOR := Color("27301f")
 
 ## Couleur du décor, selon son genre.
@@ -33,22 +35,25 @@ const STYLE_COLORS := {
 const STRIKE_TIME := 0.25
 const FLOAT_TIME := 0.9
 
+## Distance (en cases) à laquelle un toucher « attrape » un pion.
+const TAP_RADIUS := 0.8
+
 var battle: Battle
-var report: Dictionary
 var layout: VBoxContainer
 var title_label: Label
 var clock_label: Label
+var hint_label: Label
 var arena: Control
 var log_label: RichTextLabel
 var controls: HBoxContainer
 var pause_button: Button
-var speed_button: Button
 
-## Moment du combat affiché (secondes), et lecture en cours ou non.
-var time := 0.0
-var playing := false
 var paused := false
-## Prochain événement du journal et premier effet encore visible (pour ne pas tout relire à chaque image).
+## Temps accumulé depuis le dernier pas du combat (secondes).
+var accumulator := 0.0
+## Héros choisi pour recevoir un ordre (son numéro), ou -1.
+var selected_id := -1
+## Prochain événement du journal à afficher, et premier effet encore visible.
 var next_event := 0
 var first_effect := 0
 
@@ -61,20 +66,20 @@ func _ready() -> void:
 	add_child(margin)
 
 	layout = VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 10)
+	layout.add_theme_constant_override("separation", 8)
 	margin.add_child(layout)
 
 
-## Lance le combat à l'écran. « report » = le rapport de GameData.finish_tower_battle.
-func play(new_battle: Battle, title: String, new_report: Dictionary) -> void:
+## Lance l'affichage d'un combat déjà préparé (battle.start() a été appelée).
+func play(new_battle: Battle, title: String) -> void:
 	battle = new_battle
-	report = new_report
-	time = 0.0
+	accumulator = 0.0
 	next_event = 0
 	first_effect = 0
+	selected_id = -1
 	paused = false
-	playing = true
 	_build(title)
+	_update_hint()
 
 
 func _build(title: String) -> void:
@@ -92,84 +97,75 @@ func _build(title: String) -> void:
 	clock_label.add_theme_color_override("font_color", Color("f5b82e"))
 	header.add_child(clock_label)
 
-	# Le champ de bataille : dessiné par _draw_arena à chaque image.
+	hint_label = UI.make_label("", 20)
+	hint_label.add_theme_color_override("font_color", ORDER_COLOR)
+	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(hint_label)
+
+	# Le champ de bataille : dessiné par _draw_arena, et on le touche pour donner des ordres.
 	arena = Control.new()
 	arena.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	arena.draw.connect(_draw_arena)
+	arena.gui_input.connect(_on_arena_input)
 	layout.add_child(arena)
 
 	# Journal : la dernière ligne reste toujours visible.
 	log_label = RichTextLabel.new()
-	log_label.custom_minimum_size.y = 150
+	log_label.custom_minimum_size.y = 140
 	log_label.scroll_following = true
 	log_label.get_v_scroll_bar().modulate.a = 0.0  # barre invisible : on fait défiler en glissant
 	log_label.add_theme_font_size_override("normal_font_size", 18)
 	log_label.add_theme_stylebox_override("normal", UI.make_panel_style(Color("12131c")))
 	layout.add_child(log_label)
 
-	# Boutons du bas : pause, accélération (la vitesse choisie est enregistrée dans les paramètres), fin directe.
 	controls = HBoxContainer.new()
-	controls.add_theme_constant_override("separation", 12)
 	layout.add_child(controls)
-	pause_button = UI.make_button("Pause", _toggle_pause, 24)
-	pause_button.custom_minimum_size = Vector2(170, 80)
+	pause_button = UI.make_button("Pause", _toggle_pause, 26)
+	pause_button.custom_minimum_size.y = 80
+	pause_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls.add_child(pause_button)
-	speed_button = UI.make_button("", _next_speed, 24)
-	speed_button.custom_minimum_size = Vector2(170, 80)
-	controls.add_child(speed_button)
-	_next_speed(0)
-	var skip_button := UI.make_button("Passer", _skip, 24)
-	skip_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	controls.add_child(skip_button)
 
 
 func _toggle_pause() -> void:
 	paused = not paused
 	pause_button.text = "Reprendre" if paused else "Pause"
+	_update_hint()
 
 
-## Passe à la vitesse suivante (x1 → x2 → x4 → x1). « step » = 0 pour juste afficher la vitesse.
-func _next_speed(step := 1) -> void:
-	if step != 0:
-		Settings.change("battle_speed_index", (Settings.battle_speed_index + step) % SPEEDS.size())
-	speed_button.text = "x%d" % SPEEDS[Settings.battle_speed_index]
-
-
-## Va directement à la fin du combat.
-func _skip() -> void:
-	if playing:
-		time = battle.duration
-		_advance(true)
-
-
+## Le combat avance en direct, même si l'écran est caché (autre onglet), sauf en pause.
 func _process(delta: float) -> void:
-	if not playing or paused or not is_visible_in_tree():
+	if battle == null or battle.finished or paused:
 		return
-	time = minf(time + delta * SPEEDS[Settings.battle_speed_index], battle.duration)
-	_advance(false)
+	accumulator += delta
+	while accumulator >= Battle.TICK and not battle.finished:
+		battle.step()
+		accumulator -= Battle.TICK
+	_advance()
+	if battle.finished:
+		_show_result(GameData.finish_tower_battle(battle))
 
 
-## Met à jour le journal, le chrono et le dessin pour le moment « time ».
-func _advance(skipping: bool) -> void:
-	while next_event < battle.events.size() and battle.events[next_event]["t"] <= time:
-		_show_event(battle.events[next_event], skipping)
+## Met à jour le journal, le chrono et le dessin.
+func _advance() -> void:
+	while next_event < battle.events.size():
+		_show_event(battle.events[next_event])
 		next_event += 1
+	if selected_id >= 0 and battle.units[selected_id]["hp"] <= 0:
+		selected_id = -1  # le héros choisi est tombé
+		_update_hint()
 	_update_clock()
 	arena.queue_redraw()
-	if time >= battle.duration:
-		playing = false
-		_show_result()
 
 
 func _update_clock() -> void:
 	var limit: float = battle.quest["seconds"]
 	var text := ""
 	if battle.quest["lasting"]:
-		text = "Encore %s" % _format_time(limit - time)
+		text = "Encore %s" % _format_time(limit - battle.time)
 	else:
-		text = "%s / %s" % [_format_time(time), _format_time(limit)]
+		text = "%s / %s" % [_format_time(battle.time), _format_time(limit)]
 	if battle.quest["walls"] > 0:
-		text += "   Remparts %d" % battle.wall_frames[_frame_index()]
+		text += "   Remparts %d" % battle.walls
 	clock_label.text = text
 
 
@@ -178,11 +174,7 @@ func _format_time(seconds: float) -> String:
 	return "%d:%02d" % [total / 60, total % 60]
 
 
-func _frame_index() -> int:
-	return clampi(floori(time / Battle.TICK), 0, battle.frames.size() - 1)
-
-
-func _show_event(event: Dictionary, skipping: bool) -> void:
+func _show_event(event: Dictionary) -> void:
 	var style: String = event["style"]
 	if style in STYLE_COLORS:
 		log_label.push_color(STYLE_COLORS[style])
@@ -190,8 +182,61 @@ func _show_event(event: Dictionary, skipping: bool) -> void:
 		log_label.pop()
 	else:
 		log_label.add_text(event["text"] + "\n")
-	if (style == "berserk" or style == "awaken") and not skipping:
+	if style == "berserk" or style == "awaken":
 		Settings.vibrate(150)
+
+
+# ---------------------------------------------------------------------------
+# Ordres du joueur
+# ---------------------------------------------------------------------------
+
+func _update_hint() -> void:
+	if selected_id >= 0:
+		hint_label.text = "%s : touche un endroit pour l'y envoyer, ou un ennemi à attaquer." \
+			% battle.units[selected_id]["name"]
+	elif paused:
+		hint_label.text = "Pause. Tu peux donner des ordres avant de reprendre."
+	else:
+		hint_label.text = "Touche un héros pour le guider."
+
+
+func _on_arena_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if battle == null or battle.finished:
+		return
+	var map_pos: Vector2 = (event.position - _origin()) / _cell_size()
+	var touched := _unit_at(map_pos)
+
+	if not touched.is_empty() and touched["is_hero"]:
+		# Choisir un héros (ou le relâcher en le touchant à nouveau).
+		selected_id = -1 if selected_id == touched["id"] else touched["id"]
+	elif selected_id >= 0:
+		var hero: Dictionary = battle.units[selected_id]
+		if not touched.is_empty():
+			battle.order_attack(hero, touched)
+		elif Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos):
+			battle.order_move(hero, map_pos)
+		else:
+			return
+		Settings.vibrate(30)
+		selected_id = -1
+	_update_hint()
+	arena.queue_redraw()
+
+
+## Le combattant debout le plus proche du point touché (ou {} si personne n'est assez près).
+func _unit_at(map_pos: Vector2) -> Dictionary:
+	var result: Dictionary = {}
+	var best := TAP_RADIUS
+	for unit in battle.units:
+		if not unit["present"] or unit["hp"] <= 0:
+			continue
+		var distance: float = unit["pos"].distance_to(map_pos)
+		if distance < best:
+			best = distance
+			result = unit
+	return result
 
 
 # ---------------------------------------------------------------------------
@@ -213,9 +258,11 @@ func _to_screen(pos: Vector2) -> Vector2:
 
 
 func _draw_arena() -> void:
-	if battle == null or battle.frames.is_empty():
+	if battle == null:
 		return
 	var cell := _cell_size()
+	if cell < 4:
+		return  # zone trop petite (écran en train de se fermer) : rien à dessiner
 	var origin := _origin()
 	arena.draw_rect(Rect2(origin, Vector2(Battle.GRID_W, Battle.GRID_H) * cell), GROUND_COLOR)
 
@@ -224,30 +271,41 @@ func _draw_arena() -> void:
 		var screen_rect := Rect2(origin + Vector2(rect.position) * cell, Vector2(rect.size) * cell).grow(-1.5)
 		arena.draw_rect(screen_rect, OBSTACLE_COLORS[obstacle["kind"]])
 
-	# Positions à ce moment : entre deux images enregistrées, on glisse de l'une à l'autre.
-	var f := time / Battle.TICK
-	var i0 := _frame_index()
-	var i1 := mini(i0 + 1, battle.frames.size() - 1)
-	var weight := clampf(f - i0, 0.0, 1.0)
-	var a: PackedFloat32Array = battle.frames[i0]
-	var b: PackedFloat32Array = battle.frames[i1]
+	# Entre deux pas du combat, les pions glissent de leur ancienne position à la nouvelle.
+	var weight := clampf(accumulator / Battle.TICK, 0.0, 1.0)
 	var positions := {}
-	for id in battle.units.size():
-		var flags := int(a[id * 4 + 3])
-		if flags & 1 == 0:
-			continue  # pas encore arrivé sur le terrain
-		var pos := Vector2(a[id * 4], a[id * 4 + 1]).lerp(Vector2(b[id * 4], b[id * 4 + 1]), weight)
-		positions[id] = pos
-		_draw_unit(battle.units[id], _to_screen(pos), a[id * 4 + 2], flags, cell)
+	for unit in battle.units:
+		if unit["present"]:
+			positions[unit["id"]] = unit["prev_pos"].lerp(unit["pos"], weight)
 
+	_draw_orders(positions, cell)
+	for id in positions:
+		_draw_unit(battle.units[id], _to_screen(positions[id]), cell)
 	_draw_names(positions, cell)
 	_draw_effects(positions, cell)
 
 
-func _draw_unit(unit: Dictionary, center: Vector2, hp: float, flags: int, cell: float) -> void:
+## Les ordres en cours : un trait jaune vers l'endroit ou l'ennemi visé.
+func _draw_orders(positions: Dictionary, cell: float) -> void:
+	for hero in battle.heroes:
+		var order: Dictionary = hero["order"]
+		if order.is_empty() or hero["hp"] <= 0 or not positions.has(hero["id"]):
+			continue
+		var from := _to_screen(positions[hero["id"]])
+		if order["kind"] == "move":
+			var to := _to_screen(order["pos"])
+			arena.draw_dashed_line(from, to, Color(ORDER_COLOR, 0.7), 2.0, 8.0)
+			arena.draw_arc(to, cell * 0.25, 0, TAU, 16, ORDER_COLOR, 2.0)
+		elif positions.has(order["target"]):
+			var to := _to_screen(positions[order["target"]])
+			arena.draw_dashed_line(from, to, Color(ORDER_COLOR, 0.7), 2.0, 8.0)
+			arena.draw_arc(to, cell * 0.55, 0, TAU, 20, ORDER_COLOR, 2.0)
+
+
+func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var radius := cell * (0.5 if unit["boss"] else 0.36)
-	if hp <= 0:
+	if unit["hp"] <= 0:
 		# Un ennemi vaincu disparaît ; un héros tombé reste, grisé.
 		if unit["is_hero"]:
 			arena.draw_circle(center, radius, Color(0.3, 0.3, 0.3, 0.6))
@@ -255,7 +313,9 @@ func _draw_unit(unit: Dictionary, center: Vector2, hp: float, flags: int, cell: 
 				radius * 2, int(radius * 1.2), Color(0.8, 0.8, 0.8))
 		return
 
-	if flags & 4:  # Berserk : un halo rouge
+	if unit["id"] == selected_id:  # héros choisi : un anneau jaune
+		arena.draw_arc(center, radius + 6, 0, TAU, 24, ORDER_COLOR, 3.0)
+	if unit["berserk"]:  # Berserk : un halo rouge
 		arena.draw_circle(center, radius + 5, Color(1, 0.15, 0.15, 0.45))
 	var fill := Color("7a2a2a")
 	var outline := ENEMY_COLOR
@@ -273,9 +333,9 @@ func _draw_unit(unit: Dictionary, center: Vector2, hp: float, flags: int, cell: 
 	var bar_width := cell * 0.8
 	var bar_pos := center + Vector2(-bar_width / 2, -radius - 7)
 	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width, 4)), Color("12131c"))
-	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width * clampf(hp / unit["max_hp"], 0, 1), 4)), outline)
+	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width * clampf(float(unit["hp"]) / unit["max_hp"], 0, 1), 4)), outline)
 
-	if flags & 2:  # saigne : une goutte rouge
+	if unit["bleed"]["ticks"] > 0:  # saigne : une goutte rouge
 		arena.draw_circle(center + Vector2(radius * 0.8, -radius * 0.6), 3.5, Color("ff3030"))
 
 
@@ -291,7 +351,7 @@ func _draw_names(positions: Dictionary, cell: float) -> void:
 			if other != id and battle.units[other]["is_hero"] and positions[other].distance_to(positions[id]) < 1.6:
 				crowded = true
 				break
-		if not crowded:
+		if not crowded or id == selected_id:
 			var center := _to_screen(positions[id])
 			arena.draw_string(font, center + Vector2(-cell, cell * 0.36 + 12), unit["name"],
 				HORIZONTAL_ALIGNMENT_CENTER, cell * 2, 11, Color(1, 1, 1, 0.8))
@@ -300,13 +360,12 @@ func _draw_names(positions: Dictionary, cell: float) -> void:
 ## Coups (traits), sorts, soins, et chiffres qui s'envolent.
 func _draw_effects(positions: Dictionary, cell: float) -> void:
 	var font := ThemeDB.fallback_font
-	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < time - FLOAT_TIME:
+	var now := battle.time
+	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < now - FLOAT_TIME:
 		first_effect += 1
 	for i in range(first_effect, battle.effects.size()):
 		var effect: Dictionary = battle.effects[i]
-		var age: float = time - effect["t"]
-		if age < 0:
-			break  # les effets suivants sont dans le futur
+		var age: float = now - effect["t"]
 		if not positions.has(effect["to"]):
 			continue
 		var to := _to_screen(positions[effect["to"]])
@@ -337,7 +396,7 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 			color = Color("ff5050")
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
-		color.a = 1.0 - age / FLOAT_TIME
+		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
 		var rise := Vector2(-40, -cell * 0.4 - age * cell * 0.8)
 		arena.draw_string(font, to + rise, effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 80, size, color)
 
@@ -346,12 +405,12 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 # Fin du combat
 # ---------------------------------------------------------------------------
 
-## Remplace la carte et les boutons par les fenêtres de fin de combat :
+## Remplace la carte et la pause par les fenêtres de fin de combat :
 ## une fenêtre rouge par héros mort, puis le résultat (récompenses, niveaux, MVP).
-func _show_result() -> void:
-	GameData.show_money()
+func _show_result(report: Dictionary) -> void:
 	controls.queue_free()
 	arena.visible = false
+	hint_label.visible = false
 	log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	# Le journal et les fenêtres de fin se partagent la place ; les fenêtres défilent si besoin.
@@ -361,33 +420,8 @@ func _show_result() -> void:
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 12)
 	scroll.add_child(box)
-
-	if not report["dead"].is_empty():
-		Settings.vibrate(400)
-	for death in report["dead"]:
-		var hero: Dictionary = death["hero"]
-		box.add_child(UI.make_system_window("Un héros est tombé", [
-			"%s (%s) a quitté ce monde pour toujours." % [hero["name"], UI.rarity_text(hero["rarity"])],
-			"Cause : %s." % death["cause"],
-		], true))
-
-	if not report["notices"].is_empty():
-		box.add_child(UI.make_system_window("Félicitations !", report["notices"]))
-	if not report["skills"].is_empty():
-		box.add_child(UI.make_system_window("Éveil des compétences !", report["skills"]))
-
-	var lines := []
-	if report["victory"]:
-		lines.append("+%d or   +%d gemmes" % [report["gold"], report["gems"]])
-	else:
-		lines.append("Les survivants sont ramenés à la cité.")
-	lines.append("+%d expérience pour chaque survivant" % report["xp"])
-	for level_up in report["level_ups"]:
-		var hero: Dictionary = level_up["hero"]
-		lines.append("%s passe au niveau %d !" % [hero["name"], hero["level"]])
-	if report["mvp"] != "":
-		lines.append("MVP : %s" % report["mvp"])
-	box.add_child(UI.make_system_window("Étage conquis !" if report["victory"] else "Défaite", lines))
+	for window in UI.make_battle_report_windows(report):
+		box.add_child(window)
 
 	var continue_button := UI.make_button("Continuer", func(): closed.emit())
 	continue_button.custom_minimum_size.y = 90

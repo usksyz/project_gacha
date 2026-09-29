@@ -56,7 +56,6 @@ func _ready() -> void:
 	_add_volume_row(content, "Effets sonores", "sfx_volume")
 
 	_add_section(content, "Jeu")
-	_add_speed_row(content)
 	_add_toggle_row(content, "Vibrations", "vibrations")
 	_add_toggle_row(content, "Plein écran", "fullscreen")
 	var language := UI.make_label("Français", 24)
@@ -142,18 +141,6 @@ func _add_toggle_row(parent: Control, text: String, setting: String) -> void:
 		refresh.call())
 	refresh.call()
 	_add_row(parent, text, button)
-
-
-## Vitesse de combat : x1 → x2 → x4 → x1 (la même que le bouton pendant les combats).
-func _add_speed_row(parent: Control) -> void:
-	var button := UI.make_button("", func(): pass, 24)
-	button.custom_minimum_size = Vector2(200, 70)
-	var refresh := func(): button.text = "x%d" % BattleView.SPEEDS[Settings.battle_speed_index]
-	button.pressed.connect(func():
-		Settings.change("battle_speed_index", (Settings.battle_speed_index + 1) % BattleView.SPEEDS.size())
-		refresh.call())
-	refresh.call()
-	_add_row(parent, "Vitesse de combat", button)
 
 
 func _on_reset_pressed() -> void:

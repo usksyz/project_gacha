@@ -59,6 +59,41 @@ func _ready() -> void:
 	GameData.gold_changed.connect(func(_amount): _refresh_money())
 	_refresh_money()
 	show_screen("hub")
+	if not GameData.absence_report.is_empty():
+		_show_absence_report()
+
+
+## Le jeu a été fermé en plein combat : on annonce comment les héros s'en sont sortis seuls.
+func _show_absence_report() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.92)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 32)
+	overlay.add_child(margin)
+	var scroll := UI.make_scroll()
+	margin.add_child(scroll)
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 12)
+	scroll.add_child(box)
+
+	var report: Dictionary = GameData.absence_report["report"]
+	box.add_child(UI.make_system_window("Pendant ton absence", [
+		"Le combat de l'étage %d a continué sans toi." % GameData.absence_report["floor"],
+		"Tes héros se sont débrouillés seuls.",
+	]))
+	for window in UI.make_battle_report_windows(report):
+		box.add_child(window)
+	var ok := UI.make_button("Compris", func():
+		overlay.queue_free()
+		GameData.absence_report = {})
+	ok.custom_minimum_size.y = 90
+	box.add_child(ok)
 
 
 ## Affiche l'écran demandé et cache les autres.

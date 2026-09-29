@@ -31,8 +31,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   ennemis et récompenses de la Tour). Il gère aussi la sauvegarde de la partie (`user://sauvegarde.cfg`) :
   relue au lancement, réécrite par `save_game()` après chaque changement (toute nouvelle fonction qui
   modifie la partie doit l'appeler), effacée par « Recommencer la partie ».
-- `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran,
-  vitesse de combat), enregistrés dans `user://parametres.cfg`.
+- `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran),
+  enregistrés dans `user://parametres.cfg`.
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
   secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : saisie des codes secrets (aussi sur la
   Place publique du hub).
@@ -47,17 +47,21 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
   `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, annonce de la
   quête de l'étage, choix de l'équipe, combat).
-- `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, calculé d'un coup par
-  petits pas de 0,1 s (grille avec décor, recherche de chemin `AStarGrid2D`, ligne de vue pour les
-  tirs, particularités de chaque classe, saignement, éveil, renforts, remparts). Le résultat est
-  appliqué dès le début du combat : quitter le jeu ne change rien, le combat « continue ».
-  `scripts/battle_view.gd` : classe `BattleView`, rejoue le film du combat (pions, coups, chiffres),
-  avec pause, vitesse x1/x2/x4 et « Passer ».
+- `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
+  de 0,1 s (`start()` puis `step()`) : grille avec décor, recherche de chemin `AStarGrid2D`, ligne de
+  vue pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
+  du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres.
+  `scripts/battle_view.gd` : classe `BattleView`, affiche le combat en direct (pions, coups,
+  chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause.
+  Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
+  (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
+  lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
-  personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. Le joueur regarde (pause,
-  accélération) ; plus tard, il aidera par des consignes données depuis la salle d'opération, que les
-  héros qui participent au combat apprendront peu à peu. Vue du dessus pour l'instant, vue
-  isométrique 3D plus tard.
+  personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
+  jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
+  pendant le combat (ce qui peut changer le résultat) ou les laisse se débrouiller ; plus tard, les
+  consignes de la salle d'opération seront apprises peu à peu par les héros qui participent au
+  combat. Vue du dessus pour l'instant, vue isométrique 3D plus tard.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Avancement (phases du cahier des charges)

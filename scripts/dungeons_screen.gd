@@ -314,13 +314,13 @@ func _start_fight() -> void:
 
 	var floor_number := GameData.tower_floor
 	var battle := Battle.new(team, floor_enemies, floor_quest)
-	battle.run()
-	# Le résultat est appliqué tout de suite : quitter l'écran pendant l'animation
-	# ne permet pas d'éviter la mort d'un héros.
-	var report := GameData.finish_tower_battle(battle)
+	battle.start()
+	# Le combat est noté dans la sauvegarde : si le jeu est fermé en plein combat,
+	# les héros se débrouillent seuls et le résultat est appliqué au lancement suivant.
+	GameData.start_tower_battle(team, floor_enemies, floor_quest)
 
 	_show_page(battle_view)
-	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]], report)
+	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]])
 
 
 func _make_margin() -> MarginContainer:

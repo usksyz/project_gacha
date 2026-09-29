@@ -81,6 +81,38 @@ static func rarity_text(rarity: int) -> String:
 	return "%d étoile%s" % [rarity, "s" if rarity > 1 else ""]
 
 
+## Fenêtres de fin d'un combat de la Tour, à partir du rapport de GameData.finish_tower_battle :
+## une fenêtre rouge par héros mort, les annonces, l'éveil des compétences, puis le résultat.
+static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
+	var windows: Array[Control] = []
+	if not report["dead"].is_empty():
+		Settings.vibrate(400)
+	for death in report["dead"]:
+		var hero: Dictionary = death["hero"]
+		windows.append(make_system_window("Un héros est tombé", [
+			"%s (%s) a quitté ce monde pour toujours." % [hero["name"], rarity_text(hero["rarity"])],
+			"Cause : %s." % death["cause"],
+		], true))
+	if not report["notices"].is_empty():
+		windows.append(make_system_window("Félicitations !", report["notices"]))
+	if not report["skills"].is_empty():
+		windows.append(make_system_window("Éveil des compétences !", report["skills"]))
+
+	var lines := []
+	if report["victory"]:
+		lines.append("+%d or   +%d gemmes" % [report["gold"], report["gems"]])
+	else:
+		lines.append("Les survivants sont ramenés à la cité.")
+	lines.append("+%d expérience pour chaque survivant" % report["xp"])
+	for level_up in report["level_ups"]:
+		var hero: Dictionary = level_up["hero"]
+		lines.append("%s passe au niveau %d !" % [hero["name"], hero["level"]])
+	if report["mvp"] != "":
+		lines.append("MVP : %s" % report["mvp"])
+	windows.append(make_system_window("Étage conquis !" if report["victory"] else "Défaite", lines))
+	return windows
+
+
 ## Carte d'un héros (rareté, nom, classe). C'est un bouton : on peut appuyer dessus.
 static func make_hero_card(hero: Dictionary) -> Button:
 	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]

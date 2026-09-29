@@ -239,11 +239,22 @@ var next_hero_id := 1
 ## Codes secrets déjà utilisés.
 var used_codes: Array[String] = []
 
+## Combat de la Tour en cours (vide s'il n'y en a pas) : {"floor", "team": [id des héros],
+## "enemies": [...], "quest": {...}}. Il est sauvegardé dès le début du combat : si le jeu est fermé
+## en plein combat, les héros se débrouillent seuls et le combat est terminé au lancement suivant.
+var pending_battle: Dictionary = {}
+
+## Résultat d'un combat terminé pendant l'absence du joueur, à lui annoncer
+## (vide sinon) : {"floor": ..., "report": rapport de finish_tower_battle}.
+var absence_report: Dictionary = {}
+
 
 func _ready() -> void:
 	# On reprend la partie enregistrée ; s'il n'y en a pas (premier lancement), on en commence une.
 	if not load_game():
 		_new_game()
+	if not pending_battle.is_empty():
+		_resolve_pending_battle()
 
 
 ## « Recommencer la partie » (depuis les paramètres) : efface la sauvegarde et repart de zéro.
@@ -261,6 +272,8 @@ func _new_game() -> void:
 	roster.clear()
 	next_hero_id = 1
 	used_codes.clear()
+	pending_battle = {}
+	absence_report = {}
 	# Han est là dès le début de la partie.
 	roster.append(_create_secret_hero("Han"))
 
@@ -291,6 +304,7 @@ func save_game() -> void:
 	file.set_value("partie", "prochain_id", next_hero_id)
 	file.set_value("partie", "codes_utilises", used_codes)
 	file.set_value("partie", "heros", roster)
+	file.set_value("partie", "combat_en_cours", pending_battle)
 	file.save(SAVE_PATH)
 
 
@@ -307,6 +321,7 @@ func load_game() -> bool:
 	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
 	used_codes.assign(file.get_value("partie", "codes_utilises", []))
 	roster.assign(file.get_value("partie", "heros", []))
+	pending_battle = file.get_value("partie", "combat_en_cours", {})
 	return not roster.is_empty()
 
 
@@ -330,12 +345,6 @@ func add_gold(amount: int) -> void:
 	gold += amount
 	gold_changed.emit(gold)
 	save_game()
-
-
-## Met à jour l'affichage de l'or et des gemmes (après un combat).
-func show_money() -> void:
-	gold_changed.emit(gold)
-	gems_changed.emit(gems)
 
 
 # ---------------------------------------------------------------------------
@@ -646,12 +655,41 @@ func _number_duplicates(enemies: Array[Dictionary]) -> void:
 			enemy["name"] = "%s %s" % [base_name, char(65 + index)]
 
 
+## Début d'un combat de la Tour : on le note dans la sauvegarde (voir pending_battle).
+func start_tower_battle(team: Array, enemies: Array, quest: Dictionary) -> void:
+	pending_battle = {
+		"floor": tower_floor,
+		"team": team.map(func(hero): return hero["id"]),
+		"enemies": enemies.duplicate(true),
+		"quest": quest,
+	}
+	save_game()
+
+
+## Le jeu a été fermé en plein combat : les héros se sont débrouillés seuls.
+## On rejoue tout le combat sans ordres, on applique le résultat, et on le garde pour l'annoncer.
+func _resolve_pending_battle() -> void:
+	var team: Array[Dictionary] = []
+	for hero in alive_heroes():
+		if hero["id"] in pending_battle["team"]:
+			team.append(hero)
+	var floor_number: int = pending_battle["floor"]
+	if team.is_empty():
+		pending_battle = {}
+		save_game()
+		return
+	var battle := Battle.new(team, pending_battle["enemies"], pending_battle["quest"])
+	battle.run()
+	absence_report = {"floor": floor_number, "report": finish_tower_battle(battle)}
+
+
 ## Applique le résultat d'un combat de la Tour et renvoie un rapport pour l'écran de fin :
 ## - les héros tombés meurent pour toujours (sauf les immortels) ;
 ## - en cas de victoire : or, gemmes, expérience pour les survivants, étage suivant ;
 ## - en cas de défaite : les survivants gagnent quand même la moitié de l'expérience
 ##   (sinon une équipe bloquée ne pourrait plus jamais progresser).
 func finish_tower_battle(battle: Battle) -> Dictionary:
+	pending_battle = {}  # le combat est terminé (la sauvegarde est réécrite plus bas)
 	var report := {
 		"victory": battle.victory,
 		"gold": 0,
@@ -677,11 +715,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	if battle.victory:
 		report.merge(rewards, true)
 		tower_floor += 1
-		# Les récompenses sont gagnées tout de suite (et sauvegardées plus bas), mais
-		# l'affichage en haut de l'écran ne change qu'à la fin du combat, pour ne pas
-		# dévoiler la victoire : c'est l'écran de combat qui appelle show_money().
-		gold += rewards["gold"]
-		gems += rewards["gems"]
+		add_gold(rewards["gold"])
+		add_gems(rewards["gems"])
 	else:
 		report["xp"] = rewards["xp"] / 2
 

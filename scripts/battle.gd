@@ -2,11 +2,12 @@ class_name Battle
 extends RefCounted
 ## Combat en temps réel, vu du dessus.
 ##
-## Le combat est calculé en entier, d'un seul coup, par run() : on fait avancer le temps
-## par petits pas (TICK), et à chaque pas on enregistre la position et la vie de chacun
-## dans « frames ». L'écran de combat (BattleView) rejoue ensuite ce film, avec pause
-## et accélération. Comme le résultat est connu dès le départ, quitter le jeu pendant
-## le combat ne change rien : il « continue » sans le joueur.
+## Le combat se joue en direct : l'écran de combat (BattleView) appelle step() 10 fois
+## par seconde (un pas = TICK secondes), et dessine où en est chacun. Pas d'accélération :
+## on vit le combat. Le joueur peut guider ses héros pendant le combat (order_move, order_attack),
+## ce qui peut changer le résultat, ou les laisser se débrouiller.
+## run() joue tout le combat d'un coup, sans ordres : c'est ce qui arrive quand le joueur
+## ferme le jeu en plein combat (les héros se débrouillent seuls, voir GameData).
 ##
 ## Le champ de bataille est une grille : chaque case est libre ou bloquée par le décor
 ## (rochers, murs, maisons). Les combattants se déplacent librement entre les cases libres,
@@ -15,6 +16,8 @@ extends RefCounted
 ## Comportements :
 ## - les ennemis foncent sur les héros (en défense : sur les remparts, sauf si un héros est tout près) ;
 ## - les héros tiennent leur position et attaquent les ennemis qui s'approchent ;
+##   un ordre du joueur passe avant tout : aller à un endroit (qui devient leur nouveau poste),
+##   ou attaquer un ennemi précis ;
 ## - chaque classe a sa particularité :
 ##     Novice    : attaque simple au corps à corps
 ##     Guerrier  : frappe fort (dégâts x1.2)
@@ -128,26 +131,21 @@ var obstacles: Array[Dictionary] = []
 ## Remparts de la cité (quête de défense seulement).
 var walls := 0
 
-## Le film du combat : une image par pas de temps. Chaque image est une liste de 4 nombres
-## par combattant : x, y, vie, drapeaux (1 = présent sur le terrain, 2 = saigne, 4 = Berserk).
-var frames: Array[PackedFloat32Array] = []
-## Remparts restants à chaque image (défense).
-var wall_frames: PackedInt32Array = []
-
 ## Journal : {"t": moment (secondes), "text": ..., "style": "" ou "bleed", "awaken", "berserk", "reinforce"}.
 var events: Array[Dictionary] = []
 
-## Effets à dessiner : {"t", "kind": "hit" / "arrow" / "spell" / "heal", "from": id, "to": id,
+## Effets à dessiner : {"t", "kind": "hit" / "arrow" / "spell" / "heal" / "bleed", "from": id, "to": id,
 ## "text": « -12 », « esquive ! », « +20 »..., "crit": bool}.
 var effects: Array[Dictionary] = []
 
 var victory := false
-## Durée totale du combat, en secondes.
+## Vrai quand le combat est terminé (victoire, défaite, temps écoulé).
+var finished := false
+## Moment du combat, en secondes (et sa durée totale une fois terminé).
+var time := 0.0
 var duration := 0.0
 
-var _time := 0.0
 var _grid := AStarGrid2D.new()
-var _finished := false
 ## Moment où chaque place d'ennemi s'est libérée (pour faire venir un renfort après un délai).
 var _free_since := {}
 
@@ -165,23 +163,83 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 		units[i]["id"] = i
 
 
-## Joue tout le combat.
-func run() -> void:
+## Prépare le champ de bataille et place tout le monde. À appeler une fois, avant step().
+func start() -> void:
 	_build_map()
 	_place_units()
-	var limit: float = quest["seconds"]
-	while _time < limit and not _finished:
-		_step()
-		_record()
-		_time += TICK
-	if not _finished:
+
+
+## Fait avancer le combat d'un pas (TICK secondes).
+func step() -> void:
+	if finished:
+		return
+	for unit in units:
+		unit["prev_pos"] = unit["pos"]  # pour que l'écran glisse en douceur d'un pas à l'autre
+	_step()
+	time += TICK
+	if not finished and time >= quest["seconds"]:
 		if quest["lasting"]:
 			victory = true
 			_log("Le compte à rebours est terminé : ton équipe a tenu bon ! Victoire !")
 		else:
 			_log("Le temps est écoulé : ton équipe bat en retraite.")
-	duration = _time
+		_finish()
+
+
+## Joue tout le combat d'un coup, sans ordres du joueur.
+func run() -> void:
+	start()
+	while not finished:
+		step()
+
+
+func _finish() -> void:
+	finished = true
+	duration = time
 	_after_fight()
+
+
+# ---------------------------------------------------------------------------
+# Ordres du joueur
+# ---------------------------------------------------------------------------
+
+## Envoie un héros à un endroit (en cases) : il y va sans s'arrêter, puis en fait son nouveau poste.
+func order_move(hero: Dictionary, pos: Vector2) -> void:
+	if _is_blocked(pos):
+		pos = _free_cell_near(_cell_of(pos))
+	hero["order"] = {"kind": "move", "pos": pos}
+	hero["path"] = PackedVector2Array()
+
+
+## Demande à un héros d'attaquer un ennemi précis, jusqu'à ce qu'il tombe.
+func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
+	hero["order"] = {"kind": "attack", "target": enemy["id"]}
+	hero["path"] = PackedVector2Array()
+
+
+## Suit l'ordre du joueur, s'il y en a un. Renvoie faux quand il n'y a (plus) d'ordre à suivre.
+func _follow_order(unit: Dictionary, foes: Array) -> bool:
+	var order: Dictionary = unit.get("order", {})
+	if order.is_empty():
+		return false
+	if order["kind"] == "move":
+		if unit["pos"].distance_to(order["pos"]) > 0.15:
+			_move_towards(unit, order["pos"])
+			return true
+		unit["post"] = order["pos"]  # arrivé : c'est son nouveau poste
+		unit["order"] = {}
+		return false
+	var target: Dictionary = units[order["target"]]
+	if target["hp"] <= 0:
+		unit["order"] = {}  # la cible est tombée : ordre accompli
+		return false
+	unit["target_id"] = target["id"]
+	var reach := RANGED_RANGE if unit["ranged"] else MELEE_RANGE
+	if _in_reach(unit, target, reach):
+		_try_attack(unit, target, foes)
+	else:
+		_move_towards(unit, target["pos"])
+	return true
 
 
 ## Le héros qui a le plus contribué (dégâts + soins), ou "" s'il n'y a aucun héros.
@@ -221,6 +279,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"ranged": fighter_class in ["Archer", "Mage", "Soigneur"],
 		"present": false,          # sur le terrain (les renforts arrivent plus tard)
 		"pos": Vector2.ZERO,       # position, en cases (0.5 = milieu de la première case)
+		"prev_pos": Vector2.ZERO,  # position au pas précédent (pour que l'écran glisse en douceur)
+		"order": {},               # ordre du joueur en cours (voir order_move, order_attack)
 		"post": Vector2.ZERO,      # poste que le héros tient
 		"path": PackedVector2Array(),
 		"path_timer": 0.0,
@@ -310,12 +370,14 @@ func _place_row(fighters: Array[Dictionary], row: int) -> void:
 	for i in fighters.size():
 		var x := GRID_W / 2 + (i - fighters.size() / 2) * 2
 		fighters[i]["pos"] = _free_cell_near(Vector2i(clampi(x, 0, GRID_W - 1), row))
+		fighters[i]["prev_pos"] = fighters[i]["pos"]
 		fighters[i]["present"] = true
 
 
 ## Fait entrer un ennemi sur le terrain, sur une case libre de la ligne donnée.
 func _spawn_enemy(enemy: Dictionary, row: int) -> void:
 	enemy["pos"] = _free_cell_near(Vector2i(randi_range(1, GRID_W - 2), row))
+	enemy["prev_pos"] = enemy["pos"]
 	enemy["present"] = true
 
 
@@ -388,10 +450,10 @@ func _call_reinforcements() -> void:
 	var free_places := ENEMY_SLOTS - on_field
 	for place in free_places:
 		if not _free_since.has(place):
-			_free_since[place] = _time
+			_free_since[place] = time
 	var arrivals := []
 	for place in _free_since.keys():
-		if _time - _free_since[place] >= REINFORCE_DELAY and not waiting.is_empty():
+		if time - _free_since[place] >= REINFORCE_DELAY and not waiting.is_empty():
 			var enemy: Dictionary = waiting.pop_front()
 			_spawn_enemy(enemy, 0)
 			arrivals.append(enemy["name"])
@@ -410,7 +472,7 @@ func _reserve() -> Array:
 
 ## Fin du combat ? (victoire, défaite, cité tombée)
 func _check_end() -> bool:
-	if _finished:
+	if finished:
 		return true
 	if _alive(enemies).is_empty() and _reserve().is_empty():
 		victory = true
@@ -421,7 +483,7 @@ func _check_end() -> bool:
 		_log("Les remparts cèdent : la cité est tombée !")
 	else:
 		return false
-	_finished = true
+	_finish()
 	return true
 
 
@@ -429,6 +491,10 @@ func _check_end() -> bool:
 func _think(unit: Dictionary) -> void:
 	var foes := _alive(enemies if unit["is_hero"] else heroes)
 	var allies := _alive(heroes if unit["is_hero"] else enemies)
+
+	# Un ordre du joueur passe avant tout.
+	if unit["is_hero"] and _follow_order(unit, foes):
+		return
 
 	# Soigneur : un allié blessé passe avant tout.
 	if unit["class"] == "Soigneur":
@@ -833,29 +899,8 @@ func _alive(fighters: Array) -> Array:
 
 
 func _log(text: String, style := "") -> void:
-	events.append({"t": _time, "text": text, "style": style})
+	events.append({"t": time, "text": text, "style": style})
 
 
 func _effect(kind: String, from: Dictionary, to: Dictionary, text: String, crit: bool) -> void:
-	effects.append({"t": _time, "kind": kind, "from": from["id"], "to": to["id"], "text": text, "crit": crit})
-
-
-## Enregistre une image du film : position, vie et état de chacun.
-func _record() -> void:
-	var frame := PackedFloat32Array()
-	frame.resize(units.size() * 4)
-	for i in units.size():
-		var unit: Dictionary = units[i]
-		var flags := 0
-		if unit["present"]:
-			flags |= 1
-		if unit["bleed"]["ticks"] > 0:
-			flags |= 2
-		if unit["berserk"]:
-			flags |= 4
-		frame[i * 4] = unit["pos"].x
-		frame[i * 4 + 1] = unit["pos"].y
-		frame[i * 4 + 2] = unit["hp"]
-		frame[i * 4 + 3] = flags
-	frames.append(frame)
-	wall_frames.append(walls)
+	effects.append({"t": time, "kind": kind, "from": from["id"], "to": to["id"], "text": text, "crit": crit})
