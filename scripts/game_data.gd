@@ -161,11 +161,19 @@ var used_codes: Array[String] = []
 
 
 func _ready() -> void:
-	reset_game()
+	# On reprend la partie enregistrée ; s'il n'y en a pas (premier lancement), on en commence une.
+	if not load_game():
+		_new_game()
 
 
-## Remet la partie à zéro (au lancement, et depuis les paramètres : « Recommencer la partie »).
+## « Recommencer la partie » (depuis les paramètres) : efface la sauvegarde et repart de zéro.
 func reset_game() -> void:
+	delete_save()
+	_new_game()
+
+
+## Prépare une partie neuve.
+func _new_game() -> void:
 	gems = 3000
 	gold = 0
 	pity_counter = 0
@@ -178,17 +186,70 @@ func reset_game() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Sauvegarde
+# ---------------------------------------------------------------------------
+# La partie est enregistrée sur l'appareil, dans le dossier « user:// » de Godot
+# (sur le web : le stockage du navigateur). Elle est réécrite après chaque changement
+# (invocation, combat, code secret, gemmes ou or gagnés) et relue au lancement.
+# ConfigFile garde les types (un nombre entier reste un entier), contrairement au JSON.
+
+const SAVE_PATH := "user://sauvegarde.cfg"
+
+## Numéro du format de sauvegarde : à augmenter si on change ce qui est enregistré,
+## pour pouvoir adapter les anciennes sauvegardes.
+const SAVE_VERSION := 1
+
+
+## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
+func save_game() -> void:
+	var file := ConfigFile.new()
+	file.set_value("partie", "version", SAVE_VERSION)
+	file.set_value("partie", "gemmes", gems)
+	file.set_value("partie", "or", gold)
+	file.set_value("partie", "pity", pity_counter)
+	file.set_value("partie", "etage", tower_floor)
+	file.set_value("partie", "prochain_id", next_hero_id)
+	file.set_value("partie", "codes_utilises", used_codes)
+	file.set_value("partie", "heros", roster)
+	file.save(SAVE_PATH)
+
+
+## Relit la partie enregistrée. Renvoie false s'il n'y a pas de sauvegarde lisible.
+func load_game() -> bool:
+	var file := ConfigFile.new()
+	if file.load(SAVE_PATH) != OK:
+		return false
+	gems = file.get_value("partie", "gemmes", 3000)
+	gold = file.get_value("partie", "or", 0)
+	pity_counter = file.get_value("partie", "pity", 0)
+	tower_floor = file.get_value("partie", "etage", 1)
+	next_hero_id = file.get_value("partie", "prochain_id", 1)
+	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
+	used_codes.assign(file.get_value("partie", "codes_utilises", []))
+	roster.assign(file.get_value("partie", "heros", []))
+	return not roster.is_empty()
+
+
+## Efface la sauvegarde (utilisé par « Recommencer la partie »).
+func delete_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(SAVE_PATH)
+
+
+# ---------------------------------------------------------------------------
 # Monnaies
 # ---------------------------------------------------------------------------
 
 func add_gems(amount: int) -> void:
 	gems += amount
 	gems_changed.emit(gems)
+	save_game()
 
 
 func add_gold(amount: int) -> void:
 	gold += amount
 	gold_changed.emit(gold)
+	save_game()
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +273,7 @@ func summon(count: int) -> Array[Dictionary]:
 		roster.append(hero)
 		results.append(hero)
 	gems_changed.emit(gems)
+	save_game()
 	return results
 
 
@@ -305,6 +367,7 @@ func redeem_code(code: String) -> Dictionary:
 			used_codes.append(code)
 			var hero := _create_secret_hero(hero_name)
 			roster.append(hero)
+			save_game()
 			return hero
 	return {}
 
@@ -471,6 +534,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	for fighter in battle.heroes:
 		if fighter["hp"] <= 0 and not fighter["immortal"]:
 			fighter["source"]["alive"] = false
+			# La cause est gardée sur la fiche du héros (et donc dans la sauvegarde).
+			fighter["source"]["death_cause"] = fighter["killer"]
 			report["dead"].append({"hero": fighter["source"], "cause": fighter["killer"]})
 
 	var rewards := tower_rewards(tower_floor)
@@ -488,4 +553,5 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
+	save_game()
 	return report

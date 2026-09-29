@@ -143,9 +143,12 @@ func _show_detail(hero: Dictionary) -> void:
 		status_color = Color("f5b82e")
 	elif not hero["alive"]:
 		status_text = "Mort"
+		if hero.get("death_cause", "") != "":
+			status_text = "Mort — %s" % hero["death_cause"]
 		status_color = Color("e05252")
 	var status := UI.make_label(status_text, 26)
 	status.add_theme_color_override("font_color", status_color)
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(status)
 
 	var close := UI.make_button("Fermer", func(): detail_overlay.visible = false)

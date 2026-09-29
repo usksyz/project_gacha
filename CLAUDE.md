@@ -28,7 +28,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   écran actif, barre de menus en bas (Hub, Invocation, Collection, Donjons).
 - `scripts/game_data.gd` : autoload `GameData`, données et règles (invocation, fiche de héros :
   force/intelligence/santé/dextérité, niveaux et expérience, croissance cachée, héros secrets,
-  ennemis et récompenses de la Tour).
+  ennemis et récompenses de la Tour). Il gère aussi la sauvegarde de la partie (`user://sauvegarde.cfg`) :
+  relue au lancement, réécrite par `save_game()` après chaque changement (toute nouvelle fonction qui
+  modifie la partie doit l'appeler), effacée par « Recommencer la partie ».
 - `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran,
   vitesse de combat), enregistrés dans `user://parametres.cfg`.
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
@@ -56,4 +58,5 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Reste : quêtes d'étage (types, limite de temps, survie), matériaux gradés, glisser-déposer.
 - Phase 3 (gacha) : invocation de héros faite (mages rares). Reste : tirage d'armes, arsenal.
-- Phases 4 à 6 (lobby, artisanat, fin de jeu, sauvegarde) : à faire.
+- Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
+  (reste l'équilibrage de la phase 6).
