@@ -14,6 +14,12 @@ const MENU := {
 	"dungeons": "Donjons",
 }
 
+## Écrans ouverts depuis le hub, sans bouton dans la barre de menus (nom affiché en haut).
+const HUB_SCREENS := {
+	"training": "Terrain d'entraînement",
+	"armory": "Armurerie",
+}
+
 var screens := {}
 var nav_buttons := {}
 var title_label: Label
@@ -47,6 +53,12 @@ func _ready() -> void:
 	screens["summon"] = SummonScreen.new()
 	screens["collection"] = CollectionScreen.new()
 	screens["dungeons"] = DungeonsScreen.new()
+	var training := TrainingScreen.new()
+	training.navigate.connect(show_screen)
+	screens["training"] = training
+	var armory := ArmoryScreen.new()
+	armory.navigate.connect(show_screen)
+	screens["armory"] = armory
 	for screen in screens.values():
 		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 		content.add_child(screen)
@@ -100,8 +112,13 @@ func _show_absence_report() -> void:
 func show_screen(screen_name: String) -> void:
 	for key in screens:
 		screens[key].visible = key == screen_name
-	nav_buttons[screen_name].button_pressed = true
-	title_label.text = MENU[screen_name]
+	if nav_buttons.has(screen_name):
+		nav_buttons[screen_name].button_pressed = true
+		title_label.text = MENU[screen_name]
+	else:
+		# Écran du hub : c'est l'onglet Hub qui reste allumé dans la barre de menus.
+		nav_buttons["hub"].button_pressed = true
+		title_label.text = HUB_SCREENS[screen_name]
 	var screen: Control = screens[screen_name]
 	if screen.has_method("on_shown"):
 		screen.on_shown()

@@ -27,6 +27,10 @@ extends RefCounted
 ##     Assassin  : vise l'ennemi qui a le moins de points de vie
 ##     Soigneur  : soigne à distance l'allié le plus blessé (attaque si personne n'est blessé)
 ##   Les tireurs (Archer, Mage, Soigneur) reculent quand un ennemi arrive au contact.
+## - l'arme d'un héros (voir GameData.WEAPON_TYPES) décide de sa portée et de ses coups :
+##   un héros avec un arc devient un tireur, quelle que soit sa classe ; lance et fouet frappent
+##   d'un peu plus loin ; la dague frappe vite. Le grade de l'arme ajoute de l'attaque,
+##   le bouclier de la défense. Les ennemis, mages et soigneurs n'ont pas d'arme.
 ##
 ## États et compétences (les chiffres sont des propositions, à ajuster) :
 ## - saignement : un coup critique, ou un coup qui retire beaucoup de vie d'un coup,
@@ -35,7 +39,9 @@ extends RefCounted
 ## - éveil des compétences : un héros qui passe sous 25 % de sa vie peut s'éveiller,
 ##   une fois par combat : ses compétences gagnent plusieurs niveaux d'un coup,
 ##   et il peut en apprendre une nouvelle ;
-## - un héros qui a saigné et termine le combat debout peut apprendre Résistance à la douleur.
+## - un héros qui a saigné et termine le combat debout peut apprendre Résistance à la douleur ;
+## - les flèches tirées par un héros sont comptées (« shots ») : elles font progresser
+##   Maîtrise de l'arc à la fin du combat (voir GameData.finish_tower_battle).
 ## Les effets des compétences sont décrits dans GameData.SKILLS.
 ##
 ## Quête (voir GameData.floor_quest) :
@@ -69,6 +75,9 @@ const DEFAULT_QUEST := {"type": "extermination", "lasting": false, "seconds": 90
 const MELEE_RANGE := 1.0
 const RANGED_RANGE := 5.5
 const SPELL_RADIUS := 1.6
+## Au-delà de cette portée, on tire (il faut voir la cible) ; en dessous, on frappe
+## (épée, dague : 1 case ; lance, fouet : un peu plus, voir GameData.WEAPON_TYPES).
+const MELEE_REACH_MAX := 2.5
 ## Les héros restent à leur poste tant qu'aucun ennemi n'est plus près que ça (en cases).
 const ENGAGE_DISTANCE := 7.0
 ## Un chevalier attire les ennemis qui sont à moins de cette distance de lui.
@@ -234,8 +243,7 @@ func _follow_order(unit: Dictionary, foes: Array) -> bool:
 		unit["order"] = {}  # la cible est tombée : ordre accompli
 		return false
 	unit["target_id"] = target["id"]
-	var reach := RANGED_RANGE if unit["ranged"] else MELEE_RANGE
-	if _in_reach(unit, target, reach):
+	if _in_reach(unit, target, unit["reach"]):
 		_try_attack(unit, target, foes)
 	else:
 		_move_towards(unit, target["pos"])
@@ -258,6 +266,12 @@ func mvp() -> String:
 func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	var stats := GameData.combat_stats(source)
 	var fighter_class: String = source["class"]
+	# L'arme d'un héros décide de sa portée et de sa façon de frapper (voir GameData.WEAPON_TYPES).
+	# Les ennemis, les mages et les soigneurs n'ont pas d'arme : leur classe décide.
+	var gear: Dictionary = GameData.gear_stats(source) if is_hero else {}
+	var reach := RANGED_RANGE if fighter_class in ["Archer", "Mage", "Soigneur"] else MELEE_RANGE
+	if not gear.is_empty():
+		reach = gear["reach"]
 	return {
 		"name": source["name"],
 		"class": fighter_class,
@@ -272,11 +286,17 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"skills": source.get("skills", []).duplicate(true),
 		"hp": stats["hp"],
 		"max_hp": stats["hp"],
-		"atk": stats["atk"],
-		"def": stats["def"],
+		"atk": stats["atk"] + gear.get("atk", 0),
+		"def": stats["def"] + gear.get("def", 0),
 		"spd": stats["spd"],
-		"crit": stats["crit"],
-		"ranged": fighter_class in ["Archer", "Mage", "Soigneur"],
+		"crit": stats["crit"] + gear.get("crit", 0.0),
+		"weapon": gear.get("type", ""),              # type d'arme ("" = pas d'arme)
+		"weapon_skill": gear.get("skill", ""),       # compétence qui renforce cette arme
+		"weapon_power": gear.get("power", 1.0),      # force de chaque coup
+		"weapon_speed": gear.get("speed", 1.0),      # durée entre deux coups (0.7 = plus rapide)
+		"shield": gear.get("shield", false),         # porte un bouclier
+		"reach": reach,                              # portée d'attaque, en cases
+		"ranged": reach > MELEE_REACH_MAX,           # tireur : reste derrière et recule au contact
 		"present": false,          # sur le terrain (les renforts arrivent plus tard)
 		"pos": Vector2.ZERO,       # position, en cases (0.5 = milieu de la première case)
 		"prev_pos": Vector2.ZERO,  # position au pas précédent (pour que l'écran glisse en douceur)
@@ -293,6 +313,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"awakening_tried": false,  # l'éveil n'est tenté qu'une fois par combat
 		"berserk": false,          # en rage (compétence Berserk)
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
+		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 	}
 
 
@@ -534,12 +555,12 @@ func _think(unit: Dictionary) -> void:
 		var closest := _nearest(unit, foes)
 		if unit["pos"].distance_to(closest["pos"]) < 1.6:
 			_step_away(unit, closest["pos"])
-		if _in_reach(unit, target, RANGED_RANGE):
+		if _in_reach(unit, target, unit["reach"]):
 			_try_attack(unit, target, foes)
 		else:
 			_move_towards(unit, target["pos"])
 	else:
-		if _in_reach(unit, target, MELEE_RANGE):
+		if _in_reach(unit, target, unit["reach"]):
 			_try_attack(unit, target, foes)
 		else:
 			_move_towards(unit, target["pos"])
@@ -573,11 +594,12 @@ func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
 	var distance: float = unit["pos"].distance_to(target["pos"])
 	if distance > reach + 0.05:
 		return false
-	return reach <= MELEE_RANGE or _line_of_sight(unit["pos"], target["pos"])
+	return reach <= MELEE_REACH_MAX or _line_of_sight(unit["pos"], target["pos"])
 
 
+## Temps entre deux attaques : plus court avec de la dextérité, et selon l'arme (dague rapide, lance lente).
 func _attack_time(unit: Dictionary) -> float:
-	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"]))
+	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"]) * unit["weapon_speed"])
 
 
 func _move_speed(unit: Dictionary) -> float:
@@ -650,28 +672,40 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 		return
 	attacker["cooldown"] = _attack_time(attacker)
 	match attacker["class"]:
-		"Guerrier":
-			_hit(attacker, target, 1.2, false, "hit")
 		"Mage":
 			# Le sort touche la cible et tous les ennemis autour d'elle.
 			for foe in foes:
 				if foe["pos"].distance_to(target["pos"]) <= SPELL_RADIUS:
 					_hit(attacker, foe, 0.7, false, "spell")
-		"Archer":
-			var critical: bool = randf() < attacker["crit"] + 0.25
-			_hit(attacker, target, 2.0 if critical else 1.0, critical, "arrow")
-		"Assassin":
-			_hit(attacker, target, 1.0, false, "hit")
 		"Soigneur":
 			_hit(attacker, target, 1.0, false, "spell")
 		_:
-			var critical: bool = randf() < attacker["crit"]
-			_hit(attacker, target, 1.5 if critical else 1.0, critical, "hit")
+			if attacker["ranged"]:
+				# Un tir (arc). Les archers visent mieux : +25 % de critiques, et leurs critiques font x2.
+				var archer: bool = attacker["class"] == "Archer"
+				var critical: bool = randf() < attacker["crit"] + (0.25 if archer else 0.0)
+				var power := (2.0 if archer else 1.5) if critical else 1.0
+				_hit(attacker, target, power * attacker["weapon_power"], critical, "arrow")
+				if attacker["is_hero"]:
+					attacker["shots"] += 1
+			else:
+				# Un coup au contact (épée, lance, dague, fouet...).
+				var power := 1.0
+				var critical := false
+				match attacker["class"]:
+					"Guerrier":
+						power = 1.2  # frappe fort
+					"Assassin":
+						pass
+					_:
+						critical = randf() < attacker["crit"]
+						power = 1.5 if critical else 1.0
+				_hit(attacker, target, power * attacker["weapon_power"], critical, "hit")
 
 
 ## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.
 func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool, kind: String) -> void:
-	var amount := _damage(attacker, target, power, critical)
+	var amount := _damage(attacker, target, power, critical, kind)
 	var text := "esquive !" if amount < 0 else "-%d" % amount
 	_effect(kind, attacker, target, text, critical and amount >= 0)
 	if target["hp"] <= 0 and target["killer"] == "":
@@ -679,11 +713,18 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 
 
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
-func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false) -> int:
+## « kind » : "hit" (corps à corps), "arrow" (flèche) ou "spell" (sort).
+func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false, kind := "hit") -> int:
 	# Mouvement souple : une chance d'éviter complètement le coup.
 	if randf() < GameData.skill_level(target["skills"], "Mouvement souple") * DODGE_PER_LEVEL:
 		return -1
+	# Maîtrise de l'arme que tient l'attaquant (épée, arc...) : chaque niveau renforce ses coups.
+	if kind != "spell" and attacker["weapon_skill"] != "":
+		power *= 1.0 + GameData.skill_level(attacker["skills"], attacker["weapon_skill"]) * GameData.WEAPON_SKILL_BONUS_PER_LEVEL
 	var raw: float = attacker["atk"] * power * randf_range(0.9, 1.1) - target["def"] * 0.5
+	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.
+	if target["shield"]:
+		raw *= 1.0 - GameData.skill_level(target["skills"], "Utilisation du bouclier") * GameData.SHIELD_GUARD_PER_LEVEL
 	# Calme : sous la moitié de sa vie, la cible garde son sang-froid et encaisse mieux.
 	if target["hp"] * 2 < target["max_hp"]:
 		raw *= 1.0 - GameData.skill_level(target["skills"], "Calme") * CALM_PER_LEVEL

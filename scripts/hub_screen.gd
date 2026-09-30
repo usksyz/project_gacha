@@ -64,6 +64,11 @@ func on_shown() -> void:
 
 func _on_zone_pressed(zone: Dictionary) -> void:
 	info_label.text = "%s : %s" % [zone["name"], zone["info"]]
+	# Le terrain d'entraînement ne s'ouvre qu'après quelques tirages d'armes.
+	if zone["target"] == "training" and not GameData.training_unlocked():
+		info_label.text = "%s : encore fermé. Il s'ouvre après %d armes tirées à l'Armurerie (%d / %d)." % [
+			zone["name"], GameData.TRAINING_UNLOCK_DRAWS, GameData.weapon_draws, GameData.TRAINING_UNLOCK_DRAWS]
+		return
 	if zone["target"] == "code":
 		code_pad.open()
 	elif zone["target"] != "":

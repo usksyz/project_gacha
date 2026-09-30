@@ -129,6 +129,15 @@ func _show_detail(hero: Dictionary) -> void:
 		stats.add_child(stat_name)
 		stats.add_child(UI.make_label(str(hero["stats"][stat]), 26))
 
+	# Équipement : l'arme (ou l'arme de départ) et le bouclier. Les mages se battent avec la magie.
+	if GameData.uses_magic(hero):
+		content.add_child(UI.make_label("Arme : aucune (magie)", 22))
+	else:
+		content.add_child(UI.make_label("Arme : %s" % GameData.fighting_weapon(hero)["name"], 22))
+		var shield := GameData.equipped(hero, "shield")
+		if not shield.is_empty():
+			content.add_child(UI.make_label("Bouclier : %s" % GameData.weapon_name(shield), 22))
+
 	# Compétences : nom, rang et niveau, puis ce qu'elle fait (en plus petit).
 	content.add_child(UI.make_label("Compétences :" if not hero["skills"].is_empty() else "Compétences : aucune", 22))
 	for skill in hero["skills"]:
@@ -137,6 +146,17 @@ func _show_detail(hero: Dictionary) -> void:
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		description.modulate = Color(1, 1, 1, 0.6)
 		content.add_child(description)
+
+	# Progrès en cours (terrain d'entraînement, tirs à l'arc...) : « Maîtrise de l'épée : 40 / 100 ».
+	var progress: Dictionary = hero.get("skill_progress", {})
+	for skill_name in progress:
+		if progress[skill_name] > 0:
+			var line := UI.make_label("Progrès — %s : %d / %d" % [skill_name, progress[skill_name],
+				GameData.skill_progress_needed(skill_name)], 18)
+			line.modulate = Color(1, 1, 1, 0.6)
+			content.add_child(line)
+	if hero["alive"] and hero.get("training", "") != "":
+		content.add_child(UI.make_label("Au terrain d'entraînement : %s" % hero["training"], 20))
 
 	var status_text := "En vie"
 	var status_color := Color("4caf6a")

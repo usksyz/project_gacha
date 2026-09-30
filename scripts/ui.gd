@@ -96,7 +96,7 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 	if not report["notices"].is_empty():
 		windows.append(make_system_window("Félicitations !", report["notices"]))
 	if not report["skills"].is_empty():
-		windows.append(make_system_window("Éveil des compétences !", report["skills"]))
+		windows.append(make_system_window("Progrès des compétences !", report["skills"]))
 
 	var lines := []
 	if report["victory"]:

@@ -67,6 +67,28 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   pendant le combat (ce qui peut changer le résultat) ou les laisse se débrouiller ; plus tard, les
   consignes de la salle d'opération seront apprises peu à peu par les héros qui participent au
   combat. Vue du dessus pour l'instant, vue isométrique 3D plus tard.
+- `scripts/training_screen.gd` : terrain d'entraînement (ouvert depuis le hub, bouton « Retour à la cité ») ;
+  `main.gd` range les écrans du hub sans onglet dans `HUB_SCREENS`. Un héros y travaille une compétence
+  (`hero["training"]`) ; une séance toutes les `TRAINING_SESSION_SECONDS` de temps réel, même jeu fermé
+  (`GameData.update_training()`, appelée au lancement puis toutes les 5 s). Choix du porteur du projet :
+  un héros qui monte dans la Tour quitte le terrain le temps de l'étage (il garde sa place et son
+  programme, le temps dans la Tour ne compte pas) et reprend l'entraînement après.
+  À terme (pas encore fait) : le temps du lobby ira 3 fois plus vite que le temps réel, et les héros se
+  baladeront et feront des choses d'eux-mêmes, comme aller au terrain d'entraînement.
+- `scripts/armory_screen.gd` : Armurerie (ouverte depuis le hub). Tirage d'armes x1 / x10 payé en or
+  (`WEAPON_DRAW_COST`), grades F à C+ (`WEAPON_GRADES`), arsenal (`GameData.arsenal`, une arme porte le
+  numéro de son héros dans `owner`, 0 = rangée). Types : Épée, Lance, Dague, Fouet, Arc, Bouclier
+  (`WEAPON_TYPES` : portée, force, vitesse). Deux emplacements : arme + bouclier (pas de bouclier avec un arc).
+  Sans arme : vieille épée de fer [F] (vieil arc de chasse [F] pour les archers). Les mages et soigneurs
+  n'ont pas d'arme. `auto_equip()` équipe les héros tout seuls ; si le Maître choisit
+  (`hero["manual_gear"]`), le héros ne change plus d'arme seul jusqu'au bouton « Auto ».
+  Choix du porteur du projet : quand un héros meurt, ses armes sont perdues avec lui.
+  Le terrain d'entraînement ne s'ouvre qu'après 10 armes tirées (`TRAINING_UNLOCK_DRAWS`, `weapon_draws`).
+  En combat, l'arme d'un héros décide de sa portée (un héros avec un arc tire), le grade ajoute de
+  l'attaque, le bouclier de la défense ; les maîtrises d'arme ne comptent qu'avec l'arme qui va avec.
+- Progrès des compétences : `hero["skill_progress"]` (points par compétence) et `GameData.add_skill_progress()`
+  (au seuil : apprise ou niveau suivant). Sert à l'entraînement (10 + croissance par séance, 100 par niveau)
+  et à Maîtrise de l'arc (1 point par flèche tirée, 50 par niveau). Chiffres dans `GameData`.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Avancement (phases du cahier des charges)
@@ -75,7 +97,10 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   Saignement/hémorragie, éveil des compétences en situation critique, premières compétences
   (Résistance à la douleur, Mouvement souple, Calme, Berserk ; Calme et Berserk incompatibles sauf
   pour Han) : fait, chiffres provisoires dans `battle.gd` et `GameData.SKILLS`.
-  Reste : fusion de compétences, rangs de compétence, compétences d'arme et d'entraînement,
+  Lot de test (onglet « Compétences » du cahier) : Maîtrise de l'épée et Utilisation du bouclier au
+  terrain d'entraînement, Maîtrise de l'arc par l'usage : fait.
+  Reste : le reste du lot de test (Résistance aux flammes, Indomptable, Tueur de gobelins, Esprit combatif,
+  fusions Épée et bouclier / Surpassement, synthèse), rangs de compétence,
   Berserk affiché sur la fiche, mana, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec
@@ -89,6 +114,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   et de l'expérience : ne pas l'adoucir sans lui demander.
   Reste : matériaux gradés, glisser-déposer, équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
-- Phase 3 (gacha) : invocation de héros faite (mages rares). Reste : tirage d'armes, arsenal.
+- Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
+  mages, pity de 50) dans `GameData.SUMMON_TYPES` (taux provisoires, le cahier n'en donne pas),
+  tirage d'armes, arsenal et équipement : fait.
+  Reste : invocation gratuite (1 % de 4 étoiles), grades au-delà de C+, compétences de lance, dague et fouet.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

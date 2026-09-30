@@ -7,25 +7,29 @@ extends Node
 
 signal gems_changed(new_amount: int)
 signal gold_changed(new_amount: int)
+## Une ou plusieurs séances d'entraînement viennent de se terminer.
+signal training_updated
 
 # ---------------------------------------------------------------------------
 # Invocation
 # ---------------------------------------------------------------------------
 
-## Prix d'une invocation, en gemmes.
-const SUMMON_COST := 100
-
-## Pity : un héros 5 étoiles est garanti au bout de ce nombre d'invocations sans 5 étoiles.
-const PITY_LIMIT := 50
-
-## Probabilité d'obtenir chaque rareté (le total fait 1.0, soit 100 %).
-const RARITY_RATES := {
-	5: 0.02,
-	4: 0.08,
-	3: 0.20,
-	2: 0.30,
-	1: 0.40,
+## Deux sortes d'invocation (cahier des charges) :
+## - « normal » : héros de base, payée en or ;
+## - « special » : héros spéciaux, payée en gemmes, avec de meilleures chances de hauts rangs.
+##   C'est la seule qui peut donner un mage, et elle a un pity (5 étoiles garanti).
+## « cost » : prix d'une invocation ; « currency » : "gold" ou "gems" ;
+## « rates » : probabilité de chaque rareté (le total fait 1.0, soit 100 %). Chiffres provisoires.
+const SUMMON_TYPES := {
+	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
+		"rates": {5: 0.002, 4: 0.018, 3: 0.08, 2: 0.30, 1: 0.60}},
+	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
+		"rates": {5: 0.02, 4: 0.08, 3: 0.20, 2: 0.30, 1: 0.40}},
 }
+
+## Pity de l'invocation spéciale : un héros 5 étoiles est garanti au bout de ce nombre
+## d'invocations spéciales sans 5 étoiles.
+const PITY_LIMIT := 50
 
 ## Couleur associée à chaque rareté.
 const RARITY_COLORS := {
@@ -37,7 +41,7 @@ const RARITY_COLORS := {
 }
 
 ## Chance qu'un héros de 3 étoiles ou plus soit un Mage (0.05 = 5 %).
-## Les mages ne s'obtiennent que par invocation, et très rarement.
+## Les mages ne s'obtiennent que par invocation spéciale, et très rarement.
 const MAGE_CHANCE := 0.05
 
 ## Classes possibles pour un héros de 3 étoiles ou plus (hors Mage).
@@ -119,11 +123,38 @@ const SKILLS := {
 	"Mouvement souple": "Esquive : 3 % de chances par niveau d'éviter complètement un coup.",
 	"Calme": "Garde son sang-froid : sous la moitié de sa vie, subit 4 % de dégâts en moins par niveau.",
 	"Berserk": "Aux portes de la mort (moins de 30 % de vie), entre en rage : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant).",
-	"Maîtrise de l'arc": "Compétence d'arme : son effet viendra avec l'arsenal.",
+	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
+	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
+	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
 }
 
 ## Niveau maximum d'une compétence (les rangs au-delà de Débutant viendront plus tard).
 const SKILL_MAX_LEVEL := 10
+
+## Effets des compétences d'arme, par niveau (utilisés par battle.gd). Elles ne comptent
+## qu'avec l'arme qui va avec (Maîtrise de l'épée avec une épée, Utilisation du bouclier avec un bouclier...).
+const WEAPON_SKILL_BONUS_PER_LEVEL := 0.03  # Maîtrise d'une arme : +3 % de dégâts avec cette arme
+const SHIELD_GUARD_PER_LEVEL := 0.03        # Utilisation du bouclier : -3 % de dégâts subis
+
+# --- Progrès des compétences (entraînement et usage) ---
+# Un héros accumule des « points de progrès » dans une compétence (hero["skill_progress"]).
+# Arrivé au seuil, il l'apprend (niveau 1) ou passe au niveau suivant, et le compteur repart de zéro.
+
+## Maîtrise de l'arc : un point de progrès par flèche tirée en combat, niveau suivant tous les 50 tirs.
+const BOW_SHOTS_PER_LEVEL := 50
+
+## Terrain d'entraînement : les programmes proposés (une compétence travaillée par programme).
+const TRAINING_SKILLS := ["Maîtrise de l'épée", "Utilisation du bouclier"]
+## Nombre de héros qui peuvent s'entraîner en même temps (terrain de niveau 1).
+const TRAINING_SLOTS := 3
+## Le terrain d'entraînement s'ouvre après ce nombre d'armes tirées (cahier des charges).
+const TRAINING_UNLOCK_DRAWS := 10
+## Durée d'une séance, en secondes de temps réel. L'entraînement continue même jeu fermé.
+const TRAINING_SESSION_SECONDS := 300
+## Points de progrès gagnés par séance : cette base + la valeur de croissance (cachée) du héros.
+const TRAINING_POINTS_BASE := 10
+## Points de progrès nécessaires pour apprendre la compétence ou gagner un niveau.
+const TRAINING_POINTS_PER_LEVEL := 100
 
 ## Compétences qui ne peuvent pas être réunies sur un même héros (sauf Han, voir can_learn_skill).
 const INCOMPATIBLE_SKILLS := [["Calme", "Berserk"]]
@@ -158,6 +189,343 @@ func can_learn_skill(hero: Dictionary, skills: Array, skill_name: String) -> boo
 
 func new_skill(skill_name: String) -> Dictionary:
 	return {"name": skill_name, "rank": "Débutant", "level": 1}
+
+
+## Points de progrès d'un héros dans une compétence (0 s'il n'en a pas encore).
+func skill_progress(hero: Dictionary, skill_name: String) -> int:
+	return hero.get("skill_progress", {}).get(skill_name, 0)
+
+
+## Points de progrès nécessaires pour le prochain niveau d'une compétence.
+func skill_progress_needed(skill_name: String) -> int:
+	return BOW_SHOTS_PER_LEVEL if skill_name == "Maîtrise de l'arc" else TRAINING_POINTS_PER_LEVEL
+
+
+## Donne des points de progrès à un héros dans une compétence. À chaque fois que le total
+## atteint « per_level », il apprend la compétence (niveau 1) ou gagne un niveau.
+## Renvoie les nouveautés à annoncer (« Han — nouvelle compétence : Maîtrise de l'épée »).
+## Ne sauvegarde pas : c'est à la fonction qui l'appelle de le faire.
+func add_skill_progress(hero: Dictionary, skill_name: String, points: int, per_level: int) -> Array[String]:
+	var news: Array[String] = []
+	if not hero.has("skill_progress"):
+		hero["skill_progress"] = {}  # anciennes sauvegardes
+	var total: int = hero["skill_progress"].get(skill_name, 0) + points
+	while total >= per_level:
+		var level := skill_level(hero["skills"], skill_name)
+		if level >= SKILL_MAX_LEVEL:
+			break
+		total -= per_level
+		if level == 0:
+			if not can_learn_skill(hero, hero["skills"], skill_name):
+				break
+			hero["skills"].append(new_skill(skill_name))
+			news.append("%s — nouvelle compétence : %s" % [hero["name"], skill_name])
+		else:
+			for skill in hero["skills"]:
+				if skill["name"] == skill_name:
+					skill["level"] += 1
+			news.append("%s — %s passe au niveau %d" % [hero["name"], skill_name, level + 1])
+	# Au niveau maximum, on n'accumule plus rien.
+	if skill_level(hero["skills"], skill_name) >= SKILL_MAX_LEVEL:
+		total = 0
+	hero["skill_progress"][skill_name] = total
+	return news
+
+
+# ---------------------------------------------------------------------------
+# Armes : tirage, arsenal, équipement
+# ---------------------------------------------------------------------------
+# Une arme : {"id": ..., "type": "Épée", "grade": "D+", "owner": id du héros qui la porte (0 = rangée
+# dans l'arsenal)}. Un héros a deux emplacements : son arme, et un bouclier (sauf avec un arc,
+# qui se tient à deux mains). Sans arme, il se bat avec une arme de départ [F] (voir STARTER_WEAPONS).
+# Les mages et les soigneurs se battent avec la magie : ils ne portent pas d'arme.
+# Les armes de l'arsenal équipent les héros automatiquement (auto_equip), sauf ceux dont
+# le Maître a choisi l'équipement lui-même (hero["manual_gear"]).
+
+## Prix du tirage d'armes, en or (x10 = 10 fois le prix, 50 000 or comme dans le manhwa).
+const WEAPON_DRAW_COST := 5000
+
+## Grades des armes, du plus faible au plus fort, avec leur chance au tirage (total 1.0).
+## « et au-delà » (B, A, S...) viendra plus tard : il suffira d'ajouter des lignes.
+const WEAPON_GRADES := {
+	"F": 0.30, "E-": 0.20, "E": 0.15, "E+": 0.12, "D-": 0.08,
+	"D": 0.06, "D+": 0.04, "C-": 0.025, "C": 0.015, "C+": 0.01,
+}
+
+## Chaque cran de grade au-dessus de F ajoute ceci à l'attaque (arme) ou à la défense (bouclier).
+## Une arme [F] n'ajoute rien : c'est le niveau de départ de tout le monde.
+const WEAPON_ATK_PER_GRADE := 1
+const SHIELD_DEF_PER_GRADE := 1
+
+## Les types d'armes et leur façon de combattre (chiffres provisoires) :
+## « reach » : portée en cases (1 = contact, 5.5 = tir) ; « power » : dégâts de chaque coup ;
+## « speed » : durée entre deux coups (0.7 = 30 % plus rapide) ; « crit » : chance de critique en plus.
+## « skill » : la compétence d'arme qui renforce cette arme.
+const WEAPON_TYPES := {
+	"Épée": {"reach": 1.0, "power": 1.0, "speed": 1.0, "crit": 0.0, "skill": "Maîtrise de l'épée",
+		"info": "Équilibrée."},
+	"Lance": {"reach": 1.8, "power": 1.0, "speed": 1.15, "crit": 0.0, "skill": "Maîtrise de la lance",
+		"info": "Frappe de plus loin, un peu plus lente."},
+	"Dague": {"reach": 1.0, "power": 0.75, "speed": 0.7, "crit": 0.1, "skill": "Maîtrise de la dague",
+		"info": "Coups rapides et plus souvent critiques, mais moins forts."},
+	"Fouet": {"reach": 2.2, "power": 0.8, "speed": 1.0, "crit": 0.0, "skill": "Maîtrise du fouet",
+		"info": "Longue portée, coups plus faibles."},
+	"Arc": {"reach": 5.5, "power": 1.0, "speed": 1.0, "crit": 0.0, "skill": "Maîtrise de l'arc",
+		"info": "Tire de loin (il faut voir la cible). Se tient à deux mains : pas de bouclier."},
+	"Bouclier": {"reach": 0.0, "power": 0.0, "speed": 1.0, "crit": 0.0, "skill": "Utilisation du bouclier",
+		"info": "Se porte en plus de l'arme : ajoute de la défense."},
+}
+
+## Armes de départ, quand un héros n'a rien reçu de l'arsenal.
+## Le cahier prévoit une vieille épée de fer ; les archers partent avec un vieil arc (choix provisoire).
+const STARTER_WEAPONS := {"Épée": "Vieille épée de fer", "Arc": "Vieil arc de chasse"}
+
+## Armes que chaque classe prend d'elle-même dans l'arsenal, par ordre de préférence,
+## et classes qui prennent aussi un bouclier.
+const CLASS_WEAPONS := {
+	"Novice": ["Épée", "Lance", "Dague", "Fouet"],
+	"Guerrier": ["Épée", "Lance", "Fouet"],
+	"Chevalier": ["Épée", "Lance"],
+	"Assassin": ["Dague", "Épée", "Fouet"],
+	"Archer": ["Arc"],
+}
+const SHIELD_CLASSES := ["Novice", "Guerrier", "Chevalier"]
+
+
+## Numéro du grade (F = 0, E- = 1...) : sert à comparer et à calculer les bonus.
+func grade_rank(grade: String) -> int:
+	return WEAPON_GRADES.keys().find(grade)
+
+
+func weapon_name(weapon: Dictionary) -> String:
+	return "%s [%s]" % [weapon["type"], weapon["grade"]]
+
+
+## Vrai si la classe se bat avec la magie (pas d'arme).
+func uses_magic(hero: Dictionary) -> bool:
+	return hero["class"] in ["Mage", "Soigneur"]
+
+
+## Tire « count » armes au hasard, les range dans l'arsenal, et renvoie la liste
+## (vide si on n'a pas assez d'or). Les héros s'équipent ensuite automatiquement.
+## Chaque arme tirée compte pour l'ouverture du terrain d'entraînement.
+func draw_weapons(count: int) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if gold < WEAPON_DRAW_COST * count:
+		return results
+	gold -= WEAPON_DRAW_COST * count
+	weapon_draws += count
+	for i in count:
+		var weapon := {"id": next_weapon_id, "type": WEAPON_TYPES.keys().pick_random(),
+			"grade": _roll_grade(), "owner": 0}
+		next_weapon_id += 1
+		arsenal.append(weapon)
+		results.append(weapon)
+	gold_changed.emit(gold)
+	auto_equip()  # sauvegarde aussi la partie
+	return results
+
+
+func _roll_grade() -> String:
+	var roll := randf()
+	var cumulative := 0.0
+	for grade in WEAPON_GRADES:
+		cumulative += WEAPON_GRADES[grade]
+		if roll < cumulative:
+			return grade
+	return "F"
+
+
+## L'arme portée par un héros dans un emplacement (« weapon » ou « shield »), ou {} s'il n'en a pas.
+func equipped(hero: Dictionary, slot: String) -> Dictionary:
+	for weapon in arsenal:
+		if weapon["owner"] == hero["id"] and (weapon["type"] == "Bouclier") == (slot == "shield"):
+			return weapon
+	return {}
+
+
+## Ce avec quoi un héros se bat vraiment : son arme, ou son arme de départ [F].
+## Renvoie {"type", "grade", "name"}. Pour un mage ou un soigneur : {} (la magie).
+func fighting_weapon(hero: Dictionary) -> Dictionary:
+	if uses_magic(hero):
+		return {}
+	var weapon := equipped(hero, "weapon")
+	if not weapon.is_empty():
+		return {"type": weapon["type"], "grade": weapon["grade"], "name": weapon_name(weapon)}
+	var type := "Arc" if hero["class"] == "Archer" else "Épée"
+	return {"type": type, "grade": "F", "name": "%s [F]" % STARTER_WEAPONS[type]}
+
+
+## Les armes rangées dans l'arsenal (portées par personne), les meilleures d'abord.
+func free_weapons() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for weapon in arsenal:
+		if weapon["owner"] == 0:
+			result.append(weapon)
+	result.sort_custom(func(a, b): return grade_rank(a["grade"]) > grade_rank(b["grade"]))
+	return result
+
+
+## Le Maître équipe un héros d'une arme (ou d'un bouclier) de l'arsenal.
+## L'ancienne arme de cet emplacement retourne dans l'arsenal. Un arc retire le bouclier.
+## Renvoie faux si c'est impossible (mage, bouclier avec un arc...).
+func equip(hero: Dictionary, weapon: Dictionary) -> bool:
+	if uses_magic(hero) or not hero["alive"]:
+		return false
+	var slot := "shield" if weapon["type"] == "Bouclier" else "weapon"
+	if slot == "shield" and fighting_weapon(hero)["type"] == "Arc":
+		return false
+	_take_off(hero, slot)
+	weapon["owner"] = hero["id"]
+	if weapon["type"] == "Arc":
+		_take_off(hero, "shield")
+	hero["manual_gear"] = true  # le Maître a choisi : plus d'équipement automatique pour ce héros
+	auto_equip()
+	return true
+
+
+## Le Maître retire l'arme (ou le bouclier) d'un héros : elle retourne dans l'arsenal.
+func unequip(hero: Dictionary, slot: String) -> void:
+	_take_off(hero, slot)
+	hero["manual_gear"] = true
+	save_game()
+
+
+## Rend l'équipement automatique à un héros (il prendra lui-même les meilleures armes).
+func set_auto_gear(hero: Dictionary) -> void:
+	hero["manual_gear"] = false
+	auto_equip()
+
+
+func _take_off(hero: Dictionary, slot: String) -> void:
+	var weapon := equipped(hero, slot)
+	if not weapon.is_empty():
+		weapon["owner"] = 0
+
+
+## Équipement automatique : chaque héros (sauf ceux équipés à la main par le Maître)
+## prend la meilleure arme libre qu'il sait utiliser, si elle vaut mieux que la sienne,
+## puis un bouclier si sa classe en porte. Les héros les plus rares se servent en premier.
+## Les armes d'un héros mort sont perdues avec lui.
+func auto_equip() -> void:
+	arsenal = arsenal.filter(func(weapon): return weapon["owner"] == 0 or _hero_alive(weapon["owner"]))
+	var heroes := alive_heroes()
+	heroes.sort_custom(func(a, b): return a["rarity"] > b["rarity"])
+	for hero in heroes:
+		if hero.get("manual_gear", false) or uses_magic(hero):
+			continue
+		var current := equipped(hero, "weapon")
+		var current_rank := -1 if current.is_empty() else grade_rank(current["grade"])
+		for weapon in free_weapons():  # les meilleures d'abord
+			if weapon["type"] in CLASS_WEAPONS.get(hero["class"], []) and grade_rank(weapon["grade"]) > current_rank:
+				_take_off(hero, "weapon")
+				weapon["owner"] = hero["id"]
+				break
+		if hero["class"] in SHIELD_CLASSES and fighting_weapon(hero)["type"] != "Arc":
+			var shield := equipped(hero, "shield")
+			var shield_rank := -1 if shield.is_empty() else grade_rank(shield["grade"])
+			for weapon in free_weapons():
+				if weapon["type"] == "Bouclier" and grade_rank(weapon["grade"]) > shield_rank:
+					_take_off(hero, "shield")
+					weapon["owner"] = hero["id"]
+					break
+	save_game()
+
+
+func _hero_alive(hero_id: int) -> bool:
+	for hero in roster:
+		if hero["id"] == hero_id:
+			return hero["alive"]
+	return false
+
+
+## Valeurs de combat données par l'équipement (utilisées par battle.gd) :
+## {"type", "reach", "power", "speed", "crit", "atk" (bonus d'attaque), "def" (bonus du bouclier), "shield": bool}.
+func gear_stats(hero: Dictionary) -> Dictionary:
+	var weapon := fighting_weapon(hero)
+	if weapon.is_empty():
+		return {}
+	var result: Dictionary = WEAPON_TYPES[weapon["type"]].duplicate()
+	result["type"] = weapon["type"]
+	result["atk"] = grade_rank(weapon["grade"]) * WEAPON_ATK_PER_GRADE
+	var shield := equipped(hero, "shield")
+	result["shield"] = not shield.is_empty()
+	result["def"] = 0 if shield.is_empty() else 2 + grade_rank(shield["grade"]) * SHIELD_DEF_PER_GRADE
+	return result
+
+
+# ---------------------------------------------------------------------------
+# Terrain d'entraînement
+# ---------------------------------------------------------------------------
+# Un héros affecté au terrain travaille une compétence (hero["training"], vide = au repos).
+# Toutes les TRAINING_SESSION_SECONDS secondes de temps réel, il fait une séance, même si le jeu
+# est fermé : au retour, on compte les séances écoulées depuis hero["training_since"].
+# L'entraînement ne donne ni statistiques ni niveau, seulement des compétences.
+# Un héros qui monte dans la Tour quitte le terrain le temps de l'étage (il garde sa place et
+# son programme) : le temps passé dans la Tour ne compte pas, et il reprend l'entraînement après.
+# Plus tard : le temps du lobby ira 3 fois plus vite que le temps réel, et les héros iront
+# d'eux-mêmes au terrain d'entraînement.
+
+## Vrai quand le terrain d'entraînement est ouvert (assez d'armes tirées).
+func training_unlocked() -> bool:
+	return weapon_draws >= TRAINING_UNLOCK_DRAWS
+
+
+## Vrai si le héros est en train de combattre dans la Tour.
+func in_tower(hero: Dictionary) -> bool:
+	return not pending_battle.is_empty() and hero["id"] in pending_battle["team"]
+
+
+## Les héros vivants inscrits au terrain d'entraînement (y compris ceux partis dans la Tour).
+func trainees() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in alive_heroes():
+		if hero.get("training", "") != "":
+			result.append(hero)
+	return result
+
+
+## Affecte un héros à un programme d'entraînement (« » = le renvoyer au repos).
+## Renvoie faux si toutes les places du terrain sont prises.
+func set_training(hero: Dictionary, skill_name: String) -> bool:
+	var already: bool = hero.get("training", "") != ""
+	if skill_name != "" and not already and trainees().size() >= TRAINING_SLOTS:
+		return false
+	update_training()  # les séances déjà faites dans l'ancien programme sont comptées
+	hero["training"] = skill_name
+	hero["training_since"] = Time.get_unix_time_from_system()
+	save_game()
+	return true
+
+
+## Secondes avant la prochaine séance d'un héros à l'entraînement.
+func seconds_to_next_session(hero: Dictionary) -> int:
+	var elapsed: float = Time.get_unix_time_from_system() - hero.get("training_since", 0.0)
+	return maxi(0, ceili(TRAINING_SESSION_SECONDS - elapsed))
+
+
+## Compte les séances terminées depuis la dernière fois et donne les points de progrès.
+## Les nouveautés s'ajoutent à training_news, en attendant d'être annoncées au joueur.
+func update_training() -> void:
+	var now := Time.get_unix_time_from_system()
+	var changed := false
+	for hero in trainees():
+		if in_tower(hero):
+			continue  # dans la Tour : pas d'entraînement pendant l'étage
+		var since: float = hero.get("training_since", now)
+		if since > now:
+			since = now  # l'horloge de l'appareil a reculé
+		var sessions := int((now - since) / TRAINING_SESSION_SECONDS)
+		if sessions <= 0:
+			continue
+		hero["training_since"] = since + sessions * TRAINING_SESSION_SECONDS
+		var points: int = sessions * (TRAINING_POINTS_BASE + hero["growth"])
+		training_news.append_array(add_skill_progress(hero, hero["training"], points,
+			skill_progress_needed(hero["training"])))
+		changed = true
+	if changed:
+		save_game()
+		training_updated.emit()
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +622,16 @@ var pending_battle: Dictionary = {}
 ## (vide sinon) : {"floor": ..., "report": rapport de finish_tower_battle}.
 var absence_report: Dictionary = {}
 
+## Compétences apprises ou améliorées au terrain d'entraînement, pas encore annoncées au joueur (textes).
+var training_news: Array = []
+
+## Toutes les armes possédées, portées ou rangées (voir la section « Armes »).
+var arsenal: Array = []
+## Numéro donné à la prochaine arme tirée.
+var next_weapon_id := 1
+## Nombre d'armes tirées depuis le début de la partie (le terrain d'entraînement s'ouvre à 10).
+var weapon_draws := 0
+
 
 func _ready() -> void:
 	# On reprend la partie enregistrée ; s'il n'y en a pas (premier lancement), on en commence une.
@@ -261,6 +639,13 @@ func _ready() -> void:
 		_new_game()
 	if not pending_battle.is_empty():
 		_resolve_pending_battle()
+	# L'entraînement a continué pendant que le jeu était fermé, puis se poursuit toutes les 5 secondes.
+	update_training()
+	var timer := Timer.new()
+	timer.wait_time = 5.0
+	timer.timeout.connect(update_training)
+	add_child(timer)
+	timer.start()
 
 
 ## « Recommencer la partie » (depuis les paramètres) : efface la sauvegarde et repart de zéro.
@@ -281,6 +666,10 @@ func _new_game() -> void:
 	teams = _empty_teams()
 	pending_battle = {}
 	absence_report = {}
+	training_news = []
+	arsenal = []
+	next_weapon_id = 1
+	weapon_draws = 0
 	# Han est là dès le début de la partie.
 	roster.append(_create_secret_hero("Han"))
 
@@ -313,6 +702,10 @@ func save_game() -> void:
 	file.set_value("partie", "heros", roster)
 	file.set_value("partie", "equipes", teams)
 	file.set_value("partie", "combat_en_cours", pending_battle)
+	file.set_value("partie", "nouvelles_entrainement", training_news)
+	file.set_value("partie", "arsenal", arsenal)
+	file.set_value("partie", "prochaine_arme", next_weapon_id)
+	file.set_value("partie", "armes_tirees", weapon_draws)
 	file.save(SAVE_PATH)
 
 
@@ -333,6 +726,10 @@ func load_game() -> bool:
 	while teams.size() < TEAM_COUNT:
 		teams.append([])
 	pending_battle = file.get_value("partie", "combat_en_cours", {})
+	training_news = file.get_value("partie", "nouvelles_entrainement", [])
+	arsenal = file.get_value("partie", "arsenal", [])
+	next_weapon_id = file.get_value("partie", "prochaine_arme", 1)
+	weapon_draws = file.get_value("partie", "armes_tirees", 0)
 	return not roster.is_empty()
 
 
@@ -403,24 +800,32 @@ func add_gold(amount: int) -> void:
 # Invocation
 # ---------------------------------------------------------------------------
 
-func can_afford(count: int) -> bool:
-	return gems >= SUMMON_COST * count
+## Vrai si on peut payer « count » invocations de cette sorte (« normal » ou « special »).
+func can_afford(summon_type: String, count: int) -> bool:
+	var info: Dictionary = SUMMON_TYPES[summon_type]
+	var money := gold if info["currency"] == "gold" else gems
+	return money >= info["cost"] * count
 
 
-## Invoque « count » héros et renvoie la liste des héros obtenus
-## (liste vide si on n'a pas assez de gemmes).
-func summon(count: int) -> Array[Dictionary]:
+## Invoque « count » héros (invocation « normal » ou « special ») et renvoie la liste des héros
+## obtenus (liste vide si on n'a pas de quoi payer).
+func summon(summon_type: String, count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	if not can_afford(count):
+	if not can_afford(summon_type, count):
 		return results
 
-	gems -= SUMMON_COST * count
+	var info: Dictionary = SUMMON_TYPES[summon_type]
+	if info["currency"] == "gold":
+		gold -= info["cost"] * count
+		gold_changed.emit(gold)
+	else:
+		gems -= info["cost"] * count
+		gems_changed.emit(gems)
 	for i in count:
-		var hero := _create_hero(_roll_rarity())
+		var hero := _create_hero(_roll_rarity(summon_type), info["mages"])
 		roster.append(hero)
 		results.append(hero)
-	gems_changed.emit(gems)
-	save_game()
+	auto_equip()  # les nouveaux venus prennent des armes libres (et la partie est sauvegardée)
 	return results
 
 
@@ -428,29 +833,34 @@ func summons_before_pity() -> int:
 	return PITY_LIMIT - pity_counter
 
 
-## Tire une rareté au hasard selon RARITY_RATES, en tenant compte du pity.
-func _roll_rarity() -> int:
-	pity_counter += 1
-	if pity_counter >= PITY_LIMIT:
-		pity_counter = 0
-		return 5
+## Tire une rareté au hasard selon les taux de cette sorte d'invocation.
+## Seule l'invocation spéciale compte pour le pity.
+func _roll_rarity(summon_type: String) -> int:
+	var special := summon_type == "special"
+	if special:
+		pity_counter += 1
+		if pity_counter >= PITY_LIMIT:
+			pity_counter = 0
+			return 5
 
+	var rates: Dictionary = SUMMON_TYPES[summon_type]["rates"]
 	var roll := randf()
 	var cumulative := 0.0
-	for rarity in RARITY_RATES:
-		cumulative += RARITY_RATES[rarity]
+	for rarity in rates:
+		cumulative += rates[rarity]
 		if roll < cumulative:
-			if rarity == 5:
+			if rarity == 5 and special:
 				pity_counter = 0
 			return rarity
 	return 1
 
 
 ## Crée un nouveau héros ordinaire de la rareté donnée.
-func _create_hero(rarity: int) -> Dictionary:
+## « allow_mage » : seule l'invocation spéciale peut donner un mage.
+func _create_hero(rarity: int, allow_mage := false) -> Dictionary:
 	var hero_class := "Novice"
 	if rarity >= 3:
-		hero_class = "Mage" if randf() < MAGE_CHANCE else HIGH_CLASSES.pick_random()
+		hero_class = "Mage" if allow_mage and randf() < MAGE_CHANCE else HIGH_CLASSES.pick_random()
 
 	var growth: int = GROWTH[rarity]
 	if rarity == 1 and randf() < HIDDEN_TALENT_CHANCE:
@@ -480,6 +890,9 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"growth": growth,
 		"stats": _roll_stats(rarity, hero_class),
 		"skills": skills,
+		"skill_progress": {},  # points de progrès par compétence (entraînement, tirs...)
+		"training": "",        # compétence travaillée au terrain d'entraînement (vide = au repos)
+		"training_since": 0.0, # moment (temps réel) où la séance en cours a commencé
 		"alive": true,
 		"immortal": false,
 		"secret": false,
@@ -514,7 +927,7 @@ func redeem_code(code: String) -> Dictionary:
 			used_codes.append(code)
 			var hero := _create_secret_hero(hero_name)
 			roster.append(hero)
-			save_game()
+			auto_equip()
 			return hero
 	return {}
 
@@ -709,6 +1122,7 @@ func _number_duplicates(enemies: Array[Dictionary]) -> void:
 
 ## Début d'un combat de la Tour : on le note dans la sauvegarde (voir pending_battle).
 func start_tower_battle(team: Array, enemies: Array, quest: Dictionary) -> void:
+	update_training()  # les séances terminées avant le départ sont comptées
 	pending_battle = {
 		"floor": tower_floor,
 		"team": team.map(func(hero): return hero["id"]),
@@ -742,6 +1156,9 @@ func _resolve_pending_battle() -> void:
 ##   (sinon une équipe bloquée ne pourrait plus jamais progresser).
 func finish_tower_battle(battle: Battle) -> Dictionary:
 	pending_battle = {}  # le combat est terminé (la sauvegarde est réécrite plus bas)
+	# Les héros inscrits au terrain d'entraînement le retrouvent : la séance repart de zéro.
+	for fighter in battle.heroes:
+		fighter["source"]["training_since"] = Time.get_unix_time_from_system()
 	var report := {
 		"victory": battle.victory,
 		"gold": 0,
@@ -779,8 +1196,12 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			# Les compétences gagnées pendant le combat sont gardées par les survivants.
 			hero["skills"] = fighter["skills"]
 			report["skills"].append_array(fighter["skill_news"])
+			# Maîtrise de l'arc : chaque flèche tirée fait progresser la compétence.
+			if fighter["shots"] > 0:
+				report["skills"].append_array(add_skill_progress(hero, "Maîtrise de l'arc",
+					fighter["shots"], skill_progress_needed("Maîtrise de l'arc")))
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
-	save_game()
+	auto_equip()  # les armes des héros morts sont perdues (et la partie est sauvegardée)
 	return report
