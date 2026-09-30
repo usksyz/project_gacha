@@ -1086,8 +1086,9 @@ const TEAM_COUNT := 3
 const BOSS_EVERY := 5
 
 ## Un étage déjà conquis peut être rejoué (pour entraîner une nouvelle équipe ou l'équipe principale) :
-## l'expérience est entière, mais l'or est réduit (0.5 = moitié) et il n'y a pas de gemmes.
-const REPLAY_GOLD_RATE := 0.5
+## les récompenses sont réduites (0.5 = moitié) et il n'y a pas de gemmes.
+const REPLAY_XP_RATE := 0.5
+const REPLAY_GOLD_RATE := 0.2
 
 ## Étage à franchir pour débloquer le donjon journalier.
 const DAILY_UNLOCK_FLOOR := 5
@@ -1760,8 +1761,8 @@ func _resolve_pending_battle() -> void:
 ## - en cas de victoire : or, gemmes, expérience pour les survivants, étage suivant ;
 ## - en cas de défaite : les survivants gagnent quand même la moitié de l'expérience
 ##   (sinon une équipe bloquée ne pourrait plus jamais progresser) ;
-## - un étage déjà conquis (rejoué pour entraîner une équipe) donne toute l'expérience,
-##   mais moins d'or et pas de gemmes, et ne fait pas monter dans la Tour.
+## - un étage déjà conquis (rejoué pour entraîner une équipe) donne moins d'expérience et d'or,
+##   pas de gemmes, et ne fait pas monter dans la Tour.
 func finish_tower_battle(battle: Battle) -> Dictionary:
 	var floor_number: int = pending_battle.get("floor", tower_floor)
 	var replay := floor_number < tower_floor
@@ -1797,6 +1798,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	if replay:
 		rewards["gold"] = roundi(rewards["gold"] * REPLAY_GOLD_RATE)
 		rewards["gems"] = 0
+		rewards["xp"] = roundi(rewards["xp"] * REPLAY_XP_RATE)
 	if battle.victory:
 		report.merge(rewards, true)
 		if not replay:

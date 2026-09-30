@@ -90,8 +90,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   (au seuil : apprise ou niveau suivant). Sert à l'entraînement (10 + croissance par séance, 100 par niveau)
   et à Maîtrise de l'arc (1 point par flèche tirée, 50 par niveau). Chiffres dans `GameData`.
 - Tour : on peut refaire un étage déjà conquis (Donjons > « Refaire un étage ») pour entraîner une
-  nouvelle équipe ou l'équipe principale : toute l'expérience, moitié de l'or (`REPLAY_GOLD_RATE`),
-  pas de gemmes, la Tour ne monte pas. `start_tower_battle` reçoit l'étage joué.
+  nouvelle équipe ou l'équipe principale : récompenses baissées à la demande du porteur du projet
+  (`REPLAY_XP_RATE` = moitié de l'expérience, `REPLAY_GOLD_RATE` = 20 % de l'or), pas de gemmes,
+  la Tour ne monte pas. `start_tower_battle` reçoit l'étage joué.
 - Affectations (bouton du hub, `scripts/assignment_panel.gd`) : `POSTS_PER_BUILDING` = 2 postes
   d'assistant par bâtiment construit (`hero["post"]`) ; un poste et l'entraînement s'excluent.
   Un héros parti (Tour ou donjon journalier, `GameData.is_away`) ne s'entraîne pas et ne compte pas à son poste.

@@ -456,7 +456,8 @@ func _open_replay_picker() -> void:
 	margin.add_child(layout)
 	layout.add_child(UI.make_system_window("Refaire un étage", [
 		"Pour entraîner une nouvelle équipe ou ton équipe principale.",
-		"Toute l'expérience, %d %% de l'or, pas de gemmes. La Tour ne monte pas." % roundi(GameData.REPLAY_GOLD_RATE * 100),
+		"Récompenses réduites : %d %% de l'expérience, %d %% de l'or, pas de gemmes. La Tour ne monte pas." % [
+			roundi(GameData.REPLAY_XP_RATE * 100), roundi(GameData.REPLAY_GOLD_RATE * 100)],
 		"Attention : un héros qui tombe meurt quand même pour toujours."]))
 	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
@@ -499,7 +500,7 @@ func _open_tower(floor_number: int) -> void:
 	var reward_text := "Récompense : %d or, %d gemmes" % [rewards["gold"], rewards["gems"]]
 	if floor_number < GameData.tower_floor:
 		reward_text = "Entraînement : %d or, pas de gemmes, %d d'expérience" % [
-			roundi(rewards["gold"] * GameData.REPLAY_GOLD_RATE), rewards["xp"]]
+			roundi(rewards["gold"] * GameData.REPLAY_GOLD_RATE), roundi(rewards["xp"] * GameData.REPLAY_XP_RATE)]
 	var header := UI.make_label(reward_text, 22)
 	header.modulate = Color(1, 1, 1, 0.7)
 	enemies_box.add_child(header)
