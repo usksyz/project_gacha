@@ -140,6 +140,8 @@ const SKILLS := {
 	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
+	"Surpassement": "Fusion de Calme et Berserk (unique). Garde leurs effets ; quand Berserk se déclenche, ses bonus sont doublés et le héros ne saigne plus, mais il perd 2 % de sa vie chaque seconde, jusqu'à la mort.",
+	"Épée et bouclier": "Fusion de Maîtrise de l'épée et Utilisation du bouclier. Garde leurs effets, et +2 % de dégâts à l'épée par niveau.",
 	"Forge": "Artisan : à la forge, une pièce du puzzle est placée d'office, et plus de malus « Pas d'artisan ». S'apprend en travaillant comme assistant de la forge.",
 }
 
@@ -174,15 +176,77 @@ const TRAINING_POINTS_PER_LEVEL := 100
 ## Compétences qui ne peuvent pas être réunies sur un même héros (sauf Han, voir can_learn_skill).
 const INCOMPATIBLE_SKILLS := [["Calme", "Berserk"]]
 
+# --- Fusion de compétences ---
+# Deux compétences arrivées toutes les deux au niveau FUSION_LEVEL fusionnent en une seule quand
+# un déclencheur se produit en combat. La compétence fusionnée remplace les deux autres et garde
+# leurs effets (comme si elles restaient au niveau FUSION_LEVEL), avec un effet en plus.
+# (Le cahier proposait le niveau 5 ; le porteur du projet a choisi le niveau 10.)
+
+## Niveau que doivent atteindre les deux compétences pour pouvoir fusionner.
+const FUSION_LEVEL := 10
+
+## « parts » : les deux compétences qui fusionnent ; « trigger » : ce qui déclenche la fusion
+## (voir battle.gd) ; « rank » : le rang affiché de la compétence fusionnée.
+const SKILL_FUSIONS := {
+	"Surpassement": {"parts": ["Calme", "Berserk"], "trigger": "berserk", "rank": "B+, unique",
+		"when": "Berserk se déclenche en combat"},
+	"Épée et bouclier": {"parts": ["Maîtrise de l'épée", "Utilisation du bouclier"], "trigger": "sword_shield",
+		"rank": "Intermédiaire", "when": "finir un combat de la Tour debout, épée et bouclier en main"},
+}
+
+## Surpassement : quand Berserk se déclenche, ses bonus sont multipliés par ceci, le héros ne peut
+## plus saigner, mais il perd cette part de sa vie maximum chaque seconde (jusqu'à la mort).
+const SURPASS_BONUS_MULTIPLIER := 2
+const SURPASS_DRAIN_PER_SECOND := 0.02
+## Épée et bouclier : dégâts en plus à l'épée, par niveau de la compétence fusionnée.
+const SWORD_SHIELD_BONUS_PER_LEVEL := 0.02
+
+
+## Vrai si les deux compétences d'une fusion sont au niveau voulu sur ce héros.
+func fusion_ready(skills: Array, fusion_name: String) -> bool:
+	for part in SKILL_FUSIONS[fusion_name]["parts"]:
+		if _own_skill_level(skills, part) < FUSION_LEVEL:
+			return false
+	return true
+
+
+## Fusionne deux compétences : elles disparaissent, la compétence fusionnée arrive au niveau 1.
+## Renvoie le texte à annoncer.
+func fuse_skills(skills: Array, fusion_name: String) -> String:
+	var parts: Array = SKILL_FUSIONS[fusion_name]["parts"]
+	for i in range(skills.size() - 1, -1, -1):
+		if skills[i]["name"] in parts:
+			skills.remove_at(i)
+	skills.append({"name": fusion_name, "rank": SKILL_FUSIONS[fusion_name]["rank"], "level": 1})
+	return "Fusion de compétences ! %s + %s → %s" % [parts[0], parts[1], fusion_name]
+
+
+## Le niveau d'une compétence que le héros possède vraiment (sans compter les fusions).
+func _own_skill_level(skills: Array, skill_name: String) -> int:
+	for skill in skills:
+		if skill["name"] == skill_name:
+			return skill["level"]
+	return 0
+
+
+## Vrai pour Han, le héros secret de départ (il a des règles à lui).
+func is_han(hero: Dictionary) -> bool:
+	return hero.get("secret", false) and hero["name"] == "Han"
+
 ## Compétences qu'un héros peut apprendre lors d'un éveil en situation critique.
 const AWAKENING_SKILLS := ["Calme", "Mouvement souple", "Berserk"]
 
 
 ## Niveau d'une compétence dans une liste de compétences (0 si le héros ne l'a pas).
+## Une compétence fusionnée compte pour ses deux parties au niveau FUSION_LEVEL
+## (un héros qui a Surpassement garde les effets de Calme et de Berserk).
 func skill_level(skills: Array, skill_name: String) -> int:
-	for skill in skills:
-		if skill["name"] == skill_name:
-			return skill["level"]
+	var level := _own_skill_level(skills, skill_name)
+	if level > 0:
+		return level
+	for fusion_name in SKILL_FUSIONS:
+		if skill_name in SKILL_FUSIONS[fusion_name]["parts"] and _own_skill_level(skills, fusion_name) > 0:
+			return FUSION_LEVEL
 	return 0
 
 
@@ -192,7 +256,7 @@ func skill_level(skills: Array, skill_name: String) -> int:
 func can_learn_skill(hero: Dictionary, skills: Array, skill_name: String) -> bool:
 	if skill_level(skills, skill_name) > 0:
 		return false
-	if hero.get("secret", false) and hero["name"] == "Han":
+	if is_han(hero):
 		return true
 	for pair in INCOMPATIBLE_SKILLS:
 		if skill_name in pair:

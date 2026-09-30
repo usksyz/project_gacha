@@ -116,8 +116,14 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   pour Han) : fait, chiffres provisoires dans `battle.gd` et `GameData.SKILLS`.
   Lot de test (onglet « Compétences » du cahier) : Maîtrise de l'épée et Utilisation du bouclier au
   terrain d'entraînement, Maîtrise de l'arc par l'usage : fait.
+  Fusions (`GameData.SKILL_FUSIONS`) : deux compétences au niveau `FUSION_LEVEL` (10, choix du porteur du
+  projet ; le cahier disait 5) + un déclencheur en combat. Surpassement = Calme + Berserk, quand Berserk se
+  déclenche (Han seulement) ; Épée et bouclier = les deux maîtrises, en finissant un combat de la Tour debout
+  épée et bouclier en main. La compétence fusionnée remplace les deux et garde leurs effets (`skill_level`).
+  Han apprend Berserk plus facilement (choix du porteur du projet) : 80 % de chances d'éveil
+  (`HAN_AWAKENING_CHANCE`), Berserk dès 25 % de vie et en priorité.
   Reste : le reste du lot de test (Résistance aux flammes, Indomptable, Tueur de gobelins, Esprit combatif,
-  fusions Épée et bouclier / Surpassement, synthèse), rangs de compétence,
+  synthèse), autres fusions (Âme de l'épée...), rangs de compétence,
   Berserk affiché sur la fiche, mana, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec

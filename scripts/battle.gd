@@ -118,6 +118,9 @@ const AWAKENING_CHANCE := 0.35
 const BERSERK_LEARN_HP := 0.15
 ## Un héros qui possède Berserk entre en rage sous cette part de sa vie.
 const BERSERK_HP := 0.3
+## Han apprend Berserk plus facilement : ses chances d'éveil sont plus hautes, Berserk lui vient
+## dès la situation critique (pas seulement aux portes de la mort), et passe avant les autres compétences.
+const HAN_AWAKENING_CHANCE := 0.8
 
 ## Esquive par niveau de Mouvement souple, et réduction des dégâts par niveau de Calme.
 const DODGE_PER_LEVEL := 0.03
@@ -450,6 +453,8 @@ func _step() -> void:
 		if unit["hp"] <= 0:
 			continue  # tombé plus tôt pendant ce pas
 		_bleed_tick(unit)
+		if unit.get("surpass", false) and unit["hp"] > 0:
+			_surpass_tick(unit)
 		if unit["hp"] > 0:
 			unit["cooldown"] -= TICK
 			_think(unit)
@@ -721,6 +726,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Maîtrise de l'arme que tient l'attaquant (épée, arc...) : chaque niveau renforce ses coups.
 	if kind != "spell" and attacker["weapon_skill"] != "":
 		power *= 1.0 + GameData.skill_level(attacker["skills"], attacker["weapon_skill"]) * GameData.WEAPON_SKILL_BONUS_PER_LEVEL
+	# Épée et bouclier (fusion) : un bonus en plus à l'épée.
+	if kind == "hit" and attacker["weapon"] == "Épée":
+		power *= 1.0 + GameData.skill_level(attacker["skills"], "Épée et bouclier") * GameData.SWORD_SHIELD_BONUS_PER_LEVEL
 	var raw: float = attacker["atk"] * power * randf_range(0.9, 1.1) - target["def"] * 0.5
 	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.
 	if target["shield"]:
@@ -755,6 +763,8 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 
 ## La cible se met à saigner. Si elle saignait déjà, c'est une hémorragie.
 func _start_bleed(attacker: Dictionary, target: Dictionary) -> void:
+	if target.get("surpass", false):
+		return  # Surpassement : immunité aux altérations d'état
 	var bleed: Dictionary = target["bleed"]
 	var heavy: bool = bleed["ticks"] > 0
 	bleed["heavy"] = heavy
@@ -806,7 +816,8 @@ func _check_critical_state(fighter: Dictionary) -> void:
 	var ratio: float = float(fighter["hp"]) / fighter["max_hp"]
 	if ratio <= CRITICAL_HP and not fighter["awakening_tried"]:
 		fighter["awakening_tried"] = true
-		if randf() < AWAKENING_CHANCE:
+		var chance := HAN_AWAKENING_CHANCE if GameData.is_han(fighter["source"]) else AWAKENING_CHANCE
+		if randf() < chance:
 			_awaken(fighter, ratio)
 	if ratio <= BERSERK_HP and not fighter["berserk"] and GameData.skill_level(fighter["skills"], "Berserk") > 0:
 		_enter_berserk(fighter)
@@ -821,14 +832,18 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 			skill["level"] = mini(skill["level"] + randi_range(1, 3), GameData.SKILL_MAX_LEVEL)
 			news.append("%s passe au niveau %d" % [skill["name"], skill["level"]])
 
+	var han := GameData.is_han(fighter["source"])
 	var candidates := []
 	for skill_name in GameData.AWAKENING_SKILLS:
-		if skill_name == "Berserk" and ratio > BERSERK_LEARN_HP:
-			continue  # Berserk ne vient qu'aux portes de la mort
+		if skill_name == "Berserk" and ratio > BERSERK_LEARN_HP and not han:
+			continue  # Berserk ne vient qu'aux portes de la mort (Han : dès la situation critique)
 		if GameData.can_learn_skill(fighter["source"], fighter["skills"], skill_name):
 			candidates.append(skill_name)
-	if not candidates.is_empty() and (news.is_empty() or randf() < 0.5):
+	# Han apprend toujours une nouvelle compétence s'il peut, et Berserk en priorité.
+	if not candidates.is_empty() and (news.is_empty() or han or randf() < 0.5):
 		var learned: String = candidates.pick_random()
+		if han and "Berserk" in candidates:
+			learned = "Berserk"
 		fighter["skills"].append(GameData.new_skill(learned))
 		news.append("nouvelle compétence : %s" % learned)
 
@@ -842,7 +857,17 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 ## Berserk : la rage renforce le héros (Force, Santé, Dextérité) mais lui fait perdre ses moyens (Intelligence).
 func _enter_berserk(fighter: Dictionary) -> void:
 	fighter["berserk"] = true
+	# Fusion : Calme et Berserk au niveau maximum fusionnent en Surpassement au moment où la rage monte.
+	if GameData.fusion_ready(fighter["skills"], "Surpassement"):
+		_announce_fusion(fighter, GameData.fuse_skills(fighter["skills"], "Surpassement"))
 	var bonus := 4 + GameData.skill_level(fighter["skills"], "Berserk")  # +5 au niveau 1
+	if GameData.skill_level(fighter["skills"], "Surpassement") > 0:
+		# Surpassement : le corps passe en surrégime. Bonus doublés, plus de saignement,
+		# mais la vie baisse chaque seconde (voir _surpass_tick).
+		bonus *= GameData.SURPASS_BONUS_MULTIPLIER
+		fighter["surpass"] = true
+		fighter["bleed"]["ticks"] = 0
+		_log("%s entre en Surpassement ! Son corps passe en surrégime." % _name_with_stars(fighter), "berserk")
 	if fighter["class"] in ["Mage", "Soigneur"]:
 		fighter["atk"] = maxi(1, fighter["atk"] - 10)  # leur attaque vient de l'Intelligence
 	else:
@@ -854,9 +879,33 @@ func _enter_berserk(fighter: Dictionary) -> void:
 		% _name_with_stars(fighter), "berserk")
 
 
+## Annonce une fusion de compétences (journal et écran de fin).
+func _announce_fusion(fighter: Dictionary, text: String) -> void:
+	_log("%s : %s" % [_name_with_stars(fighter), text], "awaken")
+	fighter["skill_news"].append("%s — %s" % [fighter["name"], text])
+
+
+## Surpassement : chaque pas, le héros perd un peu de vie, jusqu'à la mort.
+func _surpass_tick(unit: Dictionary) -> void:
+	unit["drain"] = unit.get("drain", 0.0) + unit["max_hp"] * GameData.SURPASS_DRAIN_PER_SECOND * TICK
+	var amount := mini(int(unit["drain"]), unit["hp"])
+	if amount <= 0:
+		return
+	unit["drain"] -= amount
+	unit["hp"] -= amount
+	if unit["hp"] <= 0:
+		_announce_fall(unit, "épuisé par Surpassement")
+
+
 ## Après le combat : un héros qui a saigné et tient encore debout peut apprendre
-## (ou améliorer) Résistance à la douleur.
+## (ou améliorer) Résistance à la douleur. Un héros debout, épée et bouclier en main,
+## dont les deux maîtrises sont au maximum, les fusionne en « Épée et bouclier ».
 func _after_fight() -> void:
+	for fighter in heroes:
+		var standing: bool = fighter["hp"] > 0 or fighter["immortal"]
+		if standing and fighter["weapon"] == "Épée" and fighter["shield"] \
+				and GameData.fusion_ready(fighter["skills"], "Épée et bouclier"):
+			_announce_fusion(fighter, GameData.fuse_skills(fighter["skills"], "Épée et bouclier"))
 	for fighter in heroes:
 		if not fighter["has_bled"] or (fighter["hp"] <= 0 and not fighter["immortal"]):
 			continue
