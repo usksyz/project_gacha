@@ -140,6 +140,10 @@ const SKILLS := {
 	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
+	"Résistance aux flammes": "Dégâts de feu reçus : 5 % en moins par niveau. S'apprend en subissant du feu, ou en combattant aux côtés d'un mage de feu.",
+	"Indomptable": "Saignements et hémorragies : 10 % plus faibles par niveau. S'éveille chez un héros qui saigne en situation critique.",
+	"Tueur de gobelins": "Contre les gobelins : +10 % de dégâts par niveau. Exploit : coup fatal au boss de l'étage 5, ou 50 gobelins tués.",
+	"Esprit combatif": "Évolution de Résistance à la douleur (au niveau 10) : garde ses effets, et +5 % de dégâts par niveau sous la moitié de sa vie.",
 	"Surpassement": "Fusion de Calme et Berserk (unique). Garde leurs effets ; quand Berserk se déclenche, ses bonus sont doublés et le héros ne saigne plus, mais il perd 2 % de sa vie chaque seconde, jusqu'à la mort.",
 	"Épée et bouclier": "Fusion de Maîtrise de l'épée et Utilisation du bouclier. Garde leurs effets, et +2 % de dégâts à l'épée par niveau.",
 	"Forge": "Artisan : à la forge, une pièce du puzzle est placée d'office, et plus de malus « Pas d'artisan ». S'apprend en travaillant comme assistant de la forge.",
@@ -194,12 +198,58 @@ const SKILL_FUSIONS := {
 		"rank": "Intermédiaire", "when": "finir un combat de la Tour debout, épée et bouclier en main"},
 }
 
+## Évolutions : une compétence arrivée au niveau FUSION_LEVEL se transforme en une compétence supérieure
+## (à la fin d'un combat). Comme une fusion, la nouvelle compétence garde les effets de l'ancienne.
+const SKILL_EVOLUTIONS := {
+	"Esprit combatif": {"from": "Résistance à la douleur", "rank": "Intermédiaire"},
+}
+
+# --- Compétences du lot de test (onglet « Compétences » du cahier), chiffres provisoires ---
+## Résistance aux flammes : dégâts de feu en moins par niveau ; chance de l'apprendre (ou de la monter)
+## après un combat où l'on a subi du feu ; ou 1 point par combat fini aux côtés d'un mage de feu.
+const FIRE_RESIST_PER_LEVEL := 0.05
+const FIRE_RESIST_CHANCE := 0.5
+const FIRE_MAGE_FIGHTS_PER_LEVEL := 3
+## Indomptable : saignements plus faibles par niveau (avec Résistance à la douleur, 80 % au plus).
+const INDOMITABLE_PER_LEVEL := 0.1
+## Tueur de gobelins : dégâts en plus contre les gobelins par niveau ; gobelins à tuer par niveau.
+const GOBLIN_SLAYER_PER_LEVEL := 0.1
+const GOBLIN_KILLS_PER_LEVEL := 50
+## Esprit combatif : dégâts en plus par niveau, sous la moitié de sa vie.
+const FIGHTING_SPIRIT_PER_LEVEL := 0.05
+## Éléments de la magie : chaque mage en maîtrise un (le feu pour les ennemis sorciers).
+const MAGIC_ELEMENTS := ["Feu", "Vent", "Froid"]
+
 ## Surpassement : quand Berserk se déclenche, ses bonus sont multipliés par ceci, le héros ne peut
 ## plus saigner, mais il perd cette part de sa vie maximum chaque seconde (jusqu'à la mort).
 const SURPASS_BONUS_MULTIPLIER := 2
 const SURPASS_DRAIN_PER_SECOND := 0.02
 ## Épée et bouclier : dégâts en plus à l'épée, par niveau de la compétence fusionnée.
 const SWORD_SHIELD_BONUS_PER_LEVEL := 0.02
+
+
+## Ce que change le mode Berserk sur les valeurs de combat d'un héros (pour sa fiche) :
+## [[nom, valeur de base, valeur en Berserk], ...], ou [] s'il n'a pas Berserk.
+## Mêmes calculs que battle.gd (_enter_berserk) : bonus de 4 + niveau, doublé avec Surpassement.
+func berserk_preview(hero: Dictionary) -> Array:
+	var level := skill_level(hero["skills"], "Berserk")
+	if level == 0:
+		return []
+	var bonus := 4 + level
+	if skill_level(hero["skills"], "Surpassement") > 0:
+		bonus *= SURPASS_BONUS_MULTIPLIER
+	var base := combat_stats(hero)
+	var gear := gear_stats(hero)
+	var atk: int = base["atk"] + gear.get("atk", 0)
+	var def: int = base["def"] + gear.get("def", 0)
+	var crit: float = base["crit"] + gear.get("crit", 0.0)
+	var magic: bool = hero["class"] in ["Mage", "Soigneur"]
+	return [
+		["Attaque", atk, maxi(1, atk - 10) if magic else atk + bonus],
+		["Défense", def, def + roundi(bonus / 2.0)],
+		["Vitesse", base["spd"], base["spd"] + bonus],
+		["Critiques (%)", roundi(crit * 100), roundi((crit + bonus / 200.0) * 100)],
+	]
 
 
 ## Vrai si les deux compétences d'une fusion sont au niveau voulu sur ce héros.
@@ -247,7 +297,25 @@ func skill_level(skills: Array, skill_name: String) -> int:
 	for fusion_name in SKILL_FUSIONS:
 		if skill_name in SKILL_FUSIONS[fusion_name]["parts"] and _own_skill_level(skills, fusion_name) > 0:
 			return FUSION_LEVEL
+	for evolved in SKILL_EVOLUTIONS:
+		if SKILL_EVOLUTIONS[evolved]["from"] == skill_name and _own_skill_level(skills, evolved) > 0:
+			return FUSION_LEVEL
 	return 0
+
+
+## Évolutions : les compétences arrivées au niveau voulu se transforment. Renvoie les annonces.
+func check_evolutions(hero: Dictionary) -> Array[String]:
+	var news: Array[String] = []
+	var skills: Array = hero["skills"]
+	for evolved in SKILL_EVOLUTIONS:
+		var from: String = SKILL_EVOLUTIONS[evolved]["from"]
+		if _own_skill_level(skills, from) >= FUSION_LEVEL:
+			for i in range(skills.size() - 1, -1, -1):
+				if skills[i]["name"] == from:
+					skills.remove_at(i)
+			skills.append({"name": evolved, "rank": SKILL_EVOLUTIONS[evolved]["rank"], "level": 1})
+			news.append("%s — Évolution ! %s devient %s" % [hero["name"], from, evolved])
+	return news
 
 
 ## Vrai si le héros peut apprendre cette compétence : il ne l'a pas encore,
@@ -277,7 +345,14 @@ func skill_progress(hero: Dictionary, skill_name: String) -> int:
 
 ## Points de progrès nécessaires pour le prochain niveau d'une compétence.
 func skill_progress_needed(skill_name: String) -> int:
-	return BOW_SHOTS_PER_LEVEL if skill_name == "Maîtrise de l'arc" else TRAINING_POINTS_PER_LEVEL
+	match skill_name:
+		"Maîtrise de l'arc":
+			return BOW_SHOTS_PER_LEVEL
+		"Tueur de gobelins":
+			return GOBLIN_KILLS_PER_LEVEL
+		"Résistance aux flammes":
+			return FIRE_MAGE_FIGHTS_PER_LEVEL
+	return TRAINING_POINTS_PER_LEVEL
 
 
 ## Donne des points de progrès à un héros dans une compétence. À chaque fois que le total
@@ -1191,14 +1266,14 @@ const ENEMY_TYPES := [
 	{"name": "Squelette archer", "class": "Archer", "str": 10, "int": 3, "vit": 6, "dex": 10},
 	{"name": "Golem de pierre", "class": "Chevalier", "str": 7, "int": 1, "vit": 14, "dex": 5},
 	{"name": "Chaman", "class": "Soigneur", "str": 3, "int": 8, "vit": 7, "dex": 9},
-	{"name": "Sorcier gobelin", "class": "Mage", "str": 3, "int": 11, "vit": 5, "dex": 8},
+	{"name": "Sorcier gobelin", "class": "Mage", "str": 3, "int": 11, "vit": 5, "dex": 8, "element": "Feu"},
 ]
 
 ## Boss qui gardent les étages multiples de BOSS_EVERY.
 const BOSS_TYPES := [
 	{"name": "Chef gobelin", "class": "Guerrier", "str": 16, "int": 4, "vit": 26, "dex": 10},
 	{"name": "Minotaure", "class": "Guerrier", "str": 18, "int": 4, "vit": 30, "dex": 9},
-	{"name": "Liche", "class": "Mage", "str": 4, "int": 18, "vit": 24, "dex": 10},
+	{"name": "Liche", "class": "Mage", "str": 4, "int": 18, "vit": 24, "dex": 10, "element": "Froid"},
 	{"name": "Hydre", "class": "Chevalier", "str": 14, "int": 4, "vit": 40, "dex": 6},
 ]
 
@@ -1527,7 +1602,10 @@ func _create_hero(rarity: int, allow_mage := false) -> Dictionary:
 	if rarity == 1 and randf() < HIDDEN_TALENT_CHANCE:
 		growth += 3  # talent caché : croissance digne d'un 3 étoiles
 
-	return _new_hero(HERO_NAMES.pick_random(), rarity, hero_class, growth, [])
+	var hero := _new_hero(HERO_NAMES.pick_random(), rarity, hero_class, growth, [])
+	if hero_class == "Mage":
+		hero["element"] = MAGIC_ELEMENTS.pick_random()  # magie de feu, de vent ou de froid
+	return hero
 
 
 ## Crée un héros secret à partir de SECRET_HEROES.
@@ -1772,7 +1850,7 @@ func _create_enemy(template: Dictionary, level: int) -> Dictionary:
 		stats[stat] = maxi(1, roundi(value * randf_range(0.9, 1.1)))
 	# « base_name » garde le nom sans lettre (Gobelin), pour regrouper les ennemis à l'affichage.
 	return {"name": template["name"], "base_name": template["name"], "class": template["class"],
-		"level": level, "stats": stats}
+		"level": level, "stats": stats, "element": template.get("element", "")}
 
 
 ## Ajoute une lettre aux ennemis qui portent le même nom (Gobelin A, Gobelin B...),
@@ -1818,6 +1896,30 @@ func _resolve_pending_battle() -> void:
 	var battle := Battle.new(team, pending_battle["enemies"], pending_battle["quest"])
 	battle.run()
 	absence_report = {"floor": floor_number, "report": finish_tower_battle(battle)}
+
+
+## Compétences gagnées par les exploits d'un survivant pendant le combat (textes à annoncer) :
+## - Tueur de gobelins : coup fatal au boss de l'étage 5 (le Chef gobelin), ou 1 point par gobelin tué ;
+## - Résistance aux flammes : 1 point par combat fini dans la même équipe qu'un mage de feu.
+func _combat_feats(hero: Dictionary, fighter: Dictionary, battle: Battle) -> Array[String]:
+	var news: Array[String] = []
+	var goblins := 0
+	var boss_goblin := false
+	for kill in fighter["kills"]:
+		if kill["name"].to_lower().contains("gobelin"):
+			goblins += 1
+			if kill["boss"]:
+				boss_goblin = true
+	if boss_goblin and skill_level(hero["skills"], "Tueur de gobelins") == 0:
+		hero["skills"].append(new_skill("Tueur de gobelins"))
+		news.append("%s — exploit ! Nouvelle compétence : Tueur de gobelins" % hero["name"])
+	elif goblins > 0:
+		news.append_array(add_skill_progress(hero, "Tueur de gobelins", goblins, GOBLIN_KILLS_PER_LEVEL))
+	for ally in battle.heroes:
+		if ally["id"] != fighter["id"] and ally["class"] == "Mage" and ally["element"] == "Feu":
+			news.append_array(add_skill_progress(hero, "Résistance aux flammes", 1, FIRE_MAGE_FIGHTS_PER_LEVEL))
+			break
+	return news
 
 
 ## Applique le résultat d'un combat de la Tour et renvoie un rapport pour l'écran de fin :
@@ -1882,6 +1984,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if fighter["shots"] > 0:
 				report["skills"].append_array(add_skill_progress(hero, "Maîtrise de l'arc",
 					fighter["shots"], skill_progress_needed("Maîtrise de l'arc")))
+			report["skills"].append_array(_combat_feats(hero, fighter, battle))
+			report["skills"].append_array(check_evolutions(hero))
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})

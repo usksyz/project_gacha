@@ -322,6 +322,11 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"berserk": false,          # en rage (compétence Berserk)
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
+		"base_name": source.get("base_name", source["name"]),  # nom sans lettre (Gobelin, pas Gobelin A)
+		# Élément de la magie d'un mage (un mage sans élément noté fait du feu).
+		"element": source.get("element", "Feu" if fighter_class == "Mage" else ""),
+		"kills": [],               # ennemis achevés : [{"name", "boss"}] (pour Tueur de gobelins)
+		"took_fire": false,        # a subi des dégâts de feu (pour Résistance aux flammes)
 	}
 
 
@@ -720,6 +725,8 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 	_effect(kind, attacker, target, text, critical and amount >= 0)
 	if target["hp"] <= 0 and target["killer"] == "":
 		_announce_fall(target, "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]])
+		if attacker["is_hero"]:
+			attacker["kills"].append({"name": target["base_name"], "boss": target["boss"]})
 
 
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
@@ -734,7 +741,17 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Épée et bouclier (fusion) : un bonus en plus à l'épée.
 	if kind == "hit" and attacker["weapon"] == "Épée":
 		power *= 1.0 + GameData.skill_level(attacker["skills"], "Épée et bouclier") * GameData.SWORD_SHIELD_BONUS_PER_LEVEL
+	# Tueur de gobelins : plus de dégâts contre tous les gobelins (Gobelin, Chef gobelin, Sorcier gobelin).
+	if target["base_name"].to_lower().contains("gobelin"):
+		power *= 1.0 + GameData.skill_level(attacker["skills"], "Tueur de gobelins") * GameData.GOBLIN_SLAYER_PER_LEVEL
+	# Esprit combatif : sous la moitié de sa vie, l'attaquant frappe plus fort.
+	if attacker["hp"] * 2 < attacker["max_hp"]:
+		power *= 1.0 + GameData.skill_level(attacker["skills"], "Esprit combatif") * GameData.FIGHTING_SPIRIT_PER_LEVEL
 	var raw: float = attacker["atk"] * power * randf_range(0.9, 1.1) - target["def"] * 0.5
+	# Sort de feu : Résistance aux flammes de la cible (80 % au plus).
+	if kind == "spell" and attacker["element"] == "Feu":
+		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
+		target["took_fire"] = true
 	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.
 	if target["shield"]:
 		raw *= 1.0 - GameData.skill_level(target["skills"], "Utilisation du bouclier") * GameData.SHIELD_GUARD_PER_LEVEL
@@ -797,8 +814,9 @@ func _bleed_tick(unit: Dictionary) -> void:
 		return
 	bleed["timer"] = BLEED_INTERVAL
 	bleed["ticks"] -= 1
-	# Résistance à la douleur : les blessures guérissent plus vite.
-	var resist := minf(0.8, GameData.skill_level(unit["skills"], "Résistance à la douleur") * PAIN_RESIST_PER_LEVEL)
+	# Résistance à la douleur (les blessures guérissent plus vite) et Indomptable : 80 % au plus.
+	var resist := minf(0.8, GameData.skill_level(unit["skills"], "Résistance à la douleur") * PAIN_RESIST_PER_LEVEL \
+		+ GameData.skill_level(unit["skills"], "Indomptable") * GameData.INDOMITABLE_PER_LEVEL)
 	var amount := mini(maxi(1, roundi(bleed["amount"] * (1.0 - resist))), unit["hp"])
 	unit["hp"] -= amount
 	_effect("bleed", unit, unit, "-%d" % amount, false)
@@ -851,6 +869,9 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 			continue  # Berserk ne vient qu'aux portes de la mort (Han : dès la situation critique)
 		if GameData.can_learn_skill(fighter["source"], fighter["skills"], skill_name):
 			candidates.append(skill_name)
+	# Indomptable : candidate seulement si le héros saigne au moment de la situation critique.
+	if fighter["bleed"]["ticks"] > 0 and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Indomptable"):
+		candidates.append("Indomptable")
 	# Han apprend toujours une nouvelle compétence s'il peut, et Berserk en priorité.
 	if not candidates.is_empty() and (news.is_empty() or han or randf() < 0.5):
 		var learned: String = candidates.pick_random()
@@ -891,6 +912,25 @@ func _enter_berserk(fighter: Dictionary) -> void:
 		% _name_with_stars(fighter), "berserk")
 
 
+## Apprend une compétence au niveau 1, ou la fait monter d'un niveau, et l'annonce.
+func _improve_skill(fighter: Dictionary, skill_name: String, how: String) -> void:
+	var level := GameData.skill_level(fighter["skills"], skill_name)
+	var line := ""
+	if level == 0:
+		if not GameData.can_learn_skill(fighter["source"], fighter["skills"], skill_name):
+			return
+		fighter["skills"].append(GameData.new_skill(skill_name))
+		line = "nouvelle compétence : %s" % skill_name
+	elif level < GameData.SKILL_MAX_LEVEL:
+		for skill in fighter["skills"]:
+			if skill["name"] == skill_name:
+				skill["level"] += 1
+		line = "%s passe au niveau %d" % [skill_name, level + 1]
+	if line != "":
+		fighter["skill_news"].append("%s — %s" % [fighter["name"], line])
+		_log("%s %s : %s." % [fighter["name"], how, line], "awaken")
+
+
 ## Annonce une fusion de compétences (journal et écran de fin).
 func _announce_fusion(fighter: Dictionary, text: String) -> void:
 	_log("%s : %s" % [_name_with_stars(fighter), text], "awaken")
@@ -918,6 +958,9 @@ func _after_fight() -> void:
 		if standing and fighter["weapon"] == "Épée" and fighter["shield"] \
 				and GameData.fusion_ready(fighter["skills"], "Épée et bouclier"):
 			_announce_fusion(fighter, GameData.fuse_skills(fighter["skills"], "Épée et bouclier"))
+		# Résistance aux flammes : un héros qui a subi du feu et tient debout peut l'apprendre (ou la monter).
+		if standing and fighter["took_fire"] and randf() < GameData.FIRE_RESIST_CHANCE:
+			_improve_skill(fighter, "Résistance aux flammes", "a appris du feu")
 	for fighter in heroes:
 		if not fighter["has_bled"] or (fighter["hp"] <= 0 and not fighter["immortal"]):
 			continue

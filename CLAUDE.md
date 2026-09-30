@@ -125,9 +125,12 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   Les autres héros : chance à part « aux portes de la mort » (`DEATH_DOOR_CHANCE`, 30 %) la première fois
   qu'ils passent sous 15 % de vie dans un combat. (Avant, Berserk n'était tiré qu'à l'éveil, vers 20-25 % de
   vie : presque impossible, aucun héros ne l'avait gardé en 900 essais simulés.)
-  Reste : le reste du lot de test (Résistance aux flammes, Indomptable, Tueur de gobelins, Esprit combatif,
-  synthèse), autres fusions (Âme de l'épée...), rangs de compétence,
-  Berserk affiché sur la fiche, mana, consignes en combat.
+  Résistance aux flammes (feu subi, ou 3 combats avec un mage de feu ; les mages ont un élément
+  `hero["element"]`), Indomptable (éveil en saignant), Tueur de gobelins (coup fatal au boss de l'étage 5,
+  ou 50 gobelins), Esprit combatif (évolution de Résistance à la douleur au niveau 10, `SKILL_EVOLUTIONS`),
+  Berserk affiché sur la fiche (`berserk_preview`) : fait.
+  Reste : compétences liées à la synthèse (compétence héritée, Analyse froide), autres fusions (Âme de
+  l'épée...), rangs de compétence, mana, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec
   renforts, survie à la horde tous les 5 étages (niveau caché), défense de la cité tous les 10 étages

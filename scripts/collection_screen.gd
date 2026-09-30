@@ -98,9 +98,13 @@ func _show_detail(hero: Dictionary) -> void:
 	panel.add_theme_stylebox_override("panel", style)
 	center.add_child(panel)
 
+	# La fiche défile si elle est plus haute que l'écran (beaucoup de compétences...).
+	var scroll := UI.make_scroll()
+	panel.add_child(scroll)
 	var content := VBoxContainer.new()
+	content.custom_minimum_size.x = 496
 	content.add_theme_constant_override("separation", 16)
-	panel.add_child(content)
+	scroll.add_child(content)
 
 	var rarity := UI.make_label(UI.rarity_text(hero["rarity"]), 26)
 	rarity.add_theme_color_override("font_color", color)
@@ -131,7 +135,10 @@ func _show_detail(hero: Dictionary) -> void:
 
 	# Équipement : l'arme (ou l'arme de départ) et le bouclier. Les mages se battent avec la magie.
 	if GameData.uses_magic(hero):
-		content.add_child(UI.make_label("Arme : aucune (magie)", 22))
+		var magic := "Arme : aucune (magie)"
+		if hero["class"] == "Mage":
+			magic = "Arme : aucune (magie de %s)" % hero.get("element", "Feu").to_lower()
+		content.add_child(UI.make_label(magic, 22))
 	else:
 		content.add_child(UI.make_label("Arme : %s" % GameData.fighting_weapon(hero)["name"], 22))
 		var shield := GameData.equipped(hero, "shield")
@@ -146,6 +153,24 @@ func _show_detail(hero: Dictionary) -> void:
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		description.modulate = Color(1, 1, 1, 0.6)
 		content.add_child(description)
+
+	# Mode Berserk : ce que la rage change (valeur de base → en Berserk, et l'écart en + ou en −).
+	var berserk := GameData.berserk_preview(hero)
+	if not berserk.is_empty():
+		content.add_child(UI.make_label("Mode Berserk (sous 30 % de vie) :", 20))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 24)
+		content.add_child(grid)
+		for row in berserk:
+			var name_label := UI.make_label(row[0], 19)
+			name_label.modulate = Color(1, 1, 1, 0.7)
+			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grid.add_child(name_label)
+			var gap: int = row[2] - row[1]
+			var value := UI.make_label("%d / %d (%s%d)" % [row[2], row[1], "+" if gap >= 0 else "−", absi(gap)], 19)
+			value.add_theme_color_override("font_color", Color("e05252") if gap < 0 else Color("f5b82e"))
+			grid.add_child(value)
 
 	# Progrès en cours (terrain d'entraînement, tirs à l'arc...) : « Maîtrise de l'épée : 40 / 100 ».
 	var progress: Dictionary = hero.get("skill_progress", {})
@@ -180,4 +205,6 @@ func _show_detail(hero: Dictionary) -> void:
 	close.custom_minimum_size.y = 90
 	content.add_child(close)
 
+	# Hauteur de la zone qui défile : celle de la fiche, sans dépasser l'écran.
+	scroll.custom_minimum_size = Vector2(496, minf(content.get_combined_minimum_size().y, 880))
 	detail_overlay.visible = true
