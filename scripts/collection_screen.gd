@@ -155,8 +155,11 @@ func _show_detail(hero: Dictionary) -> void:
 				GameData.skill_progress_needed(skill_name)], 18)
 			line.modulate = Color(1, 1, 1, 0.6)
 			content.add_child(line)
-	if hero["alive"] and hero.get("training", "") != "":
-		content.add_child(UI.make_label("Au terrain d'entraînement : %s" % hero["training"], 20))
+	if hero["alive"]:
+		var activity := GameData.activity_text(hero)
+		if hero.get("training", "") != "" and not GameData.is_away(hero):
+			activity += " (%s)" % hero["training"]
+		content.add_child(UI.make_label("Occupation : %s" % activity, 20))
 
 	var status_text := "En vie"
 	var status_color := Color("4caf6a")

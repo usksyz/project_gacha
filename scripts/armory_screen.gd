@@ -33,9 +33,15 @@ func _ready() -> void:
 	layout.add_theme_constant_override("separation", 16)
 	margin.add_child(layout)
 
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	layout.add_child(top)
 	var back := UI.make_button("← Retour à la cité", func(): navigate.emit("hub"), 22)
-	back.custom_minimum_size.y = 64
-	layout.add_child(back)
+	var forge := UI.make_button("Forge (annexe) →", func(): navigate.emit("forge"), 22)
+	for button in [back, forge]:
+		button.custom_minimum_size.y = 64
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top.add_child(button)
 
 	# Tirage x1 et x10.
 	var draw_row := HBoxContainer.new()

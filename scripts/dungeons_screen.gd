@@ -1,6 +1,7 @@
 class_name DungeonsScreen
 extends Control
-## Donjons : la Tour (combats en temps réel, étage par étage) et le donjon journalier (à venir).
+## Donjons : la Tour (combats en temps réel, étage par étage, et étages déjà conquis à refaire
+## pour s'entraîner) et le donjon journalier (une équipe part récolter des matériaux).
 ## L'écran a cinq « pages » : la liste des donjons, la composition des équipes à l'avance,
 ## l'annonce de la quête de l'étage, le choix de l'équipe, et le combat.
 
@@ -30,6 +31,10 @@ var floor_quest: Dictionary = {}
 
 var floor_label: Label
 var daily_label: Label
+## Contenu changeant de la carte du donjon journalier (boutons, ramassages, retour).
+var daily_box: VBoxContainer
+## Annonce de l'entrée d'une équipe dans le donjon, montrée tant qu'elle y est.
+var daily_notice := ""
 var team_title: Label
 var enemies_box: VBoxContainer
 var pick_label: Label
@@ -39,6 +44,9 @@ var fight_button: Button
 
 ## Ennemis de l'étage qu'on s'apprête à affronter.
 var floor_enemies: Array[Dictionary] = []
+## Étage qu'on s'apprête à jouer (l'étage actuel, ou un étage déjà conquis qu'on refait).
+var chosen_floor := 1
+var replay_button: Button
 ## Numéros (id) des héros choisis pour le combat.
 var selected_ids: Array[int] = []
 
@@ -72,10 +80,8 @@ func _show_page(page: Control) -> void:
 	if page == list_page:
 		var quest := GameData.floor_quest(GameData.tower_floor)
 		floor_label.text = "Étage actuel : %d (%s)" % [GameData.tower_floor, quest["name"]]
-		if GameData.tower_floor > GameData.DAILY_UNLOCK_FLOOR:
-			daily_label.text = "Débloqué ! (bientôt disponible)"
-		else:
-			daily_label.text = "Verrouillé : franchis l'étage %d" % GameData.DAILY_UNLOCK_FLOOR
+		replay_button.disabled = GameData.tower_floor <= 1  # aucun étage conquis à refaire
+		_refresh_daily()
 
 
 # --- Page 1 : liste des donjons ---
@@ -91,19 +97,101 @@ func _build_list_page() -> Control:
 	floor_label = UI.make_label("", 26)
 	floor_label.add_theme_color_override("font_color", Color("f5b82e"))
 	tower.add_child(floor_label)
-	var enter := UI.make_button("Entrer dans la Tour", _open_tower)
+	var enter := UI.make_button("Entrer dans la Tour", func(): _open_tower(GameData.tower_floor))
 	enter.custom_minimum_size.y = 80
 	tower.add_child(enter)
+	replay_button = UI.make_button("Refaire un étage (entraînement)", _open_replay_picker, 24)
+	replay_button.custom_minimum_size.y = 70
+	tower.add_child(replay_button)
 	var compose := UI.make_button("Composer les équipes", _open_teams, 24)
 	compose.custom_minimum_size.y = 70
 	tower.add_child(compose)
 
 	var daily := _make_card(layout, "Donjon journalier",
-		"Un donjon qui change chaque jour : tes héros y récoltent des matériaux rares.")
+		"Un festin de donjon qui change tous les jours : tes héros y récoltent des matériaux rares, sans combattre.")
 	daily_label = UI.make_label("", 22)
+	daily_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	daily_label.add_theme_color_override("font_color", Color("f5b82e"))
 	daily.add_child(daily_label)
+	daily_box = VBoxContainer.new()
+	daily_box.add_theme_constant_override("separation", 8)
+	daily.add_child(daily_box)
+
+	# Chaque seconde, le compte à rebours et les ramassages du donjon journalier avancent.
+	var timer := Timer.new()
+	timer.wait_time = 1.0
+	timer.timeout.connect(func():
+		if list_page.visible and is_visible_in_tree() and not GameData.expedition.is_empty():
+			_refresh_daily())
+	add_child(timer)
+	timer.start()
+	GameData.lobby_updated.connect(func():
+		if list_page.visible:
+			_refresh_daily())
+
+	# La carte de la Tour et celle du donjon défilent si l'écran est trop petit.
+	var scroll := UI.make_scroll()
+	margin.remove_child(layout)
+	scroll.add_child(layout)
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(scroll)
 	return margin
+
+
+## Carte du donjon journalier : verrouillé, prêt (un bouton par équipe), en cours
+## (compte à rebours et derniers ramassages), ou revenu (ce qui a été rapporté).
+func _refresh_daily() -> void:
+	GameData.update_expedition()
+	for child in daily_box.get_children():
+		daily_box.remove_child(child)
+		child.queue_free()
+
+	var dungeon := "%s (%s)" % [GameData.DAILY_DUNGEON["name"], GameData.DAILY_DUNGEON["difficulty"]]
+	if not GameData.expedition_report.is_empty():
+		daily_label.text = "Le groupe est revenu !"
+		daily_box.add_child(UI.make_system_window("Donjon journalier", GameData.expedition_report["lines"]))
+		var ok := UI.make_button("Compris", func():
+			GameData.expedition_report = {}
+			GameData.save_game()
+			_refresh_daily(), 22)
+		ok.custom_minimum_size.y = 70
+		daily_box.add_child(ok)
+		return
+
+	if not GameData.expedition.is_empty():
+		var remaining := GameData.expedition_remaining()
+		daily_label.text = "%s : l'équipe %d récolte. Rappel dans %d:%02d." % [dungeon,
+			GameData.expedition["team_index"] + 1, remaining / 60, remaining % 60]
+		if daily_notice != "":
+			daily_box.add_child(UI.make_system_window("Donjon journalier", [daily_notice]))
+		var entries := GameData.expedition_log_so_far()
+		for entry in entries.slice(maxi(0, entries.size() - 6)):
+			var line := UI.make_label(entry["text"], 18)
+			line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			line.modulate = Color(1, 1, 1, 0.5 if entry["kind"] == "junk" else 0.85)
+			daily_box.add_child(line)
+		return
+
+	var problem := GameData.expedition_problem()
+	if problem != "":
+		daily_label.text = problem
+		return
+	daily_label.text = "Aujourd'hui : %s. Envoie une équipe (%d minutes de récolte) :" % [
+		dungeon, GameData.EXPEDITION_SECONDS / 60]
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	daily_box.add_child(buttons)
+	for index in GameData.TEAM_COUNT:
+		var members := GameData.expedition_members(index)
+		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()], func():
+			if GameData.start_expedition(index):
+				daily_notice = "L'équipe %d est entrée dans le donjon journalier, %s. Ils reviendront après avoir acquis des matériaux !" \
+					% [index + 1, dungeon]
+			_refresh_daily.call_deferred(), 22)
+		button.custom_minimum_size.y = 70
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.disabled = members.is_empty()
+		buttons.add_child(button)
 
 
 ## Crée une carte (titre + description) dans « parent » et renvoie son contenu,
@@ -351,9 +439,52 @@ func _build_team_page() -> Control:
 	return margin
 
 
-## Prépare l'étage actuel (ennemis) et affiche le choix de l'équipe.
-func _open_tower() -> void:
-	var floor_number := GameData.tower_floor
+## Fenêtre pour choisir un étage déjà conquis à refaire (pour entraîner une équipe).
+func _open_replay_picker() -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.85)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var margin := _make_margin()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(margin)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 12)
+	margin.add_child(layout)
+	layout.add_child(UI.make_system_window("Refaire un étage", [
+		"Pour entraîner une nouvelle équipe ou ton équipe principale.",
+		"Toute l'expérience, %d %% de l'or, pas de gemmes. La Tour ne monte pas." % roundi(GameData.REPLAY_GOLD_RATE * 100),
+		"Attention : un héros qui tombe meurt quand même pour toujours."]))
+	var scroll := UI.make_scroll()
+	layout.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(grid)
+	for floor_number in range(1, GameData.tower_floor):
+		var text := "Étage %d" % floor_number
+		if GameData.is_boss_floor(floor_number):
+			text += "\nBoss"
+		var button := UI.make_button(text, func():
+			overlay.queue_free()
+			_open_tower(floor_number), 22)
+		button.custom_minimum_size.y = 90
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(button)
+	var close := UI.make_button("Fermer", func(): overlay.queue_free(), 24)
+	close.custom_minimum_size.y = 80
+	layout.add_child(close)
+
+
+## Prépare un étage (ennemis) et affiche le choix de l'équipe.
+## L'étage actuel fait monter dans la Tour ; un étage déjà conquis sert d'entraînement.
+func _open_tower(floor_number: int) -> void:
+	chosen_floor = floor_number
 	floor_quest = GameData.floor_quest(floor_number)
 	floor_enemies = GameData.tower_enemies(floor_number)
 	selected_ids.clear()
@@ -365,7 +496,11 @@ func _open_tower() -> void:
 	for child in enemies_box.get_children():
 		child.queue_free()
 	var rewards := GameData.tower_rewards(floor_number)
-	var header := UI.make_label("Récompense : %d or, %d gemmes" % [rewards["gold"], rewards["gems"]], 22)
+	var reward_text := "Récompense : %d or, %d gemmes" % [rewards["gold"], rewards["gems"]]
+	if floor_number < GameData.tower_floor:
+		reward_text = "Entraînement : %d or, pas de gemmes, %d d'expérience" % [
+			roundi(rewards["gold"] * GameData.REPLAY_GOLD_RATE), rewards["xp"]]
+	var header := UI.make_label(reward_text, 22)
 	header.modulate = Color(1, 1, 1, 0.7)
 	enemies_box.add_child(header)
 	for text in _enemy_summary():
@@ -397,7 +532,11 @@ func _enemy_summary() -> Array:
 
 
 func _refresh_team() -> void:
-	var heroes := _sorted_heroes()
+	# Les héros partis au donjon journalier ne peuvent pas monter dans la Tour.
+	var heroes: Array[Dictionary] = []
+	for hero in _sorted_heroes():
+		if not GameData.is_away(hero):
+			heroes.append(hero)
 	_fill_hero_grid(heroes_grid, heroes, selected_ids, _toggle_hero)
 
 	# Boutons des équipes composées à l'avance (grisés si l'équipe est vide).
@@ -405,7 +544,7 @@ func _refresh_team() -> void:
 		presets_box.remove_child(child)
 		child.queue_free()
 	for index in GameData.TEAM_COUNT:
-		var members := GameData.team_members(index)
+		var members := GameData.team_members(index).filter(func(hero): return not GameData.is_away(hero))
 		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()], _use_team.bind(index), 22)
 		button.custom_minimum_size.y = 70
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -422,7 +561,8 @@ func _refresh_team() -> void:
 func _use_team(index: int) -> void:
 	selected_ids.clear()
 	for hero in GameData.team_members(index):
-		selected_ids.append(hero["id"])
+		if not GameData.is_away(hero):
+			selected_ids.append(hero["id"])
 	_refresh_team.call_deferred()
 
 
@@ -470,12 +610,12 @@ func _start_fight() -> void:
 		if hero["id"] in selected_ids:
 			team.append(hero)
 
-	var floor_number := GameData.tower_floor
+	var floor_number := chosen_floor
 	var battle := Battle.new(team, floor_enemies, floor_quest)
 	battle.start()
 	# Le combat est noté dans la sauvegarde : si le jeu est fermé en plein combat,
 	# les héros se débrouillent seuls et le résultat est appliqué au lancement suivant.
-	GameData.start_tower_battle(team, floor_enemies, floor_quest)
+	GameData.start_tower_battle(team, floor_enemies, floor_quest, floor_number)
 
 	_show_page(battle_view)
 	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]])

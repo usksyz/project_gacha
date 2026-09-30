@@ -21,6 +21,8 @@ var code_pad: CodePad
 
 ## Fenêtre de construction des bâtiments de magie (il faut un mage).
 var construction_panel: ConstructionPanel
+## Fenêtre des affectations : les héros assistants de chaque bâtiment construit.
+var assignment_panel: AssignmentPanel
 
 
 func _ready() -> void:
@@ -48,9 +50,15 @@ func _ready() -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		outside.add_child(button)
 
-	var build_button := UI.make_button("Construction", func(): construction_panel.open(), 22)
-	build_button.custom_minimum_size.y = 70
-	layout.add_child(build_button)
+	var city_buttons := HBoxContainer.new()
+	city_buttons.add_theme_constant_override("separation", 16)
+	layout.add_child(city_buttons)
+	for entry in [["Construction", func(): construction_panel.open()],
+			["Affectations", func(): assignment_panel.open()]]:
+		var button := UI.make_button(entry[0], entry[1], 22)
+		button.custom_minimum_size.y = 70
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		city_buttons.add_child(button)
 
 	var info_panel := PanelContainer.new()
 	info_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b")))
@@ -65,11 +73,14 @@ func _ready() -> void:
 	add_child(code_pad)
 	construction_panel = ConstructionPanel.new()
 	add_child(construction_panel)
+	assignment_panel = AssignmentPanel.new()
+	add_child(assignment_panel)
 
 
 func on_shown() -> void:
 	code_pad.visible = false
 	construction_panel.visible = false
+	assignment_panel.visible = false
 
 
 func _on_zone_pressed(zone: Dictionary) -> void:

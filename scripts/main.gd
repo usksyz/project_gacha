@@ -18,6 +18,7 @@ const MENU := {
 const HUB_SCREENS := {
 	"training": "Terrain d'entraînement",
 	"armory": "Armurerie",
+	"forge": "Forge",
 }
 
 var screens := {}
@@ -59,6 +60,9 @@ func _ready() -> void:
 	var armory := ArmoryScreen.new()
 	armory.navigate.connect(show_screen)
 	screens["armory"] = armory
+	var forge := ForgeScreen.new()
+	forge.navigate.connect(show_screen)
+	screens["forge"] = forge
 	for screen in screens.values():
 		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 		content.add_child(screen)

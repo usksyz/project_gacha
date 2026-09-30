@@ -89,6 +89,22 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
 - Progrès des compétences : `hero["skill_progress"]` (points par compétence) et `GameData.add_skill_progress()`
   (au seuil : apprise ou niveau suivant). Sert à l'entraînement (10 + croissance par séance, 100 par niveau)
   et à Maîtrise de l'arc (1 point par flèche tirée, 50 par niveau). Chiffres dans `GameData`.
+- Tour : on peut refaire un étage déjà conquis (Donjons > « Refaire un étage ») pour entraîner une
+  nouvelle équipe ou l'équipe principale : toute l'expérience, moitié de l'or (`REPLAY_GOLD_RATE`),
+  pas de gemmes, la Tour ne monte pas. `start_tower_battle` reçoit l'étage joué.
+- Affectations (bouton du hub, `scripts/assignment_panel.gd`) : `POSTS_PER_BUILDING` = 2 postes
+  d'assistant par bâtiment construit (`hero["post"]`) ; un poste et l'entraînement s'excluent.
+  Un héros parti (Tour ou donjon journalier, `GameData.is_away`) ne s'entraîne pas et ne compte pas à son poste.
+- Donjon journalier (carte de l'écran Donjons) : un seul pour l'instant, la Mine de Brumefer (noms originaux,
+  le cahier en prévoit trois selon le jour). Une équipe composée part récolter `EXPEDITION_SECONDS` en temps
+  réel (même jeu fermé), une fois par jour ; ramassages tirés au départ et annoncés au fil du temps
+  (`expedition["log"]`), matériaux gradés, déchets, plans de forge rares ; retour dans l'entrepôt
+  (`GameData.warehouse`).
+- Forge (annexe de l'armurerie, `scripts/forge_screen.gd`, construite 500 gemmes) : recettes
+  `FORGE_RECIPES`, rang de base = grade du minerai (+1 avec un plan), malus infrastructures / artisan / plan,
+  chance affichée (Certaine... Infime) avec Oui / Non, production automatique ou puzzle
+  (`scripts/forge_puzzle.gd`, 5 difficultés du cahier, 3 minutes, succès / grand / phénoménal).
+  Les assistants de la forge deviennent artisans (compétence « Forge ») en travaillant.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Avancement (phases du cahier des charges)
@@ -127,5 +143,7 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   l'ouverture du terrain d'entraînement ; les trois fusionnent en Hall de magie) : bouton « Construction »
   du hub (`scripts/construction_panel.gd`). Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
-- Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
+- Phases 4 à 6 (lobby, artisanat, fin de jeu) : construction, affectations, donjon journalier, entrepôt
+  et forge : premières versions faites. Reste : niveaux de bâtiment, autres donjons journaliers et matériaux
+  (bois, cuir), monstres rares, fonctions des bâtiments de magie, cafétéria, etc. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

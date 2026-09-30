@@ -109,7 +109,10 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		lines.append("%s passe au niveau %d !" % [hero["name"], hero["level"]])
 	if report["mvp"] != "":
 		lines.append("MVP : %s" % report["mvp"])
-	windows.append(make_system_window("Étage conquis !" if report["victory"] else "Défaite", lines))
+	var title := "Défaite"
+	if report["victory"]:
+		title = "Étage réussi (entraînement)" if report.get("replay", false) else "Étage conquis !"
+	windows.append(make_system_window(title, lines))
 	return windows
 
 

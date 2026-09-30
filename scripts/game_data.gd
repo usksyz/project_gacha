@@ -9,6 +9,8 @@ signal gems_changed(new_amount: int)
 signal gold_changed(new_amount: int)
 ## Une ou plusieurs séances d'entraînement viennent de se terminer.
 signal training_updated
+## Quelque chose a changé dans la cité sans que le joueur y touche (retour du donjon journalier...).
+signal lobby_updated
 
 # ---------------------------------------------------------------------------
 # Invocation
@@ -138,6 +140,7 @@ const SKILLS := {
 	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
+	"Forge": "Artisan : à la forge, une pièce du puzzle est placée d'office, et plus de malus « Pas d'artisan ». S'apprend en travaillant comme assistant de la forge.",
 }
 
 ## Niveau maximum d'une compétence (les rangs au-delà de Débutant viendront plus tard).
@@ -467,27 +470,77 @@ func gear_stats(hero: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# Construction : les bâtiments de magie
+# Construction et affectation aux bâtiments
 # ---------------------------------------------------------------------------
-# Bâtiments secondaires du terrain d'entraînement (cahier des charges). On ne peut les construire
-# qu'en ayant un mage vivant parmi ses héros (et le terrain d'entraînement ouvert). Ils se paient
-# en gemmes. Une fois construits tous les trois, ils fusionnent en un seul bâtiment, le Hall de magie.
-# Leurs fonctions (Recherche, synthèse d'objets, apprentissage des mages) viendront plus tard.
+# Les bâtiments se construisent en gemmes (cahier des charges), une fois le terrain d'entraînement
+# ouvert (10 armes tirées) :
+# - la forge, annexe de l'armurerie (500 gemmes, comme dans le cahier) ;
+# - les bâtiments de magie, annexes du terrain d'entraînement, seulement avec un mage vivant
+#   parmi ses héros. Une fois construits tous les trois, ils fusionnent en Hall de magie.
+#   Leurs fonctions (Recherche, synthèse d'objets, savoir des mages) viendront plus tard.
+# Chaque bâtiment construit a POSTS_PER_BUILDING postes d'assistant (hero["post"]) : un héros affecté
+# y travaille au lieu de s'entraîner. À la forge, un assistant devient peu à peu artisan (compétence « Forge »).
 
-## « cost » : prix en gemmes (provisoire) ; « info » : ce que fera le bâtiment ;
-## « built » : l'annonce une fois construit.
+## « cost » : prix en gemmes ; « mage » : il faut un mage pour le construire ;
+## « info » : ce que fait le bâtiment ; « built » : l'annonce une fois construit.
 const BUILDINGS := {
-	"atelier_magie": {"name": "Atelier de magie", "cost": 500,
+	"forge": {"name": "Forge", "cost": 500, "mage": false,
+		"info": "Annexe de l'armurerie : fabrique des armes avec les matériaux du donjon journalier.",
+		"built": "La forge a été construite avec succès !"},
+	"atelier_magie": {"name": "Atelier de magie", "cost": 500, "mage": true,
 		"info": "Débloque la fonction « Recherche ».",
 		"built": "L'atelier de magie a été construit avec succès !"},
-	"laboratoire": {"name": "Laboratoire d'alchimie", "cost": 500,
+	"laboratoire": {"name": "Laboratoire d'alchimie", "cost": 500, "mage": true,
 		"info": "Débloque plusieurs types de synthèse d'objets.",
 		"built": "Le laboratoire d'alchimie a été construit avec succès !"},
-	"bibliotheque": {"name": "Bibliothèque", "cost": 500,
+	"bibliotheque": {"name": "Bibliothèque", "cost": 500, "mage": true,
 		"info": "Les mages y apprennent et gagnent en connaissances.",
 		"built": "La bibliothèque a été construite avec succès !"},
 }
+const MAGIC_BUILDINGS := ["atelier_magie", "laboratoire", "bibliotheque"]
 const MAGIC_HALL_NAME := "Hall de magie"
+
+## Postes d'assistant par bâtiment (cahier : « deux postes d'assistant par métier »).
+const POSTS_PER_BUILDING := 2
+
+
+## Les héros vivants affectés à un bâtiment.
+func posted_heroes(building_id: String) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in alive_heroes():
+		if hero.get("post", "") == building_id:
+			result.append(hero)
+	return result
+
+
+## Affecte un héros à un bâtiment construit (« » = le retirer de son poste).
+## Il quitte alors le terrain d'entraînement : un héros ne travaille qu'à un endroit à la fois.
+## Renvoie faux si le bâtiment n'est pas construit ou si ses postes sont pris.
+func set_post(hero: Dictionary, building_id: String) -> bool:
+	if building_id != "":
+		if not building_id in buildings or hero.get("post", "") == building_id:
+			return false
+		if posted_heroes(building_id).size() >= POSTS_PER_BUILDING:
+			return false
+		if hero.get("training", "") != "":
+			update_training()
+			hero["training"] = ""
+	hero["post"] = building_id
+	save_game()
+	return true
+
+
+## Où est un héros en ce moment (texte court), pour l'affichage.
+func activity_text(hero: Dictionary) -> String:
+	if in_tower(hero):
+		return "Dans la Tour"
+	if on_expedition(hero):
+		return "Au donjon journalier"
+	if hero.get("post", "") != "":
+		return "Assistant : %s" % BUILDINGS[hero["post"]]["name"]
+	if hero.get("training", "") != "":
+		return "Terrain d'entraînement"
+	return "Au repos"
 
 
 ## Vrai si au moins un mage vivant fait partie des héros.
@@ -500,7 +553,7 @@ func has_mage() -> bool:
 
 ## Vrai quand les trois bâtiments de magie sont construits (ils forment alors le Hall de magie).
 func has_magic_hall() -> bool:
-	for building_id in BUILDINGS:
+	for building_id in MAGIC_BUILDINGS:
 		if not building_id in buildings:
 			return false
 	return true
@@ -512,7 +565,7 @@ func build_problem(building_id: String) -> String:
 		return "Déjà construit."
 	if not training_unlocked():
 		return "Il faut d'abord le terrain d'entraînement."
-	if not has_mage():
+	if BUILDINGS[building_id]["mage"] and not has_mage():
 		return "Il faut un mage parmi tes héros."
 	if gems < BUILDINGS[building_id]["cost"]:
 		return "Pas assez de gemmes."
@@ -528,7 +581,7 @@ func build(building_id: String) -> Array[String]:
 	gems_changed.emit(gems)
 	buildings.append(building_id)
 	messages.append(BUILDINGS[building_id]["built"])
-	if has_magic_hall():
+	if building_id in MAGIC_BUILDINGS and has_magic_hall():
 		messages.append("Les trois bâtiments fusionnent : le %s est né !" % MAGIC_HALL_NAME)
 	save_game()
 	return messages
@@ -556,6 +609,12 @@ func in_tower(hero: Dictionary) -> bool:
 	return not pending_battle.is_empty() and hero["id"] in pending_battle["team"]
 
 
+## Vrai si le héros est parti de la cité (Tour ou donjon journalier) : il n'est ni au terrain
+## d'entraînement ni à son poste, et ne peut pas partir ailleurs.
+func is_away(hero: Dictionary) -> bool:
+	return in_tower(hero) or on_expedition(hero)
+
+
 ## Les héros vivants inscrits au terrain d'entraînement (y compris ceux partis dans la Tour).
 func trainees() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
@@ -573,6 +632,8 @@ func set_training(hero: Dictionary, skill_name: String) -> bool:
 		return false
 	update_training()  # les séances déjà faites dans l'ancien programme sont comptées
 	hero["training"] = skill_name
+	if skill_name != "":
+		hero["post"] = ""  # un héros ne travaille qu'à un endroit à la fois
 	hero["training_since"] = Time.get_unix_time_from_system()
 	save_game()
 	return true
@@ -590,8 +651,8 @@ func update_training() -> void:
 	var now := Time.get_unix_time_from_system()
 	var changed := false
 	for hero in trainees():
-		if in_tower(hero):
-			continue  # dans la Tour : pas d'entraînement pendant l'étage
+		if is_away(hero):
+			continue  # dans la Tour ou au donjon journalier : pas d'entraînement pendant ce temps
 		var since: float = hero.get("training_since", now)
 		if since > now:
 			since = now  # l'horloge de l'appareil a reculé
@@ -609,6 +670,409 @@ func update_training() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Entrepôt et donjon journalier
+# ---------------------------------------------------------------------------
+# Les matériaux s'accumulent dans l'entrepôt (warehouse : {nom: {grade: nombre}}).
+# Le donjon journalier (débloqué après l'étage DAILY_UNLOCK_FLOOR) n'est pas un combat : une équipe
+# y part récolter pendant EXPEDITION_SECONDS de temps réel (même jeu fermé), puis elle est rappelée
+# automatiquement et les matériaux vont dans l'entrepôt. Une expédition par jour.
+# Les ramassages sont tirés au départ (expedition["log"]) et annoncés au fil du temps.
+# Pour l'instant, un seul donjon journalier (le cahier en prévoit trois, un par jour de la semaine).
+
+const DAILY_DUNGEON := {
+	"name": "Mine de Brumefer",
+	"difficulty": "super facile",
+	"materials": ["Minerai de fer", "Charbon", "Cristal brut"],
+}
+## Ce qu'on peut aussi ramasser de temps en temps : un déchet inutile, ou (rarement) un plan de forge.
+const JUNK_NAME := "Poubelle"
+const JUNK_CHANCE := 0.12
+const PLAN_CHANCE := 0.02
+
+## Durée d'une expédition (secondes de temps réel) et temps entre deux ramassages d'un héros.
+const EXPEDITION_SECONDS := 1800
+const PICKUP_SECONDS := 120
+
+## Grades des matériaux ramassés et leur chance (total 1.0).
+const MATERIAL_GRADE_RATES := {
+	"F": 0.45, "E-": 0.20, "E": 0.13, "E+": 0.09, "D-": 0.06, "D": 0.04, "D+": 0.02, "C-": 0.01,
+}
+
+## Matériaux dans l'entrepôt : {"Minerai de fer": {"F": 12, "E": 3}, ...}.
+var warehouse: Dictionary = {}
+## Plans de forge possédés (types d'armes), trouvés au donjon journalier.
+var plans: Array = []
+## Expédition en cours (vide s'il n'y en a pas) : {"team": [id], "start": t, "end": t, "log": [...]}.
+var expedition: Dictionary = {}
+## Jour (AAAA-MM-JJ) de la dernière expédition : une seule par jour.
+var last_expedition_day := ""
+## Résultat d'une expédition revenue, pas encore montré au joueur : {"lines": [...], "items": [...]}.
+var expedition_report: Dictionary = {}
+
+
+func daily_unlocked() -> bool:
+	return tower_floor > DAILY_UNLOCK_FLOOR
+
+
+func _today() -> String:
+	return Time.get_date_string_from_system()
+
+
+## Vrai si le héros est parti récolter au donjon journalier.
+func on_expedition(hero: Dictionary) -> bool:
+	return not expedition.is_empty() and hero["id"] in expedition["team"]
+
+
+## Pourquoi on ne peut pas partir au donjon journalier (texte), ou "" si c'est possible.
+func expedition_problem() -> String:
+	if not daily_unlocked():
+		return "Verrouillé : franchis l'étage %d." % DAILY_UNLOCK_FLOOR
+	if not expedition.is_empty():
+		return "Une équipe est déjà dans le donjon."
+	if last_expedition_day == _today():
+		return "Déjà visité aujourd'hui : reviens demain."
+	return ""
+
+
+## Les héros d'une équipe composée à l'avance qui peuvent partir (vivants, pas dans la Tour).
+func expedition_members(team_index: int) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in team_members(team_index):
+		if not is_away(hero):
+			result.append(hero)
+	return result
+
+
+## Envoie une équipe au donjon journalier. Tous les ramassages sont tirés maintenant,
+## avec le moment où ils arrivent. Renvoie faux si c'est impossible.
+func start_expedition(team_index: int) -> bool:
+	var team := expedition_members(team_index)
+	if expedition_problem() != "" or team.is_empty():
+		return false
+	update_training()  # les séances terminées avant le départ sont comptées
+	var now := Time.get_unix_time_from_system()
+	var pickups := []
+	for hero in team:
+		var t := randf_range(20.0, PICKUP_SECONDS)
+		while t < EXPEDITION_SECONDS:
+			pickups.append(_roll_pickup(hero, t))
+			t += PICKUP_SECONDS * randf_range(0.7, 1.3)
+	pickups.sort_custom(func(a, b): return a["t"] < b["t"])
+	expedition = {"team": team.map(func(hero): return hero["id"]), "team_index": team_index,
+		"start": now, "end": now + EXPEDITION_SECONDS, "log": pickups}
+	last_expedition_day = _today()
+	save_game()
+	return true
+
+
+## Un ramassage : un matériau gradé, un déchet, ou (rarement) un plan de forge.
+func _roll_pickup(hero: Dictionary, t: float) -> Dictionary:
+	var who := "%s (%s)" % [hero["name"], "★".repeat(hero["rarity"])]
+	var roll := randf()
+	if roll < PLAN_CHANCE:
+		var type: String = WEAPON_TYPES.keys().pick_random()
+		return {"t": t, "kind": "plan", "name": type,
+			"text": "%s a trouvé un plan de forge : « %s » !" % [who, type]}
+	if roll < PLAN_CHANCE + JUNK_CHANCE:
+		return {"t": t, "kind": "junk", "name": JUNK_NAME, "grade": "F",
+			"text": "%s a collecté « %s (F) ». Astuce : la poubelle est inutile, jetez-la." % [who, JUNK_NAME]}
+	var material: String = DAILY_DUNGEON["materials"].pick_random()
+	var grade := _roll_from(MATERIAL_GRADE_RATES)
+	return {"t": t, "kind": "material", "name": material, "grade": grade,
+		"text": "%s a collecté « %s (%s) »." % [who, material, grade]}
+
+
+## Tire une clé au hasard dans un tableau {clé: chance}.
+func _roll_from(rates: Dictionary) -> String:
+	var roll := randf()
+	var cumulative := 0.0
+	for key in rates:
+		cumulative += rates[key]
+		if roll < cumulative:
+			return key
+	return rates.keys()[0]
+
+
+## Secondes écoulées depuis le départ de l'expédition, et secondes restantes.
+func expedition_elapsed() -> float:
+	return Time.get_unix_time_from_system() - expedition.get("start", 0.0)
+
+
+func expedition_remaining() -> int:
+	return maxi(0, ceili(expedition.get("end", 0.0) - Time.get_unix_time_from_system()))
+
+
+## Les ramassages déjà faits (ceux dont le moment est passé).
+func expedition_log_so_far() -> Array:
+	var elapsed := expedition_elapsed()
+	return expedition.get("log", []).filter(func(entry): return entry["t"] <= elapsed)
+
+
+## À la fin du temps, le groupe est rappelé : les matériaux vont dans l'entrepôt,
+## les plans sont gardés, les déchets jetés. Appelée régulièrement (et au lancement).
+func update_expedition() -> void:
+	if expedition.is_empty() or expedition_remaining() > 0:
+		return
+	var totals := {}
+	for entry in expedition["log"]:
+		match entry["kind"]:
+			"material":
+				add_material(entry["name"], entry["grade"], 1)
+				var key := "%s (%s)" % [entry["name"], entry["grade"]]
+				totals[key] = totals.get(key, 0) + 1
+			"plan":
+				if not entry["name"] in plans:
+					plans.append(entry["name"])
+				totals["Plan : %s" % entry["name"]] = 1
+	var lines := ["L'équipe %d est revenue du donjon journalier (%s)." % [expedition["team_index"] + 1, DAILY_DUNGEON["name"]]]
+	if totals.is_empty():
+		lines.append("Elle n'a rien rapporté d'utile.")
+	var keys := totals.keys()
+	keys.sort()  # rangé par matériau
+	for key in keys:
+		lines.append("%s x%d" % [key, totals[key]])
+	# Les héros retrouvent la cité : l'entraînement reprend avec une séance neuve.
+	for hero in alive_heroes():
+		if hero["id"] in expedition["team"]:
+			hero["training_since"] = Time.get_unix_time_from_system()
+	expedition_report = {"lines": lines}
+	expedition = {}
+	save_game()
+	lobby_updated.emit()
+
+
+func add_material(material: String, grade: String, count: int) -> void:
+	if not warehouse.has(material):
+		warehouse[material] = {}
+	warehouse[material][grade] = warehouse[material].get(grade, 0) + count
+
+
+## Nombre d'un matériau dans l'entrepôt (d'un grade précis, ou de tous les grades si grade = "").
+func material_count(material: String, grade := "") -> int:
+	var by_grade: Dictionary = warehouse.get(material, {})
+	if grade != "":
+		return by_grade.get(grade, 0)
+	var total := 0
+	for g in by_grade:
+		total += by_grade[g]
+	return total
+
+
+## Retire des matériaux : du grade demandé, ou (grade = "") en commençant par les plus faibles.
+func _take_material(material: String, count: int, grade := "") -> void:
+	var by_grade: Dictionary = warehouse.get(material, {})
+	var order: Array = [grade] if grade != "" else WEAPON_GRADES.keys()
+	for g in order:
+		var used := mini(count, by_grade.get(g, 0))
+		if used > 0:
+			by_grade[g] -= used
+			if by_grade[g] == 0:
+				by_grade.erase(g)
+			count -= used
+	warehouse[material] = by_grade
+
+
+# ---------------------------------------------------------------------------
+# Forge
+# ---------------------------------------------------------------------------
+# La forge (annexe de l'armurerie) fabrique des armes avec les matériaux de l'entrepôt.
+# Le rang de base de l'arme est le grade du matériau principal choisi (+1 cran avec un plan).
+# Malus (cahier des charges) : infrastructures insuffisantes (forge de niveau 1, strict minimum),
+# pas d'artisan (aucun assistant de la forge n'a la compétence « Forge »), pas de plan.
+# Deux façons de produire :
+# - automatique : un simple tirage selon la probabilité de succès ; l'arme reste à son rang de base ;
+# - à la main : le puzzle de forge (voir forge_puzzle.gd), qui peut faire monter le rang de plusieurs crans.
+# En cas d'échec, les matériaux sont perdus.
+
+## Recettes : matériau principal (qui donne le rang) et sa quantité, plus les matériaux en appoint.
+## Pour l'instant tout vient de la mine (le bois, le cuir... viendront avec les autres donjons).
+const FORGE_RECIPES := {
+	"Épée": {"main": "Minerai de fer", "qty": 5, "extra": {"Charbon": 2}},
+	"Lance": {"main": "Minerai de fer", "qty": 4, "extra": {"Charbon": 2}},
+	"Dague": {"main": "Minerai de fer", "qty": 3, "extra": {"Charbon": 1}},
+	"Fouet": {"main": "Minerai de fer", "qty": 3, "extra": {"Charbon": 1}},
+	"Arc": {"main": "Minerai de fer", "qty": 3, "extra": {"Charbon": 1}},
+	"Bouclier": {"main": "Minerai de fer", "qty": 6, "extra": {"Charbon": 2}},
+}
+
+## Difficultés du puzzle (cahier des charges) : taille de la grille, nombre de pièces (et leur taille),
+## cases d'impureté, pièces révélées une par une, rotation permise, silhouette qui s'efface (secondes),
+## crans de bonus au maximum, et chance de succès affichée avant de confirmer.
+const FORGE_DIFFICULTIES := {
+	"Facile": {"grid": 5, "pieces": 4, "sizes": [2, 3], "impurities": 0, "reveal": false,
+		"rotation": true, "fade": 0.0, "bonus": 1, "chance": 0.95},
+	"Normal": {"grid": 6, "pieces": 6, "sizes": [2, 4], "impurities": 0, "reveal": false,
+		"rotation": true, "fade": 0.0, "bonus": 2, "chance": 0.8},
+	"Difficile": {"grid": 7, "pieces": 8, "sizes": [3, 4], "impurities": 3, "reveal": false,
+		"rotation": true, "fade": 0.0, "bonus": 3, "chance": 0.6},
+	"Infernal": {"grid": 8, "pieces": 10, "sizes": [3, 4], "impurities": 4, "reveal": true,
+		"rotation": true, "fade": 0.0, "bonus": 4, "chance": 0.4},
+	"Démoniaque": {"grid": 9, "pieces": 12, "sizes": [3, 5], "impurities": 5, "reveal": true,
+		"rotation": false, "fade": 10.0, "bonus": 5, "chance": 0.2},
+}
+
+## Temps du puzzle (secondes), et effets des malus dans le puzzle.
+const FORGE_TIME := 180
+const INFRA_TIME_MALUS := 30          # infrastructures insuffisantes : 30 secondes en moins
+const NO_ARTISAN_IMPURITIES := 2      # pas d'artisan : 2 cases d'impureté en plus
+## Production automatique : chance de succès sans malus, et ce que retire chaque malus.
+const FORGE_AUTO_CHANCE := 0.9
+const FORGE_MALUS_CHANCE := 0.15
+## Niveau de la forge (les niveaux de bâtiment viendront plus tard) : au niveau 1, les
+## infrastructures sont insuffisantes ; au niveau 2, elles donneraient 30 secondes en plus.
+const FORGE_LEVEL := 1
+## Points de compétence « Forge » gagnés par chaque assistant présent à chaque fabrication
+## (100 points par niveau, comme à l'entraînement) : au bout de 4 fabrications, il devient artisan.
+const ARTISAN_POINTS_PER_WORK := 25
+
+
+func forge_built() -> bool:
+	return "forge" in buildings
+
+
+## Les assistants de la forge présents (pas partis dans la Tour ou au donjon).
+func forge_assistants() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in posted_heroes("forge"):
+		if not is_away(hero):
+			result.append(hero)
+	return result
+
+
+## Vrai si un assistant présent est artisan (compétence « Forge »).
+func has_artisan() -> bool:
+	for hero in forge_assistants():
+		if skill_level(hero["skills"], "Forge") > 0:
+			return true
+	return false
+
+
+## Les malus qui s'appliquent pour forger ce type d'arme : liste de clés "infra", "artisan", "plan".
+func forge_maluses(weapon_type: String) -> Array:
+	var result := []
+	if FORGE_LEVEL < 2:
+		result.append("infra")
+	if not has_artisan():
+		result.append("artisan")
+	if not weapon_type in plans:
+		result.append("plan")
+	return result
+
+
+const MALUS_NAMES := {"infra": "Infrastructures insuffisantes (30 s en moins)",
+	"artisan": "Pas d'artisan (2 cases d'impureté en plus)",
+	"plan": "Pas de plan (silhouette en pointillés, pas de cran en plus)"}
+
+
+## Chance de succès (0 à 1) : « difficulty » = une difficulté du puzzle, ou "auto".
+func forge_chance(weapon_type: String, difficulty: String) -> float:
+	var malus_count := forge_maluses(weapon_type).size()
+	if difficulty == "auto":
+		return clampf(FORGE_AUTO_CHANCE - malus_count * FORGE_MALUS_CHANCE, 0.05, 1.0)
+	return clampf(FORGE_DIFFICULTIES[difficulty]["chance"] - malus_count * 0.1, 0.02, 1.0)
+
+
+## La chance en mots, comme dans le cahier : Certaine, Élevée, Moyenne, Faible, Infime.
+func chance_word(chance: float) -> String:
+	if chance >= 0.95:
+		return "Certaine"
+	if chance >= 0.7:
+		return "Élevée"
+	if chance >= 0.45:
+		return "Moyenne"
+	if chance >= 0.2:
+		return "Faible"
+	return "Infime"
+
+
+## Grades du matériau principal dont on a assez pour cette recette (les meilleurs d'abord),
+## en vérifiant aussi les matériaux d'appoint.
+func forge_grades(weapon_type: String) -> Array:
+	var recipe: Dictionary = FORGE_RECIPES[weapon_type]
+	for material in recipe["extra"]:
+		if material_count(material) < recipe["extra"][material]:
+			return []
+	var result := []
+	for grade in WEAPON_GRADES.keys():
+		if material_count(recipe["main"], grade) >= recipe["qty"]:
+			result.push_front(grade)
+	return result
+
+
+## Rang de base : le grade du matériau principal, +1 cran avec un plan.
+func forge_base_grade(weapon_type: String, material_grade: String) -> String:
+	var rank := grade_rank(material_grade)
+	if weapon_type in plans:
+		rank += 1
+	return _grade_at(rank)
+
+
+func _grade_at(rank: int) -> String:
+	var grades := WEAPON_GRADES.keys()
+	return grades[clampi(rank, 0, grades.size() - 1)]
+
+
+## Prend les matériaux d'une fabrication dans l'entrepôt. Renvoie faux s'il en manque.
+func _consume_recipe(weapon_type: String, material_grade: String) -> bool:
+	if not material_grade in forge_grades(weapon_type):
+		return false
+	var recipe: Dictionary = FORGE_RECIPES[weapon_type]
+	_take_material(recipe["main"], recipe["qty"], material_grade)
+	for material in recipe["extra"]:
+		_take_material(material, recipe["extra"][material])
+	return true
+
+
+## Production automatique : un tirage selon la probabilité. Renvoie
+## {"ok": false} s'il manque des matériaux, sinon {"ok": true, "success": bool, "weapon": ..., "news": [...]}.
+func forge_auto(weapon_type: String, material_grade: String) -> Dictionary:
+	var chance := forge_chance(weapon_type, "auto")
+	if not _consume_recipe(weapon_type, material_grade):
+		return {"ok": false}
+	var result := {"ok": true, "success": randf() < chance, "weapon": {}}
+	if result["success"]:
+		result["weapon"] = _add_forged(weapon_type, forge_base_grade(weapon_type, material_grade))
+	result["news"] = _forge_work_done()
+	save_game()
+	return result
+
+
+## Début d'une fabrication à la main : les matériaux sont pris tout de suite (perdus en cas d'échec).
+func forge_manual_begin(weapon_type: String, material_grade: String) -> bool:
+	if not _consume_recipe(weapon_type, material_grade):
+		return false
+	save_game()
+	return true
+
+
+## Fin du puzzle. « bonus » : crans gagnés (0 pour un succès simple). Renvoie l'arme et les nouveautés.
+func forge_manual_end(weapon_type: String, material_grade: String, success: bool, bonus: int) -> Dictionary:
+	var result := {"success": success, "weapon": {}}
+	if success:
+		var rank := grade_rank(forge_base_grade(weapon_type, material_grade)) + bonus
+		result["weapon"] = _add_forged(weapon_type, _grade_at(rank))
+	result["news"] = _forge_work_done()
+	save_game()
+	return result
+
+
+func _add_forged(weapon_type: String, grade: String) -> Dictionary:
+	var weapon := {"id": next_weapon_id, "type": weapon_type, "grade": grade, "owner": 0, "forged": true}
+	next_weapon_id += 1
+	arsenal.append(weapon)
+	auto_equip()
+	return weapon
+
+
+## Chaque fabrication fait progresser les assistants présents vers la compétence « Forge ».
+func _forge_work_done() -> Array[String]:
+	var news: Array[String] = []
+	for hero in forge_assistants():
+		news.append_array(add_skill_progress(hero, "Forge", ARTISAN_POINTS_PER_WORK, TRAINING_POINTS_PER_LEVEL))
+	return news
+
+
+# ---------------------------------------------------------------------------
 # La Tour
 # ---------------------------------------------------------------------------
 
@@ -620,6 +1084,10 @@ const TEAM_COUNT := 3
 
 ## Un boss garde tous les étages multiples de ce nombre (5, 10, 15...).
 const BOSS_EVERY := 5
+
+## Un étage déjà conquis peut être rejoué (pour entraîner une nouvelle équipe ou l'équipe principale) :
+## l'expérience est entière, mais l'or est réduit (0.5 = moitié) et il n'y a pas de gemmes.
+const REPLAY_GOLD_RATE := 0.5
 
 ## Étage à franchir pour débloquer le donjon journalier.
 const DAILY_UNLOCK_FLOOR := 5
@@ -721,11 +1189,15 @@ func _ready() -> void:
 		_new_game()
 	if not pending_battle.is_empty():
 		_resolve_pending_battle()
-	# L'entraînement a continué pendant que le jeu était fermé, puis se poursuit toutes les 5 secondes.
+	# L'entraînement et le donjon journalier ont continué pendant que le jeu était fermé,
+	# puis on les fait avancer toutes les 5 secondes.
+	update_expedition()
 	update_training()
 	var timer := Timer.new()
 	timer.wait_time = 5.0
-	timer.timeout.connect(update_training)
+	timer.timeout.connect(func():
+		update_expedition()
+		update_training())
 	add_child(timer)
 	timer.start()
 
@@ -753,6 +1225,11 @@ func _new_game() -> void:
 	next_weapon_id = 1
 	weapon_draws = 0
 	buildings = []
+	warehouse = {}
+	plans = []
+	expedition = {}
+	last_expedition_day = ""
+	expedition_report = {}
 	# Han est là dès le début de la partie.
 	roster.append(_create_secret_hero("Han"))
 
@@ -790,6 +1267,11 @@ func save_game() -> void:
 	file.set_value("partie", "prochaine_arme", next_weapon_id)
 	file.set_value("partie", "armes_tirees", weapon_draws)
 	file.set_value("partie", "batiments", buildings)
+	file.set_value("partie", "entrepot", warehouse)
+	file.set_value("partie", "plans", plans)
+	file.set_value("partie", "expedition", expedition)
+	file.set_value("partie", "derniere_expedition", last_expedition_day)
+	file.set_value("partie", "retour_expedition", expedition_report)
 	file.save(SAVE_PATH)
 
 
@@ -815,6 +1297,11 @@ func load_game() -> bool:
 	next_weapon_id = file.get_value("partie", "prochaine_arme", 1)
 	weapon_draws = file.get_value("partie", "armes_tirees", 0)
 	buildings = file.get_value("partie", "batiments", [])
+	warehouse = file.get_value("partie", "entrepot", {})
+	plans = file.get_value("partie", "plans", [])
+	expedition = file.get_value("partie", "expedition", {})
+	last_expedition_day = file.get_value("partie", "derniere_expedition", "")
+	expedition_report = file.get_value("partie", "retour_expedition", {})
 	return not roster.is_empty()
 
 
@@ -1239,10 +1726,11 @@ func _number_duplicates(enemies: Array[Dictionary]) -> void:
 
 
 ## Début d'un combat de la Tour : on le note dans la sauvegarde (voir pending_battle).
-func start_tower_battle(team: Array, enemies: Array, quest: Dictionary) -> void:
+## « floor_number » : l'étage joué (un étage déjà conquis peut être rejoué, voir REPLAY_GOLD_RATE).
+func start_tower_battle(team: Array, enemies: Array, quest: Dictionary, floor_number: int) -> void:
 	update_training()  # les séances terminées avant le départ sont comptées
 	pending_battle = {
-		"floor": tower_floor,
+		"floor": floor_number,
 		"team": team.map(func(hero): return hero["id"]),
 		"enemies": enemies.duplicate(true),
 		"quest": quest,
@@ -1271,8 +1759,12 @@ func _resolve_pending_battle() -> void:
 ## - les héros tombés meurent pour toujours (sauf les immortels) ;
 ## - en cas de victoire : or, gemmes, expérience pour les survivants, étage suivant ;
 ## - en cas de défaite : les survivants gagnent quand même la moitié de l'expérience
-##   (sinon une équipe bloquée ne pourrait plus jamais progresser).
+##   (sinon une équipe bloquée ne pourrait plus jamais progresser) ;
+## - un étage déjà conquis (rejoué pour entraîner une équipe) donne toute l'expérience,
+##   mais moins d'or et pas de gemmes, et ne fait pas monter dans la Tour.
 func finish_tower_battle(battle: Battle) -> Dictionary:
+	var floor_number: int = pending_battle.get("floor", tower_floor)
+	var replay := floor_number < tower_floor
 	pending_battle = {}  # le combat est terminé (la sauvegarde est réécrite plus bas)
 	# Les héros inscrits au terrain d'entraînement le retrouvent : la séance repart de zéro.
 	for fighter in battle.heroes:
@@ -1287,8 +1779,10 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"skills": [],     # compétences apprises ou améliorées pendant le combat (textes)
 		"notices": [],    # annonces spéciales (déblocages...)
 		"mvp": battle.mvp(),
+		"floor": floor_number,
+		"replay": replay,  # étage déjà conquis, rejoué pour s'entraîner
 	}
-	if battle.victory and tower_floor == DAILY_UNLOCK_FLOOR:
+	if battle.victory and not replay and floor_number == DAILY_UNLOCK_FLOOR:
 		report["notices"].append("Félicitations, Maître ! Vous avez franchi le %de étage. Le donjon journalier est débloqué." % DAILY_UNLOCK_FLOOR)
 		report["notices"].append("Conseil : rassemblez des matériaux et renforcez vos héros avant de monter plus haut.")
 	for fighter in battle.heroes:
@@ -1299,10 +1793,14 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			fighter["source"]["death_cause"] = fighter["killer"]
 			report["dead"].append({"hero": fighter["source"], "cause": fighter["killer"]})
 
-	var rewards := tower_rewards(tower_floor)
+	var rewards := tower_rewards(floor_number)
+	if replay:
+		rewards["gold"] = roundi(rewards["gold"] * REPLAY_GOLD_RATE)
+		rewards["gems"] = 0
 	if battle.victory:
 		report.merge(rewards, true)
-		tower_floor += 1
+		if not replay:
+			tower_floor += 1
 		add_gold(rewards["gold"])
 		add_gems(rewards["gems"])
 	else:

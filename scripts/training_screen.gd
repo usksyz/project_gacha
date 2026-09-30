@@ -172,8 +172,8 @@ func _progress_text(hero: Dictionary, skill_name: String) -> String:
 func _status_text(hero: Dictionary) -> String:
 	var training: String = hero.get("training", "")
 	if training == "":
-		return "Au repos"
-	if GameData.in_tower(hero):
-		return "Parti dans la Tour : reprendra l'entraînement (%s) après l'étage" % PROGRAM_LABELS[training]
+		return GameData.activity_text(hero)  # au repos, ou assistant dans un bâtiment
+	if GameData.is_away(hero):
+		return "%s : reprendra l'entraînement (%s) à son retour" % [GameData.activity_text(hero), PROGRAM_LABELS[training]]
 	var seconds := GameData.seconds_to_next_session(hero)
 	return "À l'entraînement (%s) : prochaine séance dans %d:%02d" % [PROGRAM_LABELS[training], seconds / 60, seconds % 60]

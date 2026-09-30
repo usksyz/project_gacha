@@ -1,7 +1,7 @@
 class_name ConstructionPanel
 extends Control
-## Fenêtre de construction (bouton « Construction » du hub) : les bâtiments de magie.
-## On ne peut les construire qu'avec un mage parmi ses héros (règles dans GameData, section
+## Fenêtre de construction (bouton « Construction » du hub) : la forge et les bâtiments de magie
+## (ceux-là seulement avec un mage parmi ses héros ; règles dans GameData, section
 ## « Construction »). S'affiche par-dessus l'écran ; on l'ouvre avec open().
 
 var list: VBoxContainer
@@ -29,10 +29,13 @@ func _ready() -> void:
 	margin.add_child(layout)
 
 	layout.add_child(UI.make_system_window("Mode de construction",
-		["Les bâtiments de magie ne se construisent qu'avec un mage parmi tes héros."]))
+		["Les bâtiments se paient en gemmes. Ceux de magie demandent un mage parmi tes héros."]))
+	var scroll := UI.make_scroll()  # la liste défile s'il y a trop de bâtiments
+	layout.add_child(scroll)
 	list = VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 12)
-	layout.add_child(list)
+	scroll.add_child(list)
 	result = UI.make_label("", 22)
 	result.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -54,13 +57,15 @@ func _refresh() -> void:
 	for child in list.get_children():
 		list.remove_child(child)
 		child.queue_free()
-	if GameData.has_magic_hall():
+	var hall_done := GameData.has_magic_hall()
+	if hall_done:
 		var hall := UI.make_label("%s : construit (atelier de magie, laboratoire d'alchimie et bibliothèque réunis)." \
 			% GameData.MAGIC_HALL_NAME, 22)
 		hall.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		list.add_child(hall)
-		return
 	for building_id in GameData.BUILDINGS:
+		if hall_done and building_id in GameData.MAGIC_BUILDINGS:
+			continue  # déjà réunis dans le Hall de magie
 		var info: Dictionary = GameData.BUILDINGS[building_id]
 		var panel := PanelContainer.new()
 		panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b"), Color("9b6be0"), 2))
@@ -68,7 +73,7 @@ func _refresh() -> void:
 		box.add_theme_constant_override("separation", 6)
 		panel.add_child(box)
 		box.add_child(UI.make_label(info["name"], 24))
-		var role := UI.make_label(info["info"] + " (fonction à venir)", 18)
+		var role := UI.make_label(info["info"] + ("" if building_id == "forge" else " (fonction à venir)"), 18)
 		role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		role.modulate = Color(1, 1, 1, 0.7)
 		box.add_child(role)
