@@ -115,8 +115,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   Reste : matériaux gradés, glisser-déposer, équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
-  mages, pity de 50) dans `GameData.SUMMON_TYPES` (taux provisoires, le cahier n'en donne pas),
-  tirage d'armes, arsenal et équipement : fait.
-  Reste : invocation gratuite (1 % de 4 étoiles), grades au-delà de C+, compétences de lance, dague et fouet.
+  mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
+  L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
+  en jeu, précision du porteur du projet) : 1 % de 4 étoiles, pas de 5 étoiles. Autres taux provisoires.
+  Reste : grades au-delà de C+, compétences de lance, dague et fouet.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

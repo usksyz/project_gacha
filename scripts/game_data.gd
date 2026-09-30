@@ -15,14 +15,15 @@ signal training_updated
 # ---------------------------------------------------------------------------
 
 ## Deux sortes d'invocation (cahier des charges) :
-## - « normal » : héros de base, payée en or ;
+## - « normal » : héros de base, payée en or, la monnaie gagnée en jouant. C'est l'invocation
+##   « gratuite » du cahier (sans argent réel) : 1 % de chances d'un 4 étoiles, et pas de 5 étoiles ;
 ## - « special » : héros spéciaux, payée en gemmes, avec de meilleures chances de hauts rangs.
 ##   C'est la seule qui peut donner un mage, et elle a un pity (5 étoiles garanti).
 ## « cost » : prix d'une invocation ; « currency » : "gold" ou "gems" ;
 ## « rates » : probabilité de chaque rareté (le total fait 1.0, soit 100 %). Chiffres provisoires.
 const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
-		"rates": {5: 0.002, 4: 0.018, 3: 0.08, 2: 0.30, 1: 0.60}},
+		"rates": {5: 0.0, 4: 0.01, 3: 0.08, 2: 0.31, 1: 0.60}},
 	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
 		"rates": {5: 0.02, 4: 0.08, 3: 0.20, 2: 0.30, 1: 0.40}},
 }

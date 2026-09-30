@@ -119,6 +119,8 @@ func _build_ui() -> void:
 func _rates_text(info: Dictionary) -> String:
 	var parts := []
 	for rarity in info["rates"]:
+		if info["rates"][rarity] <= 0.0:
+			continue  # rareté impossible avec cette invocation : on ne l'affiche pas
 		parts.append("%d★ %s %%" % [rarity, String.num(info["rates"][rarity] * 100.0, 1).replace(".", ",")])
 	var text := "  ".join(parts)
 	if info["mages"]:
