@@ -118,6 +118,9 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
   L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
   en jeu, précision du porteur du projet) : 1 % de 4 étoiles, pas de 5 étoiles. Autres taux provisoires.
+  Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice ;
+  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (environ 0,3 % des invocations).
+  Bouton « Détail des taux » sur l'écran d'invocation.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

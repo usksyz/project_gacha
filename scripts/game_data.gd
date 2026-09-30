@@ -41,15 +41,21 @@ const RARITY_COLORS := {
 	1: Color("8a8f98"),
 }
 
-## Chance qu'un héros de 3 étoiles ou plus soit un Mage (0.01 = 1 %).
+## Rareté des classes, à l'intérieur de chaque rareté d'étoiles : une fois les étoiles tirées,
+## on tire la classe selon ce tableau (le total de chaque ligne fait 1.0, soit 100 %).
+## Les 1 et 2 étoiles sont des gens ordinaires : tous « Novice ».
 ## Les mages ne s'obtiennent que par invocation spéciale, avec une très très faible chance :
-## 30 % des invocations spéciales donnent un 3 étoiles ou plus, donc environ 0,3 % sont des mages
-## (à peu près 1 mage toutes les 330 invocations spéciales).
-const MAGE_CHANCE := 0.01
-
-## Classes possibles pour un héros de 3 étoiles ou plus (hors Mage).
-## Les 1 et 2 étoiles commencent tous « Novice ».
-const HIGH_CLASSES := ["Guerrier", "Chevalier", "Archer", "Assassin", "Soigneur"]
+## 1 % des 3 étoiles et plus. Comme 30 % des invocations spéciales donnent un 3 étoiles ou plus,
+## environ 0,3 % des invocations spéciales donnent un mage (à peu près 1 toutes les 330).
+## Dans l'invocation normale, la part des mages est simplement retirée du tirage.
+## Chiffres provisoires, à régler.
+const CLASS_RATES := {
+	1: {"Novice": 1.0},
+	2: {"Novice": 1.0},
+	3: {"Guerrier": 0.30, "Chevalier": 0.20, "Archer": 0.20, "Assassin": 0.15, "Soigneur": 0.14, "Mage": 0.01},
+	4: {"Guerrier": 0.27, "Chevalier": 0.22, "Archer": 0.20, "Assassin": 0.15, "Soigneur": 0.15, "Mage": 0.01},
+	5: {"Guerrier": 0.25, "Chevalier": 0.22, "Archer": 0.20, "Assassin": 0.16, "Soigneur": 0.16, "Mage": 0.01},
+}
 
 ## Prénoms des héros ordinaires, tirés au hasard.
 const HERO_NAMES := [
@@ -858,12 +864,36 @@ func _roll_rarity(summon_type: String) -> int:
 	return 1
 
 
+## Chances de chaque classe pour une rareté (voir CLASS_RATES). Sans les mages (invocation
+## normale), leur part est retirée et les autres classes se partagent les 100 %.
+func class_rates(rarity: int, allow_mage: bool) -> Dictionary:
+	var rates: Dictionary = CLASS_RATES[rarity].duplicate()
+	if not allow_mage:
+		rates.erase("Mage")
+	var total := 0.0
+	for hero_class in rates:
+		total += rates[hero_class]
+	for hero_class in rates:
+		rates[hero_class] /= total
+	return rates
+
+
+## Tire la classe d'un héros selon sa rareté.
+func _roll_class(rarity: int, allow_mage: bool) -> String:
+	var rates := class_rates(rarity, allow_mage)
+	var roll := randf()
+	var cumulative := 0.0
+	for hero_class in rates:
+		cumulative += rates[hero_class]
+		if roll < cumulative:
+			return hero_class
+	return rates.keys()[0]
+
+
 ## Crée un nouveau héros ordinaire de la rareté donnée.
 ## « allow_mage » : seule l'invocation spéciale peut donner un mage.
 func _create_hero(rarity: int, allow_mage := false) -> Dictionary:
-	var hero_class := "Novice"
-	if rarity >= 3:
-		hero_class = "Mage" if allow_mage and randf() < MAGE_CHANCE else HIGH_CLASSES.pick_random()
+	var hero_class := _roll_class(rarity, allow_mage)
 
 	var growth: int = GROWTH[rarity]
 	if rarity == 1 and randf() < HIDDEN_TALENT_CHANCE:
