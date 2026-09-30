@@ -121,6 +121,11 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice ;
   mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (environ 0,3 % des invocations).
   Bouton « Détail des taux » sur l'écran d'invocation.
+  Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;
+  `_roll_stats`, `MAGE_STAT_MALUS`). Avoir un mage vivant permet de construire les bâtiments de magie
+  (`GameData.BUILDINGS` : atelier de magie, laboratoire d'alchimie, bibliothèque, en gemmes, après
+  l'ouverture du terrain d'entraînement ; les trois fusionnent en Hall de magie) : bouton « Construction »
+  du hub (`scripts/construction_panel.gd`). Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : à faire. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

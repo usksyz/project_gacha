@@ -89,6 +89,9 @@ const CLASS_MAIN_STAT := {
 	"Soigneur": "int",
 }
 
+## Mages : leurs statistiques autres que l'Intelligence partent plus bas (voir _roll_stats).
+const MAGE_STAT_MALUS := 7
+
 ## Valeur de départ de chaque statistique, selon la rareté.
 ## Un 1 étoile est une personne ordinaire : environ 10 à 12 partout.
 const BASE_STAT := {1: 11, 2: 13, 3: 15, 4: 18, 5: 21}
@@ -464,6 +467,74 @@ func gear_stats(hero: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
+# Construction : les bâtiments de magie
+# ---------------------------------------------------------------------------
+# Bâtiments secondaires du terrain d'entraînement (cahier des charges). On ne peut les construire
+# qu'en ayant un mage vivant parmi ses héros (et le terrain d'entraînement ouvert). Ils se paient
+# en gemmes. Une fois construits tous les trois, ils fusionnent en un seul bâtiment, le Hall de magie.
+# Leurs fonctions (Recherche, synthèse d'objets, apprentissage des mages) viendront plus tard.
+
+## « cost » : prix en gemmes (provisoire) ; « info » : ce que fera le bâtiment ;
+## « built » : l'annonce une fois construit.
+const BUILDINGS := {
+	"atelier_magie": {"name": "Atelier de magie", "cost": 500,
+		"info": "Débloque la fonction « Recherche ».",
+		"built": "L'atelier de magie a été construit avec succès !"},
+	"laboratoire": {"name": "Laboratoire d'alchimie", "cost": 500,
+		"info": "Débloque plusieurs types de synthèse d'objets.",
+		"built": "Le laboratoire d'alchimie a été construit avec succès !"},
+	"bibliotheque": {"name": "Bibliothèque", "cost": 500,
+		"info": "Les mages y apprennent et gagnent en connaissances.",
+		"built": "La bibliothèque a été construite avec succès !"},
+}
+const MAGIC_HALL_NAME := "Hall de magie"
+
+
+## Vrai si au moins un mage vivant fait partie des héros.
+func has_mage() -> bool:
+	for hero in alive_heroes():
+		if hero["class"] == "Mage":
+			return true
+	return false
+
+
+## Vrai quand les trois bâtiments de magie sont construits (ils forment alors le Hall de magie).
+func has_magic_hall() -> bool:
+	for building_id in BUILDINGS:
+		if not building_id in buildings:
+			return false
+	return true
+
+
+## Pourquoi on ne peut pas construire ce bâtiment (texte), ou "" si c'est possible.
+func build_problem(building_id: String) -> String:
+	if building_id in buildings:
+		return "Déjà construit."
+	if not training_unlocked():
+		return "Il faut d'abord le terrain d'entraînement."
+	if not has_mage():
+		return "Il faut un mage parmi tes héros."
+	if gems < BUILDINGS[building_id]["cost"]:
+		return "Pas assez de gemmes."
+	return ""
+
+
+## Construit un bâtiment. Renvoie les messages à afficher, ou [] si c'est impossible.
+func build(building_id: String) -> Array[String]:
+	var messages: Array[String] = []
+	if build_problem(building_id) != "":
+		return messages
+	gems -= BUILDINGS[building_id]["cost"]
+	gems_changed.emit(gems)
+	buildings.append(building_id)
+	messages.append(BUILDINGS[building_id]["built"])
+	if has_magic_hall():
+		messages.append("Les trois bâtiments fusionnent : le %s est né !" % MAGIC_HALL_NAME)
+	save_game()
+	return messages
+
+
+# ---------------------------------------------------------------------------
 # Terrain d'entraînement
 # ---------------------------------------------------------------------------
 # Un héros affecté au terrain travaille une compétence (hero["training"], vide = au repos).
@@ -640,6 +711,8 @@ var arsenal: Array = []
 var next_weapon_id := 1
 ## Nombre d'armes tirées depuis le début de la partie (le terrain d'entraînement s'ouvre à 10).
 var weapon_draws := 0
+## Bâtiments construits (identifiants de BUILDINGS).
+var buildings: Array = []
 
 
 func _ready() -> void:
@@ -679,6 +752,7 @@ func _new_game() -> void:
 	arsenal = []
 	next_weapon_id = 1
 	weapon_draws = 0
+	buildings = []
 	# Han est là dès le début de la partie.
 	roster.append(_create_secret_hero("Han"))
 
@@ -715,6 +789,7 @@ func save_game() -> void:
 	file.set_value("partie", "arsenal", arsenal)
 	file.set_value("partie", "prochaine_arme", next_weapon_id)
 	file.set_value("partie", "armes_tirees", weapon_draws)
+	file.set_value("partie", "batiments", buildings)
 	file.save(SAVE_PATH)
 
 
@@ -739,6 +814,7 @@ func load_game() -> bool:
 	arsenal = file.get_value("partie", "arsenal", [])
 	next_weapon_id = file.get_value("partie", "prochaine_arme", 1)
 	weapon_draws = file.get_value("partie", "armes_tirees", 0)
+	buildings = file.get_value("partie", "batiments", [])
 	return not roster.is_empty()
 
 
@@ -940,6 +1016,13 @@ func _roll_stats(rarity: int, hero_class: String) -> Dictionary:
 	var stats := {}
 	for stat in STAT_NAMES:
 		stats[stat] = BASE_STAT[rarity] + randi_range(-1, 1)
+	if hero_class == "Mage":
+		# Les mages sont puissants mais fragiles, comme la magicienne 3 étoiles du manhwa :
+		# Intelligence très haute (31) et tout le reste très bas (7-8).
+		for stat in STAT_NAMES:
+			stats[stat] = maxi(5, stats[stat] - MAGE_STAT_MALUS)
+		stats["int"] = BASE_STAT[rarity] * 2 + 1 + randi_range(-1, 1)
+		return stats
 	var main_stat: String = CLASS_MAIN_STAT[hero_class]
 	if main_stat != "":
 		stats[main_stat] += 3
@@ -1007,6 +1090,8 @@ func _level_up(hero: Dictionary) -> void:
 	var main_stat: String = CLASS_MAIN_STAT[hero["class"]]
 	if main_stat != "":
 		choices.append(main_stat)  # deux fois dans la liste = deux fois plus de chances
+	if hero["class"] == "Mage":
+		choices.append_array(["int", "int"])  # un mage met presque tout dans l'Intelligence
 	for i in hero["growth"]:
 		stats[choices.pick_random()] += 1
 	if randf() < 0.25:
