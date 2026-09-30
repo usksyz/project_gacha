@@ -116,6 +116,10 @@ const CRITICAL_HP := 0.25
 const AWAKENING_CHANCE := 0.35
 ## Berserk ne s'apprend qu'aux portes de la mort : sous cette part de sa vie.
 const BERSERK_LEARN_HP := 0.15
+## Aux portes de la mort (la première fois qu'il passe sous BERSERK_LEARN_HP dans un combat),
+## un héros a cette chance d'apprendre Berserk, avec une forte envie de vivre.
+## (L'éveil, lui, se tente plus tôt, à CRITICAL_HP : il n'aurait presque jamais donné Berserk.)
+const DEATH_DOOR_CHANCE := 0.3
 ## Un héros qui possède Berserk entre en rage sous cette part de sa vie.
 const BERSERK_HP := 0.3
 ## Han apprend Berserk plus facilement : ses chances d'éveil sont plus hautes, Berserk lui vient
@@ -314,6 +318,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"bleed": {"ticks": 0, "timer": 0.0, "amount": 0, "heavy": false, "cause": ""},
 		"has_bled": false,         # a saigné pendant ce combat (pour Résistance à la douleur)
 		"awakening_tried": false,  # l'éveil n'est tenté qu'une fois par combat
+		"death_door_tried": false, # la chance « aux portes de la mort » aussi
 		"berserk": false,          # en rage (compétence Berserk)
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
@@ -819,6 +824,13 @@ func _check_critical_state(fighter: Dictionary) -> void:
 		var chance := HAN_AWAKENING_CHANCE if GameData.is_han(fighter["source"]) else AWAKENING_CHANCE
 		if randf() < chance:
 			_awaken(fighter, ratio)
+	if ratio <= BERSERK_LEARN_HP and not fighter["death_door_tried"]:
+		fighter["death_door_tried"] = true
+		if randf() < DEATH_DOOR_CHANCE and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Berserk"):
+			fighter["skills"].append(GameData.new_skill("Berserk"))
+			_log("Aux portes de la mort, %s refuse de mourir... Nouvelle compétence : Berserk !" \
+				% _name_with_stars(fighter), "awaken")
+			fighter["skill_news"].append("%s — nouvelle compétence : Berserk" % fighter["name"])
 	if ratio <= BERSERK_HP and not fighter["berserk"] and GameData.skill_level(fighter["skills"], "Berserk") > 0:
 		_enter_berserk(fighter)
 
