@@ -72,9 +72,46 @@ func _refresh() -> void:
 	empty_label.visible = heroes.is_empty()
 
 
-## Affiche la fiche détaillée d'un héros.
-func _show_detail(hero: Dictionary) -> void:
+## Bouton « Promotion » : le coût (or + pierres d'attribut) est affiché ; le bouton est grisé,
+## avec la raison en dessous, si le héros ne peut pas encore être promu.
+func _add_promotion(content: VBoxContainer, hero: Dictionary) -> void:
+	if not hero["alive"]:
+		return
+	var cost := GameData.promotion_cost(hero)
+	if cost.is_empty():
+		return  # déjà au maximum d'étoiles
+	var stones := GameData.material_count(GameData.PROMOTION_STONE)
+	var text := "Promotion → %s\n%d or + %d %s%s (tu en as %d)" % ["★".repeat(hero["rarity"] + 1), cost["gold"],
+		cost["stones"], GameData.PROMOTION_STONE.to_lower(), "s" if cost["stones"] > 1 else "", stones]
+	var button := UI.make_button(text, func():
+		var lines := GameData.promote(hero)
+		_refresh()
+		_show_detail.call_deferred(hero, lines), 22)
+	button.custom_minimum_size.y = 90
+	var problem := GameData.promotion_problem(hero)
+	button.disabled = problem != ""
+	content.add_child(button)
+	if problem != "":
+		var why := UI.make_label(problem, 19)
+		why.add_theme_color_override("font_color", Color("e05252"))
+		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(why)
+	# Bouton temporaire pour tester sans monter les niveaux en combat.
+	if not GameData.is_max_level(hero):
+		var test := UI.make_button("+1 niveau (test)", func():
+			GameData.gain_xp(hero, GameData.xp_to_next(hero["level"]) - hero["xp"])
+			GameData.save_game()
+			_refresh()
+			_show_detail.call_deferred(hero), 20)
+		test.custom_minimum_size.y = 60
+		content.add_child(test)
+
+
+## Affiche la fiche détaillée d'un héros. « notice » : une fenêtre système à montrer en haut
+## (le résultat d'une promotion, par exemple).
+func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	for child in detail_overlay.get_children():
+		detail_overlay.remove_child(child)
 		child.queue_free()
 
 	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
@@ -105,6 +142,9 @@ func _show_detail(hero: Dictionary) -> void:
 	content.custom_minimum_size.x = 496
 	content.add_theme_constant_override("separation", 16)
 	scroll.add_child(content)
+
+	if not notice.is_empty():
+		content.add_child(UI.make_system_window("Promotion !", notice))
 
 	var rarity := UI.make_label(UI.rarity_text(hero["rarity"]), 26)
 	rarity.add_theme_color_override("font_color", color)
@@ -208,6 +248,8 @@ func _show_detail(hero: Dictionary) -> void:
 	status.add_theme_color_override("font_color", status_color)
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(status)
+
+	_add_promotion(content, hero)
 
 	var close := UI.make_button("Fermer", func(): detail_overlay.visible = false)
 	close.custom_minimum_size.y = 90

@@ -144,6 +144,11 @@ const SKILLS := {
 	"Indomptable": "Saignements et hémorragies : 10 % plus faibles par niveau. S'éveille chez un héros qui saigne en situation critique.",
 	"Tueur de gobelins": "Contre les gobelins : +10 % de dégâts par niveau. Exploit : coup fatal au boss de l'étage 5, ou 50 gobelins tués.",
 	"Esprit combatif": "Évolution de Résistance à la douleur (au niveau 10) : garde ses effets, et +5 % de dégâts par niveau sous la moitié de sa vie.",
+	"Volonté de fer": "Compétence de promotion : +10 % de vie maximum par niveau.",
+	"Second souffle": "Compétence de promotion : une fois par combat, sous 25 % de sa vie, reprend 15 % de sa vie (+5 % par niveau au-delà du premier).",
+	"Coup précis": "Compétence de promotion : +5 % de coups critiques par niveau.",
+	"Peau de pierre": "Compétence de promotion : 4 % de dégâts subis en moins par niveau.",
+	"Vivacité": "Compétence de promotion : coups 5 % plus rapides par niveau.",
 	"Surpassement": "Fusion de Calme et Berserk (unique). Garde leurs effets ; quand Berserk se déclenche, ses bonus sont doublés et le héros ne saigne plus, mais il perd 2 % de sa vie chaque seconde, jusqu'à la mort.",
 	"Épée et bouclier": "Fusion de Maîtrise de l'épée et Utilisation du bouclier. Garde leurs effets, et +2 % de dégâts à l'épée par niveau.",
 	"Forge": "Artisan : à la forge, une pièce du puzzle est placée d'office, et plus de malus « Pas d'artisan ». S'apprend en travaillant comme assistant de la forge.",
@@ -912,7 +917,10 @@ func _roll_pickup(hero: Dictionary, t: float) -> Dictionary:
 		var type: String = WEAPON_TYPES.keys().pick_random()
 		return {"t": t, "kind": "plan", "name": type,
 			"text": "%s a trouvé un plan de forge : « %s » !" % [who, type]}
-	if roll < PLAN_CHANCE + JUNK_CHANCE:
+	if roll < PLAN_CHANCE + STONE_PICKUP_CHANCE:
+		return {"t": t, "kind": "material", "name": PROMOTION_STONE, "grade": "F",
+			"text": "%s a trouvé une « %s » ! Elle sert à la promotion." % [who, PROMOTION_STONE]}
+	if roll < PLAN_CHANCE + STONE_PICKUP_CHANCE + JUNK_CHANCE:
 		return {"t": t, "kind": "junk", "name": JUNK_NAME, "grade": "F",
 			"text": "%s a collecté « %s (F) ». Astuce : la poubelle est inutile, jetez-la." % [who, JUNK_NAME]}
 	var material: String = DAILY_DUNGEON["materials"].pick_random()
@@ -1679,6 +1687,94 @@ func redeem_code(code: String) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
+# Promotion (passage à l'étoile suivante)
+# ---------------------------------------------------------------------------
+# Un héros arrivé au niveau maximum de sa rareté peut passer à l'étoile suivante : il paie de l'or
+# et des pierres d'attribut (matériau de l'entrepôt), gagne une étoile (donc un niveau maximum plus
+# haut et de meilleures statistiques) et une compétence spéciale.
+# Les pierres d'attribut se trouvent (rarement) au donjon journalier, et sur les étages de boss de la Tour.
+# (Le cahier demande aussi un certain niveau de compétence ; on le fixera quand l'œuvre en parlera.)
+
+const PROMOTION_STONE := "Pierre d'attribut"
+
+## Coût de la promotion, selon les étoiles actuelles du héros (1 = passer de 1 à 2 étoiles).
+## Provisoire, en attente de l'œuvre.
+const PROMOTION_COSTS := {
+	1: {"gold": 20000, "stones": 1},
+	2: {"gold": 50000, "stones": 3},
+	3: {"gold": 100000, "stones": 6},
+	4: {"gold": 200000, "stones": 10},
+}
+## Étoiles maximum par promotion pour l'instant (6 et 7 étoiles viendront plus tard, cahier : phase 6).
+const MAX_PROMOTION_RARITY := 5
+
+## Compétences spéciales de promotion : une au hasard, parmi celles que le héros n'a pas encore.
+## Provisoire, en attente de l'œuvre (effets dans battle.gd, chiffres ci-dessous).
+const PROMOTION_SKILLS := ["Volonté de fer", "Second souffle", "Coup précis", "Peau de pierre", "Vivacité"]
+const IRON_WILL_HP_PER_LEVEL := 0.1       # Volonté de fer : +10 % de vie maximum par niveau
+const SECOND_WIND_HEAL := 0.15            # Second souffle : soigne 15 % (+5 % par niveau) une fois par combat
+const SECOND_WIND_HEAL_PER_LEVEL := 0.05
+const PRECISE_STRIKE_CRIT_PER_LEVEL := 0.05  # Coup précis : +5 % de coups critiques par niveau
+const STONE_SKIN_PER_LEVEL := 0.04        # Peau de pierre : 4 % de dégâts subis en moins par niveau
+const QUICKNESS_PER_LEVEL := 0.05         # Vivacité : coups 5 % plus rapides par niveau
+
+## Pierres d'attribut : chance d'en ramasser une au donjon journalier, et nombre donné
+## par un étage de boss de la Tour conquis pour la première fois.
+const STONE_PICKUP_CHANCE := 0.03
+const BOSS_STONES := 1
+
+
+## Le coût de la promotion d'un héros ({"gold", "stones"}), ou {} s'il ne peut plus monter.
+func promotion_cost(hero: Dictionary) -> Dictionary:
+	return PROMOTION_COSTS.get(hero["rarity"], {})
+
+
+## Pourquoi ce héros ne peut pas être promu (texte), ou "" si c'est possible.
+func promotion_problem(hero: Dictionary) -> String:
+	if not hero["alive"]:
+		return "Il n'est plus de ce monde."
+	if hero["rarity"] >= MAX_PROMOTION_RARITY or promotion_cost(hero).is_empty():
+		return "Déjà au maximum (%d étoiles)." % MAX_PROMOTION_RARITY
+	if not is_max_level(hero):
+		return "Il doit d'abord atteindre le niveau %d." % MAX_LEVEL[hero["rarity"]]
+	if is_away(hero):
+		return "Il est parti (%s)." % activity_text(hero)
+	var cost := promotion_cost(hero)
+	if gold < cost["gold"]:
+		return "Pas assez d'or."
+	if material_count(PROMOTION_STONE) < cost["stones"]:
+		return "Pas assez de pierres d'attribut."
+	return ""
+
+
+## Promeut un héros. Renvoie les lignes à annoncer, ou [] si c'est impossible.
+func promote(hero: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	if promotion_problem(hero) != "":
+		return lines
+	var cost := promotion_cost(hero)
+	gold -= cost["gold"]
+	gold_changed.emit(gold)
+	_take_material(PROMOTION_STONE, cost["stones"])
+	var old_rarity: int = hero["rarity"]
+	hero["rarity"] += 1
+	hero["xp"] = 0
+	# Les statistiques montent de l'écart entre les deux raretés (ex. 1 → 2 étoiles : +2 partout).
+	var gap: int = BASE_STAT[hero["rarity"]] - BASE_STAT[old_rarity]
+	for stat in STAT_NAMES:
+		hero["stats"][stat] += gap
+	lines.append("%s passe à %s ! Niveau maximum : %d." % [hero["name"], "★".repeat(hero["rarity"]), MAX_LEVEL[hero["rarity"]]])
+	lines.append("Toutes ses statistiques : +%d." % gap)
+	var choices := PROMOTION_SKILLS.filter(func(name): return skill_level(hero["skills"], name) == 0)
+	if not choices.is_empty():
+		var skill_name: String = choices.pick_random()
+		hero["skills"].append({"name": skill_name, "rank": "Spéciale", "level": 1})
+		lines.append("Compétence spéciale : %s." % skill_name)
+	save_game()
+	return lines
+
+
+# ---------------------------------------------------------------------------
 # Expérience et niveaux
 # ---------------------------------------------------------------------------
 
@@ -1976,6 +2072,10 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		report.merge(rewards, true)
 		if not replay:
 			tower_floor += 1
+			# Objet de promotion : un étage de boss conquis donne des pierres d'attribut.
+			if is_boss_floor(floor_number):
+				add_material(PROMOTION_STONE, "F", BOSS_STONES)
+				report["stones"] = BOSS_STONES
 		add_gold(rewards["gold"])
 		add_gems(rewards["gems"])
 	else:

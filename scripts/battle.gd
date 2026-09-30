@@ -284,6 +284,10 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	# L'arme d'un héros décide de sa portée et de sa façon de frapper (voir GameData.WEAPON_TYPES).
 	# Les ennemis, les mages et les soigneurs n'ont pas d'arme : leur classe décide.
 	var gear: Dictionary = GameData.gear_stats(source) if is_hero else {}
+	# Compétences de promotion qui changent les valeurs de départ : Volonté de fer (vie), Coup précis (critiques).
+	var skills: Array = source.get("skills", [])
+	var max_hp := roundi(stats["hp"] * (1.0 + GameData.skill_level(skills, "Volonté de fer") * GameData.IRON_WILL_HP_PER_LEVEL))
+	var crit_bonus := GameData.skill_level(skills, "Coup précis") * GameData.PRECISE_STRIKE_CRIT_PER_LEVEL
 	var reach := RANGED_RANGE if fighter_class in ["Archer", "Mage", "Soigneur"] else MELEE_RANGE
 	if not gear.is_empty():
 		reach = gear["reach"]
@@ -299,12 +303,13 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"immortal": source.get("immortal", false),
 		"source": source,
 		"skills": source.get("skills", []).duplicate(true),
-		"hp": stats["hp"],
-		"max_hp": stats["hp"],
+		"hp": max_hp,
+		"max_hp": max_hp,
 		"atk": stats["atk"] + gear.get("atk", 0),
 		"def": stats["def"] + gear.get("def", 0),
 		"spd": stats["spd"],
-		"crit": stats["crit"] + gear.get("crit", 0.0),
+		"crit": stats["crit"] + gear.get("crit", 0.0) + crit_bonus,
+		"second_wind_used": false,  # Second souffle : une seule fois par combat
 		"mana": stats["mana"],                       # mages et soigneurs seulement (0 pour les autres)
 		"max_mana": stats["mana"],
 		"mana_regen": source["stats"]["int"] * MANA_REGEN_PER_INT if stats["mana"] > 0 else 0.0,
@@ -626,7 +631,9 @@ func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
 
 ## Temps entre deux attaques : plus court avec de la dextérité, et selon l'arme (dague rapide, lance lente).
 func _attack_time(unit: Dictionary) -> float:
-	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"]) * unit["weapon_speed"])
+	# Vivacité (compétence de promotion) : des coups plus rapides.
+	var quick := 1.0 - GameData.skill_level(unit["skills"], "Vivacité") * GameData.QUICKNESS_PER_LEVEL
+	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"]) * unit["weapon_speed"] * quick)
 
 
 func _move_speed(unit: Dictionary) -> float:
@@ -769,6 +776,8 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	if kind == "spell" and attacker["element"] == "Feu":
 		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
 		target["took_fire"] = true
+	# Peau de pierre (compétence de promotion) : la cible encaisse mieux.
+	raw *= 1.0 - GameData.skill_level(target["skills"], "Peau de pierre") * GameData.STONE_SKIN_PER_LEVEL
 	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.
 	if target["shield"]:
 		raw *= 1.0 - GameData.skill_level(target["skills"], "Utilisation du bouclier") * GameData.SHIELD_GUARD_PER_LEVEL
@@ -855,6 +864,15 @@ func _check_critical_state(fighter: Dictionary) -> void:
 	if not fighter["is_hero"]:
 		return
 	var ratio: float = float(fighter["hp"]) / fighter["max_hp"]
+	# Second souffle (compétence de promotion) : une fois par combat, le héros reprend de la vie.
+	var wind := GameData.skill_level(fighter["skills"], "Second souffle")
+	if ratio <= CRITICAL_HP and wind > 0 and not fighter["second_wind_used"]:
+		fighter["second_wind_used"] = true
+		var heal := roundi(fighter["max_hp"] * (GameData.SECOND_WIND_HEAL + (wind - 1) * GameData.SECOND_WIND_HEAL_PER_LEVEL))
+		fighter["hp"] = mini(fighter["max_hp"], fighter["hp"] + heal)
+		_effect("heal", fighter, fighter, "+%d" % heal, false)
+		_log("%s trouve un second souffle !" % _name_with_stars(fighter), "awaken")
+		ratio = float(fighter["hp"]) / fighter["max_hp"]
 	if ratio <= CRITICAL_HP and not fighter["awakening_tried"]:
 		fighter["awakening_tried"] = true
 		var chance := HAN_AWAKENING_CHANCE if GameData.is_han(fighter["source"]) else AWAKENING_CHANCE

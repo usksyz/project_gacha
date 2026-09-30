@@ -101,6 +101,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 	var lines := []
 	if report["victory"]:
 		lines.append("+%d or   +%d gemmes" % [report["gold"], report["gems"]])
+		if report.get("stones", 0) > 0:
+			lines.append("+%d %s (pour la promotion)" % [report["stones"], GameData.PROMOTION_STONE])
 	else:
 		lines.append("Les survivants sont ramenés à la cité.")
 	lines.append("+%d expérience pour chaque survivant" % report["xp"])

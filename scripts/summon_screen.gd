@@ -114,7 +114,10 @@ func _build_ui() -> void:
 	layout.add_child(tests)
 	var test_gems := UI.make_button("+1000 gemmes (test)", func(): GameData.add_gems(1000), 22)
 	var test_gold := UI.make_button("+50 000 or (test)", func(): GameData.add_gold(50000), 22)
-	for button in [test_gems, test_gold]:
+	var test_stones := UI.make_button("+5 pierres (test)", func():
+		GameData.add_material(GameData.PROMOTION_STONE, "F", 5)
+		GameData.save_game(), 22)
+	for button in [test_gems, test_gold, test_stones]:
 		button.custom_minimum_size.y = 64
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tests.add_child(button)
