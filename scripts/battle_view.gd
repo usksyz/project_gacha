@@ -1,8 +1,9 @@
 class_name BattleView
 extends Control
 ## Écran de combat, en direct et vu du dessus.
-## En haut le titre et le chrono, la barre de vie du boss et les portraits de l'équipe (vie en rouge,
-## mana en bleu) ; au milieu le champ de bataille ; en bas le journal et la pause.
+## En haut le titre, le chrono et la barre de vie du boss ; au milieu le champ de bataille ;
+## en dessous l'encart de l'équipe (vie en rouge, mana en bleu, toucher un héros le choisit) ;
+## en bas le journal et la pause.
 ## Pas d'accélération ni de « passer » : on vit le combat. On peut guider ses héros :
 ## toucher un héros pour le choisir, puis toucher un endroit pour l'y envoyer
 ## (se mettre à couvert, reculer, relayer un blessé), ou toucher un ennemi pour qu'il l'attaque.
@@ -40,7 +41,7 @@ const FLOAT_TIME := 0.9
 const TAP_RADIUS := 0.8
 
 ## Portraits de l'équipe : hauteur de la rangée, couleurs des barres (cahier : vie rouge, mana bleue).
-const PORTRAIT_HEIGHT := 78
+const PORTRAIT_HEIGHT := 96
 const HP_COLOR := Color("e04848")
 const MANA_COLOR := Color("4a8fe8")
 
@@ -110,18 +111,12 @@ func _build(title: String) -> void:
 	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(hint_label)
 
-	# Barre de vie du boss (seulement s'il y en a un), puis les portraits de l'équipe :
-	# vie en rouge, mana en bleu (mages et soigneurs). Toucher un portrait choisit le héros.
+	# Barre de vie du boss (seulement s'il y en a un).
 	boss_bar = Control.new()
 	boss_bar.custom_minimum_size.y = 30
 	boss_bar.draw.connect(_draw_boss_bar)
 	boss_bar.visible = battle.enemies.any(func(enemy): return enemy["boss"])
 	layout.add_child(boss_bar)
-	portraits = Control.new()
-	portraits.custom_minimum_size.y = PORTRAIT_HEIGHT
-	portraits.draw.connect(_draw_portraits)
-	portraits.gui_input.connect(_on_portraits_input)
-	layout.add_child(portraits)
 
 	# Le champ de bataille : dessiné par _draw_arena, et on le touche pour donner des ordres.
 	arena = Control.new()
@@ -129,6 +124,14 @@ func _build(title: String) -> void:
 	arena.draw.connect(_draw_arena)
 	arena.gui_input.connect(_on_arena_input)
 	layout.add_child(arena)
+
+	# Encart de l'équipe, sous le champ de bataille : les héros côte à côte, avec leurs PV
+	# (actuels / max et pourcentage) et leur mana (mages et soigneurs). Toucher un héros le choisit.
+	portraits = Control.new()
+	portraits.custom_minimum_size.y = PORTRAIT_HEIGHT
+	portraits.draw.connect(_draw_portraits)
+	portraits.gui_input.connect(_on_portraits_input)
+	layout.add_child(portraits)
 
 	# Journal : la dernière ligne reste toujours visible.
 	log_label = RichTextLabel.new()
@@ -200,7 +203,8 @@ func _draw_boss_bar() -> void:
 		return
 
 
-## Une case par héros : nom, barre de vie (rouge), barre de mana (bleue) s'il en a.
+## Une case par héros : nom, barre de vie (rouge) avec « PV / PV max » et le pourcentage restant,
+## barre de mana (bleue) avec ses points s'il en a.
 ## Encadrée en jaune s'il est choisi, en rouge s'il est en Berserk ; grisée s'il est tombé.
 func _draw_portraits() -> void:
 	var font := ThemeDB.fallback_font
@@ -224,12 +228,18 @@ func _draw_portraits() -> void:
 			portraits.draw_string(font, box.position + Vector2(6, 48), "à terre" if hero["immortal"] else "tombé",
 				HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 12, 15, Color(1, 0.5, 0.5, 0.7))
 			continue
-		var bar := Rect2(box.position + Vector2(6, 32), Vector2(box.size.x - 12, 12))
-		_draw_bar(bar, float(hero["hp"]) / hero["max_hp"], HP_COLOR)
-		portraits.draw_string(font, bar.position + Vector2(3, 10), str(hero["hp"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11)
+		# Vie : la barre, puis « 57 / 88 · 65 % » en dessous.
+		var ratio: float = float(hero["hp"]) / hero["max_hp"]
+		var bar := Rect2(box.position + Vector2(6, 30), Vector2(box.size.x - 12, 12))
+		_draw_bar(bar, ratio, HP_COLOR)
+		portraits.draw_string(font, bar.position + Vector2(0, 27), "%d / %d · %d %%" % [hero["hp"], hero["max_hp"],
+			ceili(ratio * 100)], HORIZONTAL_ALIGNMENT_CENTER, bar.size.x, 13, Color(1, 0.8, 0.8))
+		# Mana (mages et soigneurs) : la barre avec ses points dessus.
 		if hero["max_mana"] > 0:
-			_draw_bar(Rect2(bar.position + Vector2(0, 17), Vector2(bar.size.x, 8)),
-				hero["mana"] / hero["max_mana"], MANA_COLOR)
+			var mana_bar := Rect2(bar.position + Vector2(0, 36), Vector2(bar.size.x, 12))
+			_draw_bar(mana_bar, hero["mana"] / hero["max_mana"], MANA_COLOR)
+			portraits.draw_string(font, mana_bar.position + Vector2(0, 10), "%d / %d" % [int(hero["mana"]), hero["max_mana"]],
+				HORIZONTAL_ALIGNMENT_CENTER, mana_bar.size.x, 11, Color.WHITE)
 
 
 func _draw_bar(rect: Rect2, ratio: float, color: Color) -> void:
