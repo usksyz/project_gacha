@@ -132,8 +132,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   Mana (mages et soigneurs, héros et ennemis) : réserve = Intelligence x `MANA_PER_INT`, recharge
   `MANA_REGEN_PER_INT` par seconde ; sort de zone et soin coûtent du mana, à sec le mage lance un petit
   trait gratuit et le soigneur ne soigne plus (compte surtout dans les longs combats). Écran de combat :
-  portraits de l'équipe au-dessus de la carte (vie rouge, mana bleue, toucher = choisir le héros) et barre
-  de vie du boss : fait. Phase 1 terminée, sauf les compétences liées à la synthèse (compétence héritée,
+  encart de l'équipe sous la carte, demandé par le porteur du projet (héros côte à côte, PV actuels / max
+  et pourcentage, mana chiffrée, toucher = choisir le héros) et barre de vie du boss en haut : fait. Phase 1 terminée, sauf les compétences liées à la synthèse (compétence héritée,
   Analyse froide), qui attendent la salle de synthèse (phase 4).
   Reste plus tard : autres fusions (Âme de l'épée...), rangs de compétence, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
