@@ -41,9 +41,11 @@ const RARITY_COLORS := {
 	1: Color("8a8f98"),
 }
 
-## Chance qu'un héros de 3 étoiles ou plus soit un Mage (0.05 = 5 %).
-## Les mages ne s'obtiennent que par invocation spéciale, et très rarement.
-const MAGE_CHANCE := 0.05
+## Chance qu'un héros de 3 étoiles ou plus soit un Mage (0.01 = 1 %).
+## Les mages ne s'obtiennent que par invocation spéciale, avec une très très faible chance :
+## 30 % des invocations spéciales donnent un 3 étoiles ou plus, donc environ 0,3 % sont des mages
+## (à peu près 1 mage toutes les 330 invocations spéciales).
+const MAGE_CHANCE := 0.01
 
 ## Classes possibles pour un héros de 3 étoiles ou plus (hors Mage).
 ## Les 1 et 2 étoiles commencent tous « Novice ».
