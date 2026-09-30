@@ -133,6 +133,14 @@ func _show_detail(hero: Dictionary) -> void:
 		stats.add_child(stat_name)
 		stats.add_child(UI.make_label(str(hero["stats"][stat]), 26))
 
+	# Mana (mages et soigneurs) : la réserve, et ce qu'elle regagne chaque seconde en combat.
+	var mana: int = GameData.combat_stats(hero)["mana"]
+	if mana > 0:
+		var mana_label := UI.make_label("Mana : %d (+%s par seconde en combat)" % [mana,
+			String.num(hero["stats"]["int"] * Battle.MANA_REGEN_PER_INT, 1).replace(".", ",")], 22)
+		mana_label.add_theme_color_override("font_color", Color("4a8fe8"))
+		content.add_child(mana_label)
+
 	# Équipement : l'arme (ou l'arme de départ) et le bouclier. Les mages se battent avec la magie.
 	if GameData.uses_magic(hero):
 		var magic := "Arme : aucune (magie)"

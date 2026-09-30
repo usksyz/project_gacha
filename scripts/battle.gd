@@ -126,6 +126,14 @@ const BERSERK_HP := 0.3
 ## dès la situation critique (pas seulement aux portes de la mort), et passe avant les autres compétences.
 const HAN_AWAKENING_CHANCE := 0.8
 
+## Mana (mages et soigneurs) : réserve de départ = Intelligence x MANA_PER_INT (voir GameData.combat_stats),
+## recharge par seconde = Intelligence x MANA_REGEN_PER_INT. Un sort de zone et un soin coûtent du mana ;
+## à sec, le mage lance un petit trait de magie gratuit (MANA_BOLT_POWER) et le soigneur ne soigne plus.
+const MANA_REGEN_PER_INT := 0.15
+const SPELL_MANA_COST := 20
+const HEAL_MANA_COST := 12
+const MANA_BOLT_POWER := 0.3
+
 ## Esquive par niveau de Mouvement souple, et réduction des dégâts par niveau de Calme.
 const DODGE_PER_LEVEL := 0.03
 const CALM_PER_LEVEL := 0.04
@@ -297,6 +305,9 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"def": stats["def"] + gear.get("def", 0),
 		"spd": stats["spd"],
 		"crit": stats["crit"] + gear.get("crit", 0.0),
+		"mana": stats["mana"],                       # mages et soigneurs seulement (0 pour les autres)
+		"max_mana": stats["mana"],
+		"mana_regen": source["stats"]["int"] * MANA_REGEN_PER_INT if stats["mana"] > 0 else 0.0,
 		"weapon": gear.get("type", ""),              # type d'arme ("" = pas d'arme)
 		"weapon_skill": gear.get("skill", ""),       # compétence qui renforce cette arme
 		"weapon_power": gear.get("power", 1.0),      # force de chaque coup
@@ -463,6 +474,7 @@ func _step() -> void:
 		if unit["hp"] <= 0:
 			continue  # tombé plus tôt pendant ce pas
 		_bleed_tick(unit)
+		unit["mana"] = minf(unit["max_mana"], unit["mana"] + unit["mana_regen"] * TICK)
 		if unit.get("surpass", false) and unit["hp"] > 0:
 			_surpass_tick(unit)
 		if unit["hp"] > 0:
@@ -532,8 +544,8 @@ func _think(unit: Dictionary) -> void:
 	if unit["is_hero"] and _follow_order(unit, foes):
 		return
 
-	# Soigneur : un allié blessé passe avant tout.
-	if unit["class"] == "Soigneur":
+	# Soigneur : un allié blessé passe avant tout (s'il lui reste assez de mana pour soigner).
+	if unit["class"] == "Soigneur" and unit["mana"] >= HEAL_MANA_COST:
 		var wounded := _most_wounded(allies)
 		if not wounded.is_empty():
 			if _in_reach(unit, wounded, RANGED_RANGE):
@@ -688,10 +700,15 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 	attacker["cooldown"] = _attack_time(attacker)
 	match attacker["class"]:
 		"Mage":
-			# Le sort touche la cible et tous les ennemis autour d'elle.
-			for foe in foes:
-				if foe["pos"].distance_to(target["pos"]) <= SPELL_RADIUS:
-					_hit(attacker, foe, 0.7, false, "spell")
+			if attacker["mana"] >= SPELL_MANA_COST:
+				# Le sort touche la cible et tous les ennemis autour d'elle.
+				attacker["mana"] -= SPELL_MANA_COST
+				for foe in foes:
+					if foe["pos"].distance_to(target["pos"]) <= SPELL_RADIUS:
+						_hit(attacker, foe, 0.7, false, "spell")
+			else:
+				# À court de mana : un petit trait de magie, sur la cible seulement.
+				_hit(attacker, target, MANA_BOLT_POWER, false, "bolt")
 		"Soigneur":
 			_hit(attacker, target, 1.0, false, "spell")
 		_:
@@ -772,6 +789,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 	if healer["cooldown"] > 0:
 		return
 	healer["cooldown"] = _attack_time(healer)
+	healer["mana"] -= HEAL_MANA_COST
 	var amount := roundi(healer["atk"] * 2.0 * randf_range(0.9, 1.1))
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount

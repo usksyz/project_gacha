@@ -1,7 +1,8 @@
 class_name BattleView
 extends Control
 ## Écran de combat, en direct et vu du dessus.
-## En haut le titre et le chrono, au milieu le champ de bataille, en bas le journal et la pause.
+## En haut le titre et le chrono, la barre de vie du boss et les portraits de l'équipe (vie en rouge,
+## mana en bleu) ; au milieu le champ de bataille ; en bas le journal et la pause.
 ## Pas d'accélération ni de « passer » : on vit le combat. On peut guider ses héros :
 ## toucher un héros pour le choisir, puis toucher un endroit pour l'y envoyer
 ## (se mettre à couvert, reculer, relayer un blessé), ou toucher un ennemi pour qu'il l'attaque.
@@ -38,12 +39,19 @@ const FLOAT_TIME := 0.9
 ## Distance (en cases) à laquelle un toucher « attrape » un pion.
 const TAP_RADIUS := 0.8
 
+## Portraits de l'équipe : hauteur de la rangée, couleurs des barres (cahier : vie rouge, mana bleue).
+const PORTRAIT_HEIGHT := 78
+const HP_COLOR := Color("e04848")
+const MANA_COLOR := Color("4a8fe8")
+
 var battle: Battle
 var layout: VBoxContainer
 var title_label: Label
 var clock_label: Label
 var hint_label: Label
 var arena: Control
+var boss_bar: Control
+var portraits: Control
 var log_label: RichTextLabel
 var controls: HBoxContainer
 var pause_button: Button
@@ -102,6 +110,19 @@ func _build(title: String) -> void:
 	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(hint_label)
 
+	# Barre de vie du boss (seulement s'il y en a un), puis les portraits de l'équipe :
+	# vie en rouge, mana en bleu (mages et soigneurs). Toucher un portrait choisit le héros.
+	boss_bar = Control.new()
+	boss_bar.custom_minimum_size.y = 30
+	boss_bar.draw.connect(_draw_boss_bar)
+	boss_bar.visible = battle.enemies.any(func(enemy): return enemy["boss"])
+	layout.add_child(boss_bar)
+	portraits = Control.new()
+	portraits.custom_minimum_size.y = PORTRAIT_HEIGHT
+	portraits.draw.connect(_draw_portraits)
+	portraits.gui_input.connect(_on_portraits_input)
+	layout.add_child(portraits)
+
 	# Le champ de bataille : dessiné par _draw_arena, et on le touche pour donner des ordres.
 	arena = Control.new()
 	arena.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -157,6 +178,80 @@ func _advance() -> void:
 		_update_hint()
 	_update_clock()
 	arena.queue_redraw()
+	portraits.queue_redraw()
+	boss_bar.queue_redraw()
+
+
+## Barre de vie du boss, en haut : son nom et sa vie.
+func _draw_boss_bar() -> void:
+	var font := ThemeDB.fallback_font
+	for enemy in battle.enemies:
+		if not enemy["boss"]:
+			continue
+		var ratio := clampf(float(enemy["hp"]) / enemy["max_hp"], 0.0, 1.0)
+		var rect := Rect2(Vector2.ZERO, boss_bar.size)
+		boss_bar.draw_rect(rect, Color("12131c"))
+		boss_bar.draw_rect(Rect2(rect.position, Vector2(rect.size.x * ratio, rect.size.y)), Color("7a2a8a"))
+		boss_bar.draw_rect(rect, Color("c9a2ff"), false, 2.0)
+		var text := "%s — %d / %d" % [enemy["name"], maxi(0, enemy["hp"]), enemy["max_hp"]]
+		if not enemy["present"]:
+			text = "%s — pas encore arrivé" % enemy["name"]
+		boss_bar.draw_string(font, Vector2(10, rect.size.y * 0.72), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18)
+		return
+
+
+## Une case par héros : nom, barre de vie (rouge), barre de mana (bleue) s'il en a.
+## Encadrée en jaune s'il est choisi, en rouge s'il est en Berserk ; grisée s'il est tombé.
+func _draw_portraits() -> void:
+	var font := ThemeDB.fallback_font
+	var width := portraits.size.x / GameData.TEAM_SIZE
+	for i in battle.heroes.size():
+		var hero: Dictionary = battle.heroes[i]
+		var box := Rect2(Vector2(i * width, 0), Vector2(width, PORTRAIT_HEIGHT)).grow(-3)
+		var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+		var fallen: bool = hero["hp"] <= 0
+		portraits.draw_rect(box, Color("262a3b") if not fallen else Color("1b1d2a"))
+		var border := color
+		if hero["berserk"]:
+			border = Color("ff4040")
+		if hero["id"] == selected_id:
+			border = ORDER_COLOR
+		portraits.draw_rect(box, border, false, 3.0 if hero["id"] == selected_id else 2.0)
+		var text_color := Color.WHITE if not fallen else Color(1, 1, 1, 0.4)
+		portraits.draw_string(font, box.position + Vector2(6, 22), hero["name"], HORIZONTAL_ALIGNMENT_LEFT,
+			box.size.x - 12, 16, text_color)
+		if fallen:
+			portraits.draw_string(font, box.position + Vector2(6, 48), "à terre" if hero["immortal"] else "tombé",
+				HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 12, 15, Color(1, 0.5, 0.5, 0.7))
+			continue
+		var bar := Rect2(box.position + Vector2(6, 32), Vector2(box.size.x - 12, 12))
+		_draw_bar(bar, float(hero["hp"]) / hero["max_hp"], HP_COLOR)
+		portraits.draw_string(font, bar.position + Vector2(3, 10), str(hero["hp"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11)
+		if hero["max_mana"] > 0:
+			_draw_bar(Rect2(bar.position + Vector2(0, 17), Vector2(bar.size.x, 8)),
+				hero["mana"] / hero["max_mana"], MANA_COLOR)
+
+
+func _draw_bar(rect: Rect2, ratio: float, color: Color) -> void:
+	portraits.draw_rect(rect, Color("12131c"))
+	portraits.draw_rect(Rect2(rect.position, Vector2(rect.size.x * clampf(ratio, 0.0, 1.0), rect.size.y)), color)
+
+
+## Toucher un portrait choisit le héros (comme toucher son pion), ou le relâche.
+func _on_portraits_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if battle == null or battle.finished or paused:
+		return
+	var index := int(click.position.x / (portraits.size.x / GameData.TEAM_SIZE))
+	if index < 0 or index >= battle.heroes.size() or battle.heroes[index]["hp"] <= 0:
+		return
+	var hero_id: int = battle.heroes[index]["id"]
+	selected_id = -1 if selected_id == hero_id else hero_id
+	_update_hint()
+	arena.queue_redraw()
+	portraits.queue_redraw()
 
 
 func _update_clock() -> void:
@@ -385,6 +480,8 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 					arena.draw_circle(to, Battle.SPELL_RADIUS * cell * 0.5, Color(0.6, 0.3, 1, 0.25 * fade))
 				"heal":
 					arena.draw_line(from, to, Color(0.4, 1, 0.5, fade), 2.0)
+				"bolt":  # petit trait de magie, quand le mage n'a plus de mana
+					arena.draw_line(from, to, Color(0.55, 0.75, 1, fade), 1.5)
 
 		# Le chiffre monte et s'efface.
 		var color := Color.WHITE
@@ -413,6 +510,8 @@ func _show_result(report: Dictionary) -> void:
 	controls.queue_free()
 	arena.visible = false
 	hint_label.visible = false
+	boss_bar.visible = false
+	portraits.visible = false
 	log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	# Le journal et les fenêtres de fin se partagent la place ; les fenêtres défilent si besoin.

@@ -1735,8 +1735,13 @@ func _level_up(hero: Dictionary) -> void:
 # Combat
 # ---------------------------------------------------------------------------
 
+## Réserve de mana des mages et des soigneurs, par point d'Intelligence (la recharge et le coût
+## des sorts sont dans battle.gd).
+const MANA_PER_INT := 4
+
+
 ## Transforme les 4 statistiques (d'un héros ou d'un ennemi) en valeurs de combat :
-## points de vie, attaque, défense, vitesse, chance de coup critique.
+## points de vie, attaque, défense, vitesse, chance de coup critique, mana.
 func combat_stats(unit: Dictionary) -> Dictionary:
 	var stats: Dictionary = unit["stats"]
 	var magic: bool = unit["class"] in ["Mage", "Soigneur"]
@@ -1746,6 +1751,8 @@ func combat_stats(unit: Dictionary) -> Dictionary:
 		"def": roundi(stats["vit"] / 2.0),
 		"spd": stats["dex"],
 		"crit": stats["dex"] / 200.0,
+		# Mana : seulement pour les classes qui lancent des sorts (réserve = Intelligence x MANA_PER_INT).
+		"mana": stats["int"] * MANA_PER_INT if magic else 0,
 	}
 
 
