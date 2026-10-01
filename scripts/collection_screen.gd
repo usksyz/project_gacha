@@ -1,12 +1,17 @@
 class_name CollectionScreen
 extends Control
-## Collection : tous les héros possédés, triés par rareté.
+## Collection : les héros vivants, avec une recherche et des filtres (classe, étoiles, tri).
+## Les héros morts n'y sont plus : on les retrouve avec le bouton « Tombés ».
 ## Appuyer sur un héros ouvre sa fiche détaillée.
 
 var count_label: Label
 var empty_label: Label
+var dead_button: Button
+var filter: HeroFilter
 var grid: GridContainer
 var detail_overlay: Control
+## Vrai quand on regarde les héros tombés au lieu des vivants.
+var show_dead := false
 
 
 func _ready() -> void:
@@ -20,11 +25,26 @@ func _ready() -> void:
 	layout.add_theme_constant_override("separation", 16)
 	margin.add_child(layout)
 
+	# En haut : le nombre de héros, et le bouton pour voir les héros tombés (ou revenir aux vivants).
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 12)
+	layout.add_child(top)
 	count_label = UI.make_label("", 26)
-	layout.add_child(count_label)
+	count_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(count_label)
+	dead_button = UI.make_button("", func():
+		show_dead = not show_dead
+		_refresh(), 20)
+	dead_button.custom_minimum_size.y = 56
+	top.add_child(dead_button)
 
-	empty_label = UI.make_label("Tu n'as encore aucun héros.\nVa dans la Salle d'invocation !", 26)
+	filter = HeroFilter.new()
+	filter.changed.connect(_refresh)
+	layout.add_child(filter)
+
+	empty_label = UI.make_label("", 26)
 	empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	empty_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(empty_label)
 
 	# Zone qui défile quand il y a beaucoup de héros.
@@ -56,20 +76,32 @@ func _refresh() -> void:
 		grid.remove_child(child)
 		child.queue_free()
 
-	# Tri : les plus rares d'abord, puis dans l'ordre d'invocation.
-	var heroes: Array = GameData.roster.duplicate()
-	heroes.sort_custom(func(a, b):
-		if a["rarity"] != b["rarity"]:
-			return a["rarity"] > b["rarity"]
-		return a["id"] < b["id"])
+	# Les vivants (ou les tombés), puis la recherche et les filtres, qui trient aussi la liste.
+	var alive := GameData.alive_heroes()
+	var dead_count := GameData.roster.size() - alive.size()
+	if dead_count == 0:
+		show_dead = false
+	var group: Array = alive
+	if show_dead:
+		group = GameData.roster.filter(func(hero): return not hero["alive"])
+	var heroes := filter.apply(group)
 
 	for hero in heroes:
 		var card := UI.make_hero_card(hero)
 		card.pressed.connect(func(): _show_detail(hero))
 		grid.add_child(card)
 
-	count_label.text = "Héros possédés : %d" % heroes.size()
+	var title := "Héros tombés" if show_dead else "Héros"
+	count_label.text = "%s : %d" % [title, group.size()]
+	if heroes.size() != group.size():
+		count_label.text += " (%d affichés)" % heroes.size()
+	dead_button.text = "← Héros vivants" if show_dead else "Tombés (%d)" % dead_count
+	dead_button.visible = dead_count > 0
 	empty_label.visible = heroes.is_empty()
+	if group.is_empty():
+		empty_label.text = "Tu n'as encore aucun héros.\nVa dans la Salle d'invocation !"
+	else:
+		empty_label.text = "Aucun héros ne correspond à la recherche."
 
 
 ## Bouton « Promotion » : le coût (or + pierres d'attribut) est affiché ; le bouton est grisé,
@@ -187,6 +219,10 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 		if hero["class"] == "Mage":
 			magic = "Arme : aucune (magie de %s)" % hero.get("element", "Feu").to_lower()
 		content.add_child(UI.make_label(magic, 22))
+	elif hero["alive"] and GameData.gears_up_on_mission(hero):
+		var gear_label := UI.make_label("Arme : prend la meilleure de l'arsenal en partant en mission", 20)
+		gear_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(gear_label)
 	else:
 		content.add_child(UI.make_label("Arme : %s" % GameData.fighting_weapon(hero)["name"], 22))
 		var shield := GameData.equipped(hero, "shield")

@@ -398,8 +398,9 @@ func add_skill_progress(hero: Dictionary, skill_name: String, points: int, per_l
 # dans l'arsenal)}. Un héros a deux emplacements : son arme, et un bouclier (sauf avec un arc,
 # qui se tient à deux mains). Sans arme, il se bat avec une arme de départ [F] (voir STARTER_WEAPONS).
 # Les mages et les soigneurs se battent avec la magie : ils ne portent pas d'arme.
-# Les armes de l'arsenal équipent les héros automatiquement (auto_equip), sauf ceux dont
-# le Maître a choisi l'équipement lui-même (hero["manual_gear"]).
+# Les héros prennent eux-mêmes les meilleures armes de l'arsenal en partant en mission (gear_up)
+# et les reposent au retour (tidy_arsenal), sauf ceux dont le Maître a choisi l'équipement
+# (hero["manual_gear"]) : eux gardent leurs armes en permanence.
 
 ## Prix du tirage d'armes, en or (x10 = 10 fois le prix, 50 000 or comme dans le manhwa).
 const WEAPON_DRAW_COST := 5000
@@ -466,7 +467,7 @@ func uses_magic(hero: Dictionary) -> bool:
 
 
 ## Tire « count » armes au hasard, les range dans l'arsenal, et renvoie la liste
-## (vide si on n'a pas assez d'or). Les héros s'équipent ensuite automatiquement.
+## (vide si on n'a pas assez d'or). Les héros les prendront en partant en mission.
 ## Chaque arme tirée compte pour l'ouverture du terrain d'entraînement.
 func draw_weapons(count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
@@ -481,7 +482,7 @@ func draw_weapons(count: int) -> Array[Dictionary]:
 		arsenal.append(weapon)
 		results.append(weapon)
 	gold_changed.emit(gold)
-	auto_equip()  # sauvegarde aussi la partie
+	save_game()
 	return results
 
 
@@ -538,8 +539,8 @@ func equip(hero: Dictionary, weapon: Dictionary) -> bool:
 	weapon["owner"] = hero["id"]
 	if weapon["type"] == "Arc":
 		_take_off(hero, "shield")
-	hero["manual_gear"] = true  # le Maître a choisi : plus d'équipement automatique pour ce héros
-	auto_equip()
+	hero["manual_gear"] = true  # le Maître a choisi : le héros garde cette arme, même à la cité
+	tidy_arsenal()
 	return true
 
 
@@ -550,10 +551,11 @@ func unequip(hero: Dictionary, slot: String) -> void:
 	save_game()
 
 
-## Rend l'équipement automatique à un héros (il prendra lui-même les meilleures armes).
+## Rend l'équipement automatique à un héros : il repose ses armes (s'il est à la cité)
+## et prendra lui-même les meilleures au prochain départ en mission.
 func set_auto_gear(hero: Dictionary) -> void:
 	hero["manual_gear"] = false
-	auto_equip()
+	tidy_arsenal()
 
 
 func _take_off(hero: Dictionary, slot: String) -> void:
@@ -562,13 +564,30 @@ func _take_off(hero: Dictionary, slot: String) -> void:
 		weapon["owner"] = 0
 
 
-## Équipement automatique : chaque héros (sauf ceux équipés à la main par le Maître)
-## prend la meilleure arme libre qu'il sait utiliser, si elle vaut mieux que la sienne,
-## puis un bouclier si sa classe en porte. Les héros les plus rares se servent en premier.
-## Les armes d'un héros mort sont perdues avec lui.
-func auto_equip() -> void:
+## Rangement de l'arsenal, appelé après chaque changement :
+## - les armes d'un héros mort sont perdues avec lui ;
+## - un héros qui s'équipe tout seul (pas choisi par le Maître) et qui est à la cité repose ses armes
+##   dans l'arsenal : il n'en prend qu'en partant en mission (voir gear_up), et les repose au retour.
+## Sauvegarde aussi la partie.
+func tidy_arsenal() -> void:
 	arsenal = arsenal.filter(func(weapon): return weapon["owner"] == 0 or _hero_alive(weapon["owner"]))
-	var heroes := alive_heroes()
+	for hero in alive_heroes():
+		if not hero.get("manual_gear", false) and not is_away(hero):
+			_take_off(hero, "weapon")
+			_take_off(hero, "shield")
+	save_game()
+
+
+## Vrai si le héros est à la cité les mains vides et prendra ses armes au prochain départ en mission.
+func gears_up_on_mission(hero: Dictionary) -> bool:
+	return not hero.get("manual_gear", false) and not uses_magic(hero) and not is_away(hero)
+
+
+## Départ en mission (Tour ou donjon journalier) : chaque héros de l'équipe qui s'équipe tout seul
+## prend la meilleure arme libre qu'il sait utiliser, puis un bouclier si sa classe en porte.
+## Les héros les plus rares se servent en premier. Ceux équipés par le Maître gardent leurs armes.
+func gear_up(team: Array) -> void:
+	var heroes := team.duplicate()
 	heroes.sort_custom(func(a, b): return a["rarity"] > b["rarity"])
 	for hero in heroes:
 		if hero.get("manual_gear", false) or uses_magic(hero):
@@ -905,7 +924,7 @@ func start_expedition(team_index: int) -> bool:
 	expedition = {"team": team.map(func(hero): return hero["id"]), "team_index": team_index,
 		"start": now, "end": now + EXPEDITION_SECONDS, "log": pickups}
 	last_expedition_day = _today()
-	save_game()
+	gear_up(team)  # les héros prennent leurs armes dans l'arsenal (et la partie est sauvegardée)
 	return true
 
 
@@ -984,7 +1003,7 @@ func update_expedition() -> void:
 			hero["training_since"] = Time.get_unix_time_from_system()
 	expedition_report = {"lines": lines}
 	expedition = {}
-	save_game()
+	tidy_arsenal()  # les héros reposent leurs armes dans l'arsenal (et la partie est sauvegardée)
 	lobby_updated.emit()
 
 
@@ -1207,7 +1226,7 @@ func _add_forged(weapon_type: String, grade: String) -> Dictionary:
 	var weapon := {"id": next_weapon_id, "type": weapon_type, "grade": grade, "owner": 0, "forged": true}
 	next_weapon_id += 1
 	arsenal.append(weapon)
-	auto_equip()
+	save_game()
 	return weapon
 
 
@@ -1341,6 +1360,7 @@ func _ready() -> void:
 	# puis on les fait avancer toutes les 5 secondes.
 	update_expedition()
 	update_training()
+	tidy_arsenal()  # (anciennes sauvegardes) les héros à la cité reposent leurs armes
 	var timer := Timer.new()
 	timer.wait_time = 5.0
 	timer.timeout.connect(func():
@@ -1545,7 +1565,7 @@ func summon(summon_type: String, count: int) -> Array[Dictionary]:
 		var hero := _create_hero(_roll_rarity(summon_type), info["mages"])
 		roster.append(hero)
 		results.append(hero)
-	auto_equip()  # les nouveaux venus prennent des armes libres (et la partie est sauvegardée)
+	save_game()
 	return results
 
 
@@ -1681,7 +1701,7 @@ func redeem_code(code: String) -> Dictionary:
 			used_codes.append(code)
 			var hero := _create_secret_hero(hero_name)
 			roster.append(hero)
-			auto_equip()
+			save_game()
 			return hero
 	return {}
 
@@ -1973,6 +1993,7 @@ func _number_duplicates(enemies: Array[Dictionary]) -> void:
 
 ## Début d'un combat de la Tour : on le note dans la sauvegarde (voir pending_battle).
 ## « floor_number » : l'étage joué (un étage déjà conquis peut être rejoué, voir REPLAY_GOLD_RATE).
+## Les héros prennent leurs armes dans l'arsenal au départ (gear_up) : à appeler avant Battle.new.
 func start_tower_battle(team: Array, enemies: Array, quest: Dictionary, floor_number: int) -> void:
 	update_training()  # les séances terminées avant le départ sont comptées
 	pending_battle = {
@@ -1981,7 +2002,7 @@ func start_tower_battle(team: Array, enemies: Array, quest: Dictionary, floor_nu
 		"enemies": enemies.duplicate(true),
 		"quest": quest,
 	}
-	save_game()
+	gear_up(team)  # sauvegarde aussi la partie
 
 
 ## Le jeu a été fermé en plein combat : les héros se sont débrouillés seuls.
@@ -2096,5 +2117,5 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
-	auto_equip()  # les armes des héros morts sont perdues (et la partie est sauvegardée)
+	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report

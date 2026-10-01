@@ -1,9 +1,11 @@
 class_name ArmoryScreen
 extends Control
 ## Armurerie (ouverte depuis le hub) : tirage d'armes payé en or, arsenal, et équipement des héros.
-## Les armes tirées vont dans l'arsenal, puis les héros s'équipent d'eux-mêmes (GameData.auto_equip).
-## Le Maître peut aussi choisir l'arme d'un héros : ce héros ne change alors plus d'arme tout seul,
-## jusqu'à ce qu'on appuie sur « Auto ». Les règles sont dans GameData (section « Armes »).
+## Les armes tirées vont dans l'arsenal ; les héros y prennent les meilleures en partant en mission
+## (GameData.gear_up) et les reposent au retour. Le Maître peut aussi choisir l'arme d'un héros :
+## ce héros la garde alors en permanence, jusqu'à ce qu'on appuie sur « Auto ».
+## Une recherche et des filtres (HeroFilter) aident à trouver un héros parmi des centaines.
+## Les règles sont dans GameData (section « Armes »).
 
 ## Demande à l'écran principal d'afficher un autre écran (retour au hub).
 signal navigate(screen_name: String)
@@ -20,6 +22,11 @@ var arsenal_title: Label
 var heroes_box: VBoxContainer
 ## Calque pour choisir une arme dans l'arsenal, par-dessus l'écran.
 var picker: Control
+var filter: HeroFilter
+## Au-delà de ce nombre, on n'affiche pas tous les héros : il faut affiner la recherche.
+const MAX_ROWS := 30
+## Type d'arme montré dans la fenêtre de choix ("" = tous).
+var picker_type := ""
 
 
 func _ready() -> void:
@@ -74,6 +81,9 @@ func _ready() -> void:
 	arsenal_box.add_theme_constant_override("v_separation", 8)
 	content.add_child(arsenal_box)
 	content.add_child(UI.make_label("Équipement des héros", 24))
+	filter = HeroFilter.new()
+	filter.changed.connect(_refresh_heroes)
+	content.add_child(filter)
 	heroes_box = VBoxContainer.new()
 	heroes_box.add_theme_constant_override("separation", 12)
 	content.add_child(heroes_box)
@@ -88,7 +98,7 @@ func on_shown() -> void:
 	picker.visible = false
 	for child in result_box.get_children():
 		child.queue_free()
-	info_label.text = "Les armes rangées dans l'arsenal équipent les héros automatiquement."
+	info_label.text = "Les héros prennent les meilleures armes de l'arsenal en partant en mission, et les reposent au retour."
 	_refresh()
 
 
@@ -108,24 +118,41 @@ func _draw_weapons(count: int) -> void:
 	if before < GameData.TRAINING_UNLOCK_DRAWS and GameData.training_unlocked():
 		result_box.add_child(UI.make_system_window("Félicitations !",
 			["Le terrain d'entraînement a été construit avec succès !"]))
-	info_label.text = "Les nouvelles armes sont dans l'arsenal ; les héros prennent celles qui leur conviennent."
+	info_label.text = "Les nouvelles armes sont dans l'arsenal : les héros les prendront en partant en mission."
 	_refresh()
 
 
-## Redessine l'arsenal (armes rangées) et l'équipement de chaque héros vivant.
+## Redessine l'arsenal (armes rangées) et l'équipement des héros.
 func _refresh() -> void:
-	for box in [arsenal_box, heroes_box]:
-		for child in box.get_children():
-			box.remove_child(child)
-			child.queue_free()
+	for child in arsenal_box.get_children():
+		arsenal_box.remove_child(child)
+		child.queue_free()
 
 	var free := GameData.free_weapons()
 	arsenal_title.text = "Arsenal : %d arme%s rangée%s" % [free.size(), "s" if free.size() > 1 else "", "s" if free.size() > 1 else ""]
 	for weapon in free:
 		arsenal_box.add_child(_make_weapon_tag(weapon))
+	_refresh_heroes()
 
-	for hero in GameData.alive_heroes():
+
+## Redessine les cartes des héros qui correspondent à la recherche (MAX_ROWS au plus).
+func _refresh_heroes() -> void:
+	for child in heroes_box.get_children():
+		heroes_box.remove_child(child)
+		child.queue_free()
+	var heroes := filter.apply(GameData.alive_heroes())
+	for hero in heroes.slice(0, MAX_ROWS):
 		heroes_box.add_child(_make_hero_row(hero))
+	var hint := ""
+	if heroes.is_empty():
+		hint = "Aucun héros ne correspond à la recherche."
+	elif heroes.size() > MAX_ROWS:
+		hint = "… et %d autres héros : affine la recherche pour les trouver." % (heroes.size() - MAX_ROWS)
+	if hint != "":
+		var label := UI.make_label(hint, 20)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.modulate = Color(1, 1, 1, 0.7)
+		heroes_box.add_child(label)
 
 
 ## Petite étiquette colorée « Épée [D+] ».
@@ -161,23 +188,34 @@ func _make_hero_row(hero: Dictionary) -> Control:
 		return panel
 
 	var weapon := GameData.fighting_weapon(hero)
-	var from_arsenal := not GameData.equipped(hero, "weapon").is_empty()
-	box.add_child(UI.make_label("Arme : %s%s" % [weapon["name"], "" if from_arsenal else " (arme de départ)"], 20))
-	var shield := GameData.equipped(hero, "shield")
-	var shield_text := "aucun" if shield.is_empty() else GameData.weapon_name(shield)
-	if weapon["type"] == "Arc":
-		shield_text = "impossible avec un arc"
-	box.add_child(UI.make_label("Bouclier : %s" % shield_text, 20))
-	var mode := UI.make_label("Équipement choisi par le Maître" if hero.get("manual_gear", false) \
-		else "S'équipe tout seul", 18)
-	mode.modulate = Color(1, 1, 1, 0.6)
-	box.add_child(mode)
+	if GameData.gears_up_on_mission(hero):
+		# À la cité, les mains vides : il se servira dans l'arsenal au prochain départ.
+		var idle := UI.make_label("S'équipe tout seul : prend les meilleures armes de l'arsenal en partant en mission, et les repose au retour.", 20)
+		idle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		idle.modulate = Color(1, 1, 1, 0.75)
+		box.add_child(idle)
+	else:
+		var from_arsenal := not GameData.equipped(hero, "weapon").is_empty()
+		box.add_child(UI.make_label("Arme : %s%s" % [weapon["name"], "" if from_arsenal else " (arme de départ)"], 20))
+		var shield := GameData.equipped(hero, "shield")
+		var shield_text := "aucun" if shield.is_empty() else GameData.weapon_name(shield)
+		if weapon["type"] == "Arc":
+			shield_text = "impossible avec un arc"
+		box.add_child(UI.make_label("Bouclier : %s" % shield_text, 20))
+		var mode_text := "En mission (%s) : reposera ses armes au retour" % GameData.activity_text(hero)
+		if hero.get("manual_gear", false):
+			mode_text = "Équipement choisi par le Maître (gardé en permanence)"
+		var mode := UI.make_label(mode_text, 18)
+		mode.modulate = Color(1, 1, 1, 0.6)
+		box.add_child(mode)
 
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	box.add_child(buttons)
 	for entry in [["Arme", "weapon"], ["Bouclier", "shield"]]:
-		var button := UI.make_button(entry[0], func(): _open_picker(hero, entry[1]), 22)
+		var button := UI.make_button(entry[0], func():
+			picker_type = ""
+			_open_picker(hero, entry[1]), 22)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.custom_minimum_size.y = 64
 		button.disabled = entry[1] == "shield" and weapon["type"] == "Arc"
@@ -220,6 +258,26 @@ func _open_picker(hero: Dictionary, slot: String) -> void:
 
 	var title := "Bouclier" if slot == "shield" else "Arme"
 	layout.add_child(UI.make_label("%s de %s" % [title, hero["name"]], 28))
+
+	# Pour une arme : un bouton par type (Toutes, Épée, Lance...), pour ne montrer que celui-là.
+	if slot == "weapon":
+		var types := HFlowContainer.new()
+		types.add_theme_constant_override("h_separation", 6)
+		types.add_theme_constant_override("v_separation", 6)
+		layout.add_child(types)
+		var type_names: Array = [""]
+		for weapon_type in GameData.WEAPON_TYPES:
+			if weapon_type != "Bouclier":
+				type_names.append(weapon_type)
+		for weapon_type in type_names:
+			var type_button := UI.make_button("Toutes" if weapon_type == "" else weapon_type, func():
+				picker_type = weapon_type
+				_open_picker.call_deferred(hero, slot), 20)
+			type_button.toggle_mode = true
+			type_button.button_pressed = picker_type == weapon_type
+			type_button.custom_minimum_size = Vector2(96, 52)
+			types.add_child(type_button)
+
 	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
 	var list := VBoxContainer.new()
@@ -228,9 +286,14 @@ func _open_picker(hero: Dictionary, slot: String) -> void:
 	scroll.add_child(list)
 
 	var count := 0
-	for weapon in GameData.free_weapons():
+	for weapon in GameData.free_weapons():  # les meilleures d'abord
 		if (weapon["type"] == "Bouclier") != (slot == "shield"):
 			continue
+		if picker_type != "" and weapon["type"] != picker_type:
+			continue
+		if count >= MAX_ROWS:
+			list.add_child(UI.make_label("… et d'autres, moins bonnes.", 18))
+			break
 		var text := "%s — %s" % [GameData.weapon_name(weapon), GameData.WEAPON_TYPES[weapon["type"]]["info"]]
 		var button := UI.make_button(text, func():
 			GameData.equip(hero, weapon)

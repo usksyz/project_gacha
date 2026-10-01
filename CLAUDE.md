@@ -43,6 +43,10 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   clavier refait dans le jeu ; `html/experimental_virtual_keyboard=true` dans `export_presets.cfg`
   fait apparaître le clavier du téléphone dans la version web.
 - `scripts/ui.gd` : classe `UI`, fonctions communes (labels, boutons, cartes de héros, fenêtres système).
+- Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
+  classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
+  « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
+  `MAX_ROWS` résultats, on demande d'affiner la recherche. La collection cache les héros morts (bouton « Tombés »).
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
   `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, composition des
@@ -80,8 +84,10 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   numéro de son héros dans `owner`, 0 = rangée). Types : Épée, Lance, Dague, Fouet, Arc, Bouclier
   (`WEAPON_TYPES` : portée, force, vitesse). Deux emplacements : arme + bouclier (pas de bouclier avec un arc).
   Sans arme : vieille épée de fer [F] (vieil arc de chasse [F] pour les archers). Les mages et soigneurs
-  n'ont pas d'arme. `auto_equip()` équipe les héros tout seuls ; si le Maître choisit
-  (`hero["manual_gear"]`), le héros ne change plus d'arme seul jusqu'au bouton « Auto ».
+  n'ont pas d'arme. Choix du porteur du projet : un héros ne prend une arme de l'arsenal qu'en partant
+  en mission (Tour ou donjon journalier, `gear_up()`) et la repose au retour (`tidy_arsenal()`, appelée
+  après chaque changement de l'arsenal ou des héros) ; si le Maître choisit (`hero["manual_gear"]`),
+  le héros garde ses armes en permanence jusqu'au bouton « Auto ».
   Choix du porteur du projet : quand un héros meurt, ses armes sont perdues avec lui.
   Le terrain d'entraînement ne s'ouvre qu'après 10 armes tirées (`TRAINING_UNLOCK_DRAWS`, `weapon_draws`).
   En combat, l'arme d'un héros décide de sa portée (un héros avec un arc tire), le grade ajoute de

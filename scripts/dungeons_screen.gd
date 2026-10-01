@@ -612,11 +612,12 @@ func _start_fight() -> void:
 			team.append(hero)
 
 	var floor_number := chosen_floor
-	var battle := Battle.new(team, floor_enemies, floor_quest)
-	battle.start()
 	# Le combat est noté dans la sauvegarde : si le jeu est fermé en plein combat,
 	# les héros se débrouillent seuls et le résultat est appliqué au lancement suivant.
+	# C'est aussi là que les héros prennent leurs armes dans l'arsenal : avant de créer le combat.
 	GameData.start_tower_battle(team, floor_enemies, floor_quest, floor_number)
+	var battle := Battle.new(team, floor_enemies, floor_quest)
+	battle.start()
 
 	_show_page(battle_view)
 	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]])
