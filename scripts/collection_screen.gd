@@ -178,14 +178,19 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	if not notice.is_empty():
 		content.add_child(UI.make_system_window("Promotion !", notice))
 
-	var rarity := UI.make_label(UI.rarity_text(hero["rarity"]), 26)
-	rarity.add_theme_color_override("font_color", color)
-	content.add_child(rarity)
-	content.add_child(UI.make_label(hero["name"], 52))
-	content.add_child(UI.make_label(hero["class"], 28))
-
-	var level_text := "Niveau %d / %d" % [hero["level"], GameData.MAX_LEVEL[hero["rarity"]]]
-	content.add_child(UI.make_label(level_text, 26))
+	if Settings.new_visuals:
+		# Nouveaux visuels : la carte avec son cadre (étoiles, portrait, nom, niveau et stats).
+		var card_box := CenterContainer.new()
+		card_box.add_child(FramedHeroCard.new(hero, FramedHeroCard.CROP.size.x, true))
+		content.add_child(card_box)
+	else:
+		var rarity := UI.make_label(UI.rarity_text(hero["rarity"]), 26)
+		rarity.add_theme_color_override("font_color", color)
+		content.add_child(rarity)
+		content.add_child(UI.make_label(hero["name"], 52))
+		content.add_child(UI.make_label(hero["class"], 28))
+		var level_text := "Niveau %d / %d" % [hero["level"], GameData.MAX_LEVEL[hero["rarity"]]]
+		content.add_child(UI.make_label(level_text, 26))
 	var xp_text := "Niveau maximum atteint"
 	if not GameData.is_max_level(hero):
 		xp_text = "Expérience : %d / %d" % [hero["xp"], GameData.xp_to_next(hero["level"])]
