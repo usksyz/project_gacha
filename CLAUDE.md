@@ -43,6 +43,17 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   clavier refait dans le jeu ; `html/experimental_virtual_keyboard=true` dans `export_presets.cfg`
   fait apparaître le clavier du téléphone dans la version web.
 - `scripts/ui.gd` : classe `UI`, fonctions communes (labels, boutons, cartes de héros, fenêtres système).
+- Visuels (onglet « Piste graphique » du cahier) : images de test d'environ 512 px dans `assets/ui/`.
+  Réglage `Settings.new_visuals` (Paramètres > « Nouveaux visuels », signal `visuals_changed`) : les
+  anciens visuels restent disponibles pour comparer, tout nouveau visuel doit les garder.
+  Écran d'invocation : portail en fond plein écran + voile de 40 %, boutons `SummonButton`
+  (`shaders/summon_button.gdshader` : détourage, plaques sur les textes anglais, teinte du vortex,
+  halo et glitch au toucher). Cartes `FramedHeroCard` (`shaders/hero_frame.gdshader` : cadre teinté
+  selon la rareté, fenêtre percée, portrait provisoire `HeroPortrait` dessous) sur la fiche du héros et
+  les cartes d'équipe. Gemmes : `GemIcon` (cristal détouré `icone-gemme.png`, fait par
+  `tools/detour_gemme.gd`, qui lévite) via `UI.make_gem_amount()`. Les positions dans les images
+  (CROP, rectangles) sont en pixels de l'image source, dans le script ET le shader : à refaire si une
+  image est remplacée par une version plus grande.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
