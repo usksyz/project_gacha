@@ -11,7 +11,8 @@ C'est la référence pour les règles du jeu et l'ordre de développement (6 pha
 concernée avant de coder, et signaler les écarts plutôt que trancher seul.
 
 Noms : les mécaniques peuvent copier Pick Me Up, mais les noms et l'univers restent originaux.
-Seule exception : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron...), clins d'œil au manhwa.
+Seule exception : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron, la magicienne Yvolka, la voleuse
+Edith...), clins d'œil au manhwa (stats du tableau du cahier quand on les connaît : clé « stats »).
 Ils sont immortels et s'obtiennent tous par code secret, Han compris (code « HAN », choix du porteur du
 projet ; avant, Han était donné au début), dans Paramètres > Codes secrets ou sur la Place publique du hub.
 Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois. Ils sont définis dans `SECRET_HEROES` (`game_data.gd`).

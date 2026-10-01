@@ -123,6 +123,18 @@ const SECRET_HEROES := {
 	"Jenna": {"rarity": 1, "class": "Archer", "growth": 2, "code": "JENNA",  # étoiles à confirmer
 		"skills": [{"name": "Maîtrise de l'arc", "rank": "Débutant", "level": 1}]},
 	"Aaron": {"rarity": 1, "class": "Novice", "growth": 2, "code": "AARON", "skills": []},  # à confirmer
+	# Yvolka Rivel Strachur, la magicienne 3 étoiles du manhwa (fiche du cahier : 7 / 31 / 8 / 7,
+	# « Magie de feu intermédiaire », pas encore une compétence du jeu : ici, la magie de feu).
+	"Yvolka": {"rarity": 3, "class": "Mage", "growth": 5, "code": "YVOLKA", "element": "Feu",
+		"stats": {"str": 7, "int": 31, "vit": 8, "dex": 7}, "skills": []},
+	# Edith Callen, la voleuse 3 étoiles (cahier : Force 13, Vitalité 14, Dextérité 17 ; Intelligence
+	# non donnée, à confirmer). Sa « Épée courte » (niv. 3) devient Maîtrise de l'épée, son « Tir à l'arc »
+	# Maîtrise de l'arc.
+	"Edith": {"rarity": 3, "class": "Assassin", "growth": 5, "code": "EDITH",
+		"stats": {"str": 13, "int": 12, "vit": 14, "dex": 17}, "skills": [
+			{"name": "Maîtrise de l'épée", "rank": "Débutant", "level": 3},
+			{"name": "Maîtrise de l'arc", "rank": "Débutant", "level": 1},
+			{"name": "Mouvement souple", "rank": "Débutant", "level": 1}]},
 }
 
 # ---------------------------------------------------------------------------
@@ -1691,6 +1703,13 @@ func _create_secret_hero(hero_name: String) -> Dictionary:
 	var template: Dictionary = SECRET_HEROES[hero_name]
 	var hero := _new_hero(hero_name, template["rarity"], template["class"], template["growth"],
 		template["skills"].duplicate(true))
+	# Stats et élément du manhwa, quand on les connaît (sinon : tirés comme pour les autres héros).
+	if template.has("stats"):
+		hero["stats"] = template["stats"].duplicate()
+	if template.has("element"):
+		hero["element"] = template["element"]
+	elif template["class"] == "Mage":
+		hero["element"] = MAGIC_ELEMENTS.pick_random()
 	hero["immortal"] = true
 	hero["secret"] = true
 	return hero
