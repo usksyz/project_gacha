@@ -17,9 +17,9 @@ var art_material: ShaderMaterial
 var effect: Tween
 
 
-## « count » : 1 ou 10 ; « cost » : « 50 000 or » ; « hue » : rotation de teinte du vortex
-## en degrés (0 = rouge d'origine) ; « width » : largeur du bouton (la hauteur suit l'image).
-func _init(count: int, cost: String, hue: float, saturation: float, width: float) -> void:
+## « count » : 1 ou 10 ; « cost » et « gems » : le prix, en gemmes ou en or ; « hue » : rotation de
+## teinte du vortex en degrés (0 = rouge d'origine) ; « width » : largeur du bouton (la hauteur suit l'image).
+func _init(count: int, cost: int, gems: bool, hue: float, saturation: float, width: float) -> void:
 	flat = true
 	focus_mode = Control.FOCUS_NONE
 	custom_minimum_size = Vector2(width, width * CROP.size.y / CROP.size.x)
@@ -51,10 +51,18 @@ func _init(count: int, cost: String, hue: float, saturation: float, width: float
 	title.add_child(_make_label("x%d" % count, 22, Color("f5c45a")))
 	add_child(title)
 
-	var cost_label := _make_label(cost, 13 if cost.length() > 9 else 15, Color("9ef3ff"))
-	cost_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_place(cost_label, COST_RECT)
-	add_child(cost_label)
+	# Prix sur la plaque du bas : « 50 000 or », ou « 1 000 » suivi du cristal des gemmes.
+	var cost_box := CenterContainer.new()
+	_place(cost_box, COST_RECT)
+	if gems:
+		var amount := UI.make_gem_amount(UI.format_number(cost), 15, Color("9ef3ff"))
+		var amount_label: Label = amount.get_child(0)
+		amount_label.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
+		amount_label.add_theme_constant_override("outline_size", 4)
+		cost_box.add_child(amount)
+	else:
+		cost_box.add_child(_make_label("%s or" % UI.format_number(cost), 15, Color("9ef3ff")))
+	add_child(cost_box)
 
 	button_down.connect(_play_touch_effect)
 	resized.connect(func(): pivot_offset = size / 2)

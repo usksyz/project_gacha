@@ -503,11 +503,11 @@ func _open_tower(floor_number: int) -> void:
 	for child in enemies_box.get_children():
 		child.queue_free()
 	var rewards := GameData.tower_rewards(floor_number)
-	var reward_text := "Récompense : %d or, %d gemmes" % [rewards["gold"], rewards["gems"]]
+	# « Récompense : 300 or, 5 » suivi du cristal des gemmes (ou du mot « gemmes », anciens visuels).
+	var header: Control = UI.make_gem_amount("Récompense : %d or, %d" % [rewards["gold"], rewards["gems"]], 22)
 	if floor_number < GameData.tower_floor:
-		reward_text = "Entraînement : %d or, pas de gemmes, %d d'expérience" % [
-			roundi(rewards["gold"] * GameData.REPLAY_GOLD_RATE), roundi(rewards["xp"] * GameData.REPLAY_XP_RATE)]
-	var header := UI.make_label(reward_text, 22)
+		header = UI.make_label("Entraînement : %d or, pas de gemmes, %d d'expérience" % [
+			roundi(rewards["gold"] * GameData.REPLAY_GOLD_RATE), roundi(rewards["xp"] * GameData.REPLAY_XP_RATE)], 22)
 	header.modulate = Color(1, 1, 1, 0.7)
 	enemies_box.add_child(header)
 	for text in _enemy_summary():

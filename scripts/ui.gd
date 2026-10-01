@@ -52,7 +52,8 @@ static func set_button_style(button: Button, normal: StyleBox, pressed: StyleBox
 
 ## Fenêtre « système » : fond sombre, bordure violette, titre centré en majuscules.
 ## « danger » = variante rouge, pour les alertes graves (mort d'un héros...).
-## Chaque ligne de « lines » devient un texte centré.
+## Chaque ligne de « lines » devient un texte centré (une ligne peut aussi être un nœud déjà
+## fabriqué, comme un montant de gemmes avec son icône : il est centré tel quel).
 static func make_system_window(title: String, lines: Array, danger := false) -> PanelContainer:
 	var accent := Color("e05252") if danger else Color("9b6be0")
 	var panel := PanelContainer.new()
@@ -67,14 +68,46 @@ static func make_system_window(title: String, lines: Array, danger := false) -> 
 	title_label.add_theme_color_override("font_color", accent.lightened(0.3))
 	content.add_child(title_label)
 	for line in lines:
+		if line is Control:
+			var centered := CenterContainer.new()
+			centered.add_child(line)
+			content.add_child(centered)
+			continue
 		var label := make_label(line, 22)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		if danger:
 			label.add_theme_color_override("font_color", accent.lightened(0.4))
 		content.add_child(label)
 	for label in content.get_children():
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		if label is Label:
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return panel
+
+
+## Un montant de gemmes : le texte (« 1 000 », « +5 »...) suivi du cristal qui lévite
+## (nouveaux visuels), ou du mot « gemmes » (anciens visuels).
+static func make_gem_amount(text: String, font_size: int, color := Color.WHITE) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var label := make_label(text if Settings.new_visuals else text + " gemmes", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	if Settings.new_visuals:
+		row.add_child(GemIcon.new(roundf(font_size * 1.7)))
+	return row
+
+
+## Un nombre avec des espaces entre les milliers : 50000 -> « 50 000 ».
+static func format_number(value: int) -> String:
+	var digits := str(absi(value))
+	var grouped := ""
+	for i in digits.length():
+		if i > 0 and (digits.length() - i) % 3 == 0:
+			grouped += " "
+		grouped += digits[i]
+	return ("-" if value < 0 else "") + grouped
 
 
 static func rarity_text(rarity: int) -> String:
@@ -100,7 +133,7 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 
 	var lines := []
 	if report["victory"]:
-		lines.append("+%d or   +%d gemmes" % [report["gold"], report["gems"]])
+		lines.append(make_gem_amount("+%d or   +%d" % [report["gold"], report["gems"]], 22))
 		if report.get("stones", 0) > 0:
 			lines.append("+%d %s (pour la promotion)" % [report["stones"], GameData.PROMOTION_STONE])
 	else:

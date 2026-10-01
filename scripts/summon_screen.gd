@@ -181,21 +181,11 @@ func _add_illustrated_summons(layout: VBoxContainer) -> void:
 		column.add_child(buttons)
 		for count in [1, 10]:
 			var color: Array = VORTEX_COLORS[summon_type][count]
-			var button := SummonButton.new(count, _cost_text(info, count), color[0], color[1], 150)
+			var button := SummonButton.new(count, info["cost"] * count, info["currency"] == "gems",
+				color[0], color[1], 150)
 			button.pressed.connect(func(): _on_summon(summon_type, count))
 			buttons.add_child(button)
 			summon_buttons.append([summon_type, count, button])
-
-
-## « 50 000 or », « 1 000 gemmes ».
-func _cost_text(info: Dictionary, count: int) -> String:
-	var amount := str(info["cost"] * count)
-	var grouped := ""
-	for i in amount.length():
-		if i > 0 and (amount.length() - i) % 3 == 0:
-			grouped += " "
-		grouped += amount[i]
-	return "%s %s" % [grouped, "or" if info["currency"] == "gold" else "gemmes"]
 
 
 ## Anciens visuels : une ligne par sorte d'invocation, son nom, ses chances, puis les boutons x1 et x10.

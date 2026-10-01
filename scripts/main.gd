@@ -24,7 +24,8 @@ const HUB_SCREENS := {
 var screens := {}
 var nav_buttons := {}
 var title_label: Label
-var gems_label: Label
+## Or et gemmes, en haut à droite (les gemmes avec leur cristal, avec les nouveaux visuels).
+var money_box: HBoxContainer
 var settings_panel: SettingsPanel
 
 
@@ -73,6 +74,7 @@ func _ready() -> void:
 
 	GameData.gems_changed.connect(func(_amount): _refresh_money())
 	GameData.gold_changed.connect(func(_amount): _refresh_money())
+	Settings.visuals_changed.connect(_refresh_money)
 	_refresh_money()
 	show_screen("hub")
 	if not GameData.absence_report.is_empty():
@@ -129,7 +131,10 @@ func show_screen(screen_name: String) -> void:
 
 
 func _refresh_money() -> void:
-	gems_label.text = "%d or   %d gemmes" % [GameData.gold, GameData.gems]
+	for child in money_box.get_children():
+		money_box.remove_child(child)
+		child.queue_free()
+	money_box.add_child(UI.make_gem_amount("%d or   %d" % [GameData.gold, GameData.gems], 24, ACCENT_COLOR))
 
 
 func _build_top_bar() -> Control:
@@ -147,10 +152,9 @@ func _build_top_bar() -> Control:
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title_label)
-	gems_label = UI.make_label("", 24)
-	gems_label.add_theme_color_override("font_color", ACCENT_COLOR)
-	gems_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(gems_label)
+	money_box = HBoxContainer.new()
+	money_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(money_box)
 
 	# Bouton des paramètres : une roue dentée.
 	var settings_button := UI.make_button("", func(): settings_panel.open())

@@ -86,6 +86,14 @@ func _refresh() -> void:
 		var button := UI.make_button(text, func(): _build(building_id), 22)
 		button.custom_minimum_size.y = 64
 		button.disabled = problem != ""
+		if problem == "" and Settings.new_visuals:
+			# Nouveaux visuels : « Construire : 500 » suivi du cristal des gemmes, posé sur le bouton.
+			button.text = ""
+			var price := CenterContainer.new()
+			price.set_anchors_preset(Control.PRESET_FULL_RECT)
+			price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			price.add_child(UI.make_gem_amount("Construire : %d" % info["cost"], 22))
+			button.add_child(price)
 		box.add_child(button)
 		list.add_child(panel)
 
