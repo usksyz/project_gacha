@@ -181,6 +181,20 @@ static func make_hero_card(hero: Dictionary) -> Button:
 	for label in content.get_children():
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
+	if GameData.is_favorite(hero):
+		add_favorite_mark(card, 22)
 	if not hero["alive"]:
 		card.modulate = Color(0.4, 0.4, 0.4)
 	return card
+
+
+## Petit cœur rose en haut à droite d'une carte : le héros est un favori.
+static func add_favorite_mark(card: Control, font_size: int) -> void:
+	var heart := make_label("♥", font_size)
+	heart.add_theme_color_override("font_color", Color("ff5c8a"))
+	heart.add_theme_color_override("font_outline_color", Color.BLACK)
+	heart.add_theme_constant_override("outline_size", 4)
+	heart.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heart.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	heart.position += Vector2(-font_size * 0.9, 2)
+	card.add_child(heart)

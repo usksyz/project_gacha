@@ -116,7 +116,7 @@ func _refresh() -> void:
 	title_label.text = "2. Choisis les héros à sacrifier pour renforcer %s (%s, niv. %d)" % [
 		target["name"], "★".repeat(target["rarity"]), target["level"]]
 	if sacrifices.is_empty():
-		info_label.text = "Jusqu'à %d héros, de n'importe quel rang. Les sacrifiés disparaîtront pour toujours. Les héros légendaires ne peuvent pas être sacrifiés." \
+		info_label.text = "Jusqu'à %d héros, de n'importe quel rang. Les sacrifiés disparaîtront pour toujours. Les héros légendaires et les favoris (♥) ne peuvent pas être sacrifiés." \
 			% GameData.SYNTHESIS_MAX_SACRIFICES
 		action_button.text = "Changer de héros à renforcer"
 	else:

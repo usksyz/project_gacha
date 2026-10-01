@@ -4,7 +4,7 @@ extends VBoxContainer
 ## (collection, armurerie, terrain d'entraînement) : utile quand on a 200 héros et plus.
 ## - une recherche par nom (clavier du téléphone ou du PC) ;
 ## - un filtre par classe et un ordre de tri (listes déroulantes) ;
-## - un filtre par nombre d'étoiles (boutons).
+## - un filtre par nombre d'étoiles (boutons), et le bouton ♥ pour ne garder que les favoris.
 ## Utilisation : var filter := HeroFilter.new() ; filter.changed.connect(_refresh) ;
 ## puis filter.apply(liste_de_héros) renvoie les héros à afficher, déjà triés.
 
@@ -18,6 +18,8 @@ var class_menu: OptionButton
 var sort_menu: OptionButton
 ## Nombre d'étoiles demandé (0 = toutes).
 var stars := 0
+## Vrai : seulement les héros favoris.
+var favorites_only := false
 var star_buttons: Array[Button] = []
 
 
@@ -61,6 +63,18 @@ func _ready() -> void:
 		star_row.add_child(button)
 		star_buttons.append(button)
 
+	# Favoris : un bouton à part, qui s'ajoute aux autres filtres.
+	var favorites := UI.make_button("♥", func(): pass, 22)
+	favorites.toggle_mode = true
+	favorites.custom_minimum_size = Vector2(60, 52)
+	favorites.add_theme_color_override("font_color", Color("ff5c8a"))
+	favorites.add_theme_color_override("font_pressed_color", Color("ff5c8a"))
+	favorites.tooltip_text = "Seulement les favoris"
+	favorites.toggled.connect(func(on: bool):
+		favorites_only = on
+		changed.emit())
+	star_row.add_child(favorites)
+
 
 func _make_menu(items: Array) -> OptionButton:
 	var menu := OptionButton.new()
@@ -80,7 +94,8 @@ func apply(heroes: Array) -> Array:
 	var result := heroes.filter(func(hero):
 		return (text == "" or hero["name"].to_lower().contains(text)) \
 			and (hero_class == "" or hero["class"] == hero_class) \
-			and (stars == 0 or hero["rarity"] == stars))
+			and (stars == 0 or hero["rarity"] == stars) \
+			and (not favorites_only or GameData.is_favorite(hero)))
 	var sort_name: String = SORTS[maxi(0, sort_menu.selected)]
 	result.sort_custom(func(a, b):
 		match sort_name:

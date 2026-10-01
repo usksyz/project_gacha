@@ -135,6 +135,29 @@ func _add_promotion(content: VBoxContainer, hero: Dictionary) -> void:
 		content.add_child(why)
 
 
+## Bouton « Favori » : met le héros en favori (cœur sur sa carte, protégé de la synthèse) ou l'en retire.
+## Grisé, avec la raison, quand les GameData.FAVORITES_MAX places sont prises.
+func _add_favorite_button(content: VBoxContainer, hero: Dictionary) -> void:
+	if not hero["alive"]:
+		return
+	var count := GameData.favorites_count()
+	var favorite := GameData.is_favorite(hero)
+	var text := "♥ Favori — retirer des favoris" if favorite \
+		else "♡ Ajouter aux favoris (%d / %d)" % [count, GameData.FAVORITES_MAX]
+	var button := UI.make_button(text, func():
+		GameData.toggle_favorite(hero)
+		_redraw_detail.call_deferred(), 22)
+	button.custom_minimum_size.y = 80
+	button.add_theme_color_override("font_color", Color("ff5c8a"))
+	button.disabled = not favorite and count >= GameData.FAVORITES_MAX
+	content.add_child(button)
+	if button.disabled:
+		var why := UI.make_label("Déjà %d favoris : retire d'abord un héros des favoris." % GameData.FAVORITES_MAX, 19)
+		why.add_theme_color_override("font_color", Color("e05252"))
+		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(why)
+
+
 ## Mode dev : outils de test sur ce héros (niveaux, expérience, étoiles, stats, compétences, résurrection).
 ## Ils passent outre les règles du jeu (voir GameData, section « Mode dev »).
 func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
@@ -208,7 +231,7 @@ func _make_dev_button(text: String, action: Callable) -> Button:
 	return button
 
 
-## Redessine la fiche du héros affiché (après un outil du mode dev), au même endroit de la page.
+## Redessine la fiche du héros affiché (après un outil du mode dev, ou le bouton Favori), au même endroit de la page.
 func _redraw_detail() -> void:
 	var scroll_position := detail_scroll.scroll_vertical
 	var notice := _dev_notice
@@ -373,6 +396,7 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(status)
 
+	_add_favorite_button(content, hero)
 	_add_promotion(content, hero)
 	if Settings.dev_mode:
 		_add_dev_tools(content, hero)

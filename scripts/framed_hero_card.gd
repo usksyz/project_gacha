@@ -96,6 +96,13 @@ func _init(hero_data: Dictionary, width: float, detailed := false) -> void:
 		plate.add_child(_make_label("San %d · Dex %d" % [s["vit"], s["dex"]], 14, Color("9ef3ff")))
 	add_child(plate)
 
+	# Favori : un cœur dans le coin haut droit du portrait.
+	if GameData.is_favorite(hero):
+		var heart_box := Control.new()
+		_place(heart_box, Rect2(WINDOW_RECT.end.x - 36, WINDOW_RECT.position.y + 4, 32, 32))
+		add_child(heart_box)
+		UI.add_favorite_mark(heart_box, maxi(12, roundi(28 * scale_factor)))
+
 	if not hero["alive"]:
 		modulate = Color(0.45, 0.45, 0.45)
 

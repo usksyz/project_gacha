@@ -1543,6 +1543,34 @@ func _remove_from_teams(hero_id: int) -> void:
 
 
 # ---------------------------------------------------------------------------
+# Favoris
+# ---------------------------------------------------------------------------
+# Le Maître peut mettre des héros en favoris (cahier : « favori » sur la fiche), FAVORITES_MAX au plus
+# (choix du porteur du projet). Un favori est protégé : il ne peut pas être sacrifié en synthèse.
+# Seuls les héros vivants comptent : un favori mort libère sa place.
+
+const FAVORITES_MAX := 20
+
+
+func is_favorite(hero: Dictionary) -> bool:
+	return hero.get("favorite", false)
+
+
+## Nombre de favoris (vivants).
+func favorites_count() -> int:
+	return alive_heroes().filter(is_favorite).size()
+
+
+## Met un héros en favori, ou le retire des favoris. Renvoie faux si les FAVORITES_MAX places sont prises.
+func toggle_favorite(hero: Dictionary) -> bool:
+	if not is_favorite(hero) and favorites_count() >= FAVORITES_MAX:
+		return false
+	hero["favorite"] = not is_favorite(hero)
+	save_game()
+	return true
+
+
+# ---------------------------------------------------------------------------
 # Monnaies
 # ---------------------------------------------------------------------------
 
@@ -1685,6 +1713,7 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"alive": true,
 		"immortal": false,
 		"secret": false,
+		"favorite": false,     # mis en favori par le Maître (voir FAVORITES_MAX)
 	}
 	next_hero_id += 1
 	return hero
@@ -1884,6 +1913,8 @@ func synthesis_problem(target: Dictionary, sacrifice: Dictionary) -> String:
 		return "Les deux héros doivent être en vie."
 	if sacrifice.get("secret", false):
 		return "Un héros légendaire ne peut pas être sacrifié."
+	if is_favorite(sacrifice):
+		return "Un héros favori ne peut pas être sacrifié (retire-le d'abord des favoris)."
 	if is_away(target) or is_away(sacrifice):
 		return "Les deux héros doivent être à la cité."
 	return ""
