@@ -16,6 +16,9 @@ Edith...), clins d'œil au manhwa (stats du tableau du cahier quand on les conna
 Ils sont immortels et s'obtiennent tous par code secret, Han compris (code « HAN », choix du porteur du
 projet ; avant, Han était donné au début), dans Paramètres > Codes secrets ou sur la Place publique du hub.
 Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois. Ils sont définis dans `SECRET_HEROES` (`game_data.gd`).
+Le code « SECRET_HERO » (`GameData.SECRET_MENU_CODE`, réutilisable) ouvre `SecretHeroMenu` (`scripts/secret_hero_menu.gd`) :
+la fiche de chaque héros secret (stats tirées à l'ouverture : ce sont celles qu'il aura), on en choisit un
+ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchent toujours.
 
 ## Contexte
 - Le porteur du projet débute en programmation de jeux (bases de Python au lycée) :

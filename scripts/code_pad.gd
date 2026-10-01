@@ -9,6 +9,8 @@ const CODE_MAX_LENGTH := 12
 
 var input: LineEdit
 var result: Label
+## Menu des héros secrets (code GameData.SECRET_MENU_CODE), créé à la première utilisation.
+var secret_menu: SecretHeroMenu
 
 
 func _ready() -> void:
@@ -82,6 +84,16 @@ func _submit_code() -> void:
 			Settings.change("dev_mode", true)
 			result.text = "Mode dev activé : or et gemmes infinis. Outils dans Paramètres > « Outils du mode dev », et sur la fiche de chaque héros."
 		input.text = ""
+		return
+	# Le menu des héros secrets : on y choisit les héros à faire venir, avec leurs fiches.
+	if input.text.strip_edges().to_upper() == GameData.SECRET_MENU_CODE:
+		input.text = ""
+		input.release_focus()  # range le clavier du téléphone
+		result.text = ""
+		if secret_menu == null:
+			secret_menu = SecretHeroMenu.new()
+			add_child(secret_menu)
+		secret_menu.open()
 		return
 	var hero := GameData.redeem_code(input.text)
 	if hero.is_empty():

@@ -1769,7 +1769,7 @@ func redeem_code(code: String) -> Dictionary:
 	for hero_name in SECRET_HEROES:
 		if SECRET_HEROES[hero_name]["code"] == code:
 			# Déjà dans la cité (par exemple Han, donné au début dans les anciennes parties) : pas de double.
-			if roster.any(func(hero): return hero.get("secret", false) and hero["name"] == hero_name):
+			if owns_secret_hero(hero_name):
 				return {}
 			used_codes.append(code)
 			var hero := _create_secret_hero(hero_name)
@@ -1777,6 +1777,45 @@ func redeem_code(code: String) -> Dictionary:
 			save_game()
 			return hero
 	return {}
+
+
+## Code du menu des héros secrets : il ouvre une fenêtre où l'on choisit, fiches à l'appui,
+## le ou les héros secrets à faire venir (ceux qu'on n'a pas encore). Il peut servir plusieurs fois.
+const SECRET_MENU_CODE := "SECRET_HERO"
+
+
+## Vrai si ce héros secret est déjà dans la cité (vivant ou non : il est immortel).
+func owns_secret_hero(hero_name: String) -> bool:
+	return roster.any(func(hero): return hero.get("secret", false) and hero["name"] == hero_name)
+
+
+## Fiches des héros secrets pour le menu : un héros « prêt à venir » par nom (sans numéro, pas encore
+## dans la cité). C'est exactement lui qui viendra si on le choisit (mêmes stats).
+func secret_hero_previews() -> Array[Dictionary]:
+	var previews: Array[Dictionary] = []
+	for hero_name in SECRET_HEROES:
+		var id_before := next_hero_id
+		var hero := _create_secret_hero(hero_name)
+		next_hero_id = id_before  # une fiche à montrer, pas encore un vrai héros
+		hero["id"] = 0
+		previews.append(hero)
+	return previews
+
+
+## Fait venir un héros secret montré dans le menu. Renvoie le héros, ou {} s'il est déjà là.
+func recruit_secret_hero(preview: Dictionary) -> Dictionary:
+	if owns_secret_hero(preview["name"]):
+		return {}
+	var hero := preview.duplicate(true)
+	hero["id"] = next_hero_id
+	next_hero_id += 1
+	roster.append(hero)
+	# Son propre code ne servira plus (il est déjà là).
+	var code: String = SECRET_HEROES[hero["name"]]["code"]
+	if code != "" and not code in used_codes:
+		used_codes.append(code)
+	save_game()
+	return hero
 
 
 # ---------------------------------------------------------------------------
