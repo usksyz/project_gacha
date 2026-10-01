@@ -109,13 +109,14 @@ const GROWTH := {1: 2, 2: 3, 3: 5, 4: 6, 5: 8}
 const HIDDEN_TALENT_CHANCE := 0.15
 
 ## Héros secrets (clins d'œil au manhwa). Ils ne suivent pas les règles : ils sont immortels.
-## « code » : le code secret à taper sur la Place publique pour l'obtenir
-## (vide = le héros est donné dès le début de la partie).
+## « code » : le code secret à taper (Paramètres > Codes secrets, ou la Place publique) pour l'obtenir.
+## Tous s'obtiennent par code, Han compris (choix du porteur du projet : avant, Han était donné
+## dès le début de la partie). Un héros secret qu'on a déjà ne peut pas être obtenu une deuxième fois.
 ## Les étoiles et classes marquées « à confirmer » sont à ajuster selon le manhwa.
 const SECRET_HEROES := {
 	# Han : 1 étoile en apparence, mais une croissance de 3 étoiles.
-	# Plus tard, il obtiendra à la fois Calme et Berserk, normalement incompatibles.
-	"Han": {"rarity": 1, "class": "Novice", "growth": 5, "code": "", "skills": []},
+	# Il peut réunir Calme et Berserk, normalement incompatibles.
+	"Han": {"rarity": 1, "class": "Novice", "growth": 5, "code": "HAN", "skills": []},
 	"Hansen": {"rarity": 1, "class": "Novice", "growth": 2, "code": "HANSEN", "skills": []},
 	"Zid": {"rarity": 1, "class": "Novice", "growth": 2, "code": "ZID", "skills": []},  # à confirmer
 	"Shei": {"rarity": 4, "class": "Novice", "growth": 6, "code": "SHEI", "skills": []},  # classe à confirmer
@@ -1420,8 +1421,7 @@ func _new_game() -> void:
 	expedition = {}
 	last_expedition_day = ""
 	expedition_report = {}
-	# Han est là dès le début de la partie.
-	roster.append(_create_secret_hero("Han"))
+	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.
 
 
 # ---------------------------------------------------------------------------
@@ -1749,6 +1749,9 @@ func redeem_code(code: String) -> Dictionary:
 		return {}
 	for hero_name in SECRET_HEROES:
 		if SECRET_HEROES[hero_name]["code"] == code:
+			# Déjà dans la cité (par exemple Han, donné au début dans les anciennes parties) : pas de double.
+			if roster.any(func(hero): return hero.get("secret", false) and hero["name"] == hero_name):
+				return {}
 			used_codes.append(code)
 			var hero := _create_secret_hero(hero_name)
 			roster.append(hero)
