@@ -138,6 +138,14 @@ func _refresh_money() -> void:
 	for child in money_box.get_children():
 		money_box.remove_child(child)
 		child.queue_free()
+	# Mode dev : un badge rouge, et de l'or et des gemmes infinis (∞).
+	if Settings.dev_mode:
+		var badge := UI.make_label("DEV", 20)
+		badge.add_theme_color_override("font_color", Color("e05252"))
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		money_box.add_child(badge)
+		money_box.add_child(UI.make_gem_amount("  ∞ or   ∞", 24, ACCENT_COLOR))
+		return
 	money_box.add_child(UI.make_gem_amount("%d or   %d" % [GameData.gold, GameData.gems], 24, ACCENT_COLOR))
 
 

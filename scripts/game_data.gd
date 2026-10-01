@@ -1313,8 +1313,25 @@ const BOSS_TYPES := [
 # État de la partie
 # ---------------------------------------------------------------------------
 
-var gems := 3000
-var gold := 0
+## Vraies réserves de gemmes et d'or : celles de la sauvegarde.
+var real_gems := 3000
+var real_gold := 0
+## Montant affiché et utilisable en mode dev (Settings.dev_mode) : « infini ».
+const DEV_MONEY := 999999999
+## Gemmes et or utilisables : à utiliser partout dans le jeu. En mode dev, ils sont infinis
+## (on peut tout payer) et les vraies réserves ne bougent pas : on les retrouve en quittant le mode dev.
+var gems: int:
+	get:
+		return DEV_MONEY if Settings.dev_mode else real_gems
+	set(value):
+		if not Settings.dev_mode:
+			real_gems = value
+var gold: int:
+	get:
+		return DEV_MONEY if Settings.dev_mode else real_gold
+	set(value):
+		if not Settings.dev_mode:
+			real_gold = value
 var pity_counter := 0
 
 ## Prochain étage de la Tour à conquérir.
@@ -1383,8 +1400,8 @@ func reset_game() -> void:
 
 ## Prépare une partie neuve.
 func _new_game() -> void:
-	gems = 3000
-	gold = 0
+	real_gems = 3000
+	real_gold = 0
 	pity_counter = 0
 	tower_floor = 1
 	roster.clear()
@@ -1426,8 +1443,8 @@ const SAVE_VERSION := 1
 func save_game() -> void:
 	var file := ConfigFile.new()
 	file.set_value("partie", "version", SAVE_VERSION)
-	file.set_value("partie", "gemmes", gems)
-	file.set_value("partie", "or", gold)
+	file.set_value("partie", "gemmes", real_gems)
+	file.set_value("partie", "or", real_gold)
 	file.set_value("partie", "pity", pity_counter)
 	file.set_value("partie", "etage", tower_floor)
 	file.set_value("partie", "prochain_id", next_hero_id)
@@ -1453,8 +1470,8 @@ func load_game() -> bool:
 	var file := ConfigFile.new()
 	if file.load(SAVE_PATH) != OK:
 		return false
-	gems = file.get_value("partie", "gemmes", 3000)
-	gold = file.get_value("partie", "or", 0)
+	real_gems = file.get_value("partie", "gemmes", 3000)
+	real_gold = file.get_value("partie", "or", 0)
 	pity_counter = file.get_value("partie", "pity", 0)
 	tower_floor = file.get_value("partie", "etage", 1)
 	next_hero_id = file.get_value("partie", "prochain_id", 1)
@@ -1781,6 +1798,15 @@ func promote(hero: Dictionary) -> Array[String]:
 	gold -= cost["gold"]
 	gold_changed.emit(gold)
 	_take_material(PROMOTION_STONE, cost["stones"])
+	lines.append_array(_apply_promotion(hero))
+	save_game()
+	return lines
+
+
+## Le passage à l'étoile suivante lui-même (sans payer ni vérifier) : stats, niveau maximum,
+## compétence spéciale. Renvoie les lignes à annoncer.
+func _apply_promotion(hero: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
 	var old_rarity: int = hero["rarity"]
 	hero["rarity"] += 1
 	hero["xp"] = 0
@@ -1795,7 +1821,6 @@ func promote(hero: Dictionary) -> Array[String]:
 		var skill_name: String = choices.pick_random()
 		hero["skills"].append({"name": skill_name, "rank": "Spéciale", "level": 1})
 		lines.append("Compétence spéciale : %s." % skill_name)
-	save_game()
 	return lines
 
 
@@ -2250,3 +2275,149 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 				report["level_ups"].append({"hero": hero, "levels": levels})
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
+
+
+# ---------------------------------------------------------------------------
+# Mode dev (outils de test)
+# ---------------------------------------------------------------------------
+# Actif quand Settings.dev_mode est vrai (code secret Settings.DEV_CODE) : or et gemmes infinis
+# (voir « gems » et « gold »), et ces outils, utilisés par dev_panel.gd et la fiche du héros.
+# Ils passent outre les règles du jeu : à ne jamais appeler en dehors du mode dev.
+
+## Crée un héros de la rareté voulue ; « hero_class » vide = classe tirée au hasard (mages possibles).
+func dev_create_hero(rarity: int, hero_class := "") -> Dictionary:
+	if hero_class == "":
+		hero_class = _roll_class(rarity, true)
+	var hero := _new_hero(HERO_NAMES.pick_random(), rarity, hero_class, GROWTH[rarity], [])
+	if hero_class == "Mage":
+		hero["element"] = MAGIC_ELEMENTS.pick_random()
+	roster.append(hero)
+	save_game()
+	return hero
+
+
+## Fait gagner « count » niveaux à un héros (sans dépasser son niveau maximum).
+func dev_add_levels(hero: Dictionary, count: int) -> void:
+	for i in count:
+		if is_max_level(hero):
+			break
+		gain_xp(hero, xp_to_next(hero["level"]) - hero["xp"])
+	save_game()
+
+
+func dev_add_xp(hero: Dictionary, amount: int) -> void:
+	gain_xp(hero, amount)
+	save_game()
+
+
+## Passe à l'étoile suivante gratuitement, sans attendre le niveau maximum.
+func dev_promote(hero: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	if hero["rarity"] >= MAX_PROMOTION_RARITY:
+		return lines
+	lines = _apply_promotion(hero)
+	hero["level"] = mini(hero["level"], MAX_LEVEL[hero["rarity"]])
+	save_game()
+	return lines
+
+
+func dev_add_stats(hero: Dictionary, amount: int) -> void:
+	for stat in STAT_NAMES:
+		hero["stats"][stat] = maxi(1, hero["stats"][stat] + amount)
+	save_game()
+
+
+## Donne une compétence au niveau 1 (sans vérifier les incompatibilités), ou la monte d'un niveau.
+func dev_give_skill(hero: Dictionary, skill_name: String) -> void:
+	for skill in hero["skills"]:
+		if skill["name"] == skill_name:
+			skill["level"] = mini(skill["level"] + 1, SKILL_MAX_LEVEL)
+			save_game()
+			return
+	var skill := new_skill(skill_name)
+	if skill_name in SKILL_FUSIONS:
+		skill["rank"] = SKILL_FUSIONS[skill_name]["rank"]
+	elif skill_name in SKILL_EVOLUTIONS:
+		skill["rank"] = SKILL_EVOLUTIONS[skill_name]["rank"]
+	hero["skills"].append(skill)
+	save_game()
+
+
+func dev_set_skill_level(hero: Dictionary, skill_name: String, level: int) -> void:
+	for skill in hero["skills"]:
+		if skill["name"] == skill_name:
+			skill["level"] = clampi(level, 1, SKILL_MAX_LEVEL)
+	save_game()
+
+
+func dev_remove_skill(hero: Dictionary, skill_name: String) -> void:
+	hero["skills"] = hero["skills"].filter(func(skill): return skill["name"] != skill_name)
+	save_game()
+
+
+## Ramène un héros mort (sans ses armes, perdues avec lui).
+func dev_revive(hero: Dictionary) -> void:
+	hero["alive"] = true
+	hero["death_cause"] = ""
+	save_game()
+
+
+## Change le prochain étage de la Tour à conquérir (1 au minimum).
+func dev_set_floor(floor_number: int) -> void:
+	tower_floor = maxi(1, floor_number)
+	save_game()
+
+
+func dev_unlock_training() -> void:
+	weapon_draws = maxi(weapon_draws, TRAINING_UNLOCK_DRAWS)
+	save_game()
+
+
+## Les héros à l'entraînement (et à la cité) font une séance tout de suite.
+func dev_training_session() -> void:
+	update_training()
+	for hero in trainees():
+		if not is_away(hero):
+			hero["training_since"] = Time.get_unix_time_from_system() - TRAINING_SESSION_SECONDS
+	update_training()
+	save_game()
+
+
+## Le donjon journalier peut être refait aujourd'hui.
+func dev_reset_daily() -> void:
+	last_expedition_day = ""
+	save_game()
+
+
+## L'expédition en cours se termine tout de suite (tous ses ramassages compris).
+func dev_finish_expedition() -> void:
+	if expedition.is_empty():
+		return
+	var shift := float(expedition_remaining())
+	expedition["start"] -= shift
+	expedition["end"] -= shift
+	update_expedition()
+
+
+## Construit tous les bâtiments, gratuitement et sans conditions.
+func dev_build_all() -> void:
+	for building_id in BUILDINGS:
+		if not building_id in buildings:
+			buildings.append(building_id)
+	save_game()
+
+
+## Ajoute « count » de chaque matériau du donjon journalier (au grade voulu) et des pierres d'attribut.
+func dev_add_materials(grade: String, count: int) -> void:
+	for material in DAILY_DUNGEON["materials"]:
+		add_material(material, grade, count)
+	add_material(PROMOTION_STONE, "F", count)
+	save_game()
+
+
+## Donne tous les plans de forge.
+func dev_all_plans() -> void:
+	for weapon_type in WEAPON_TYPES:
+		if not weapon_type in plans:
+			plans.append(weapon_type)
+	save_game()

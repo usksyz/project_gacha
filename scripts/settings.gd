@@ -16,6 +16,20 @@ var new_visuals := true
 ## Émis quand on change de visuels : les écrans concernés se redessinent.
 signal visuals_changed
 
+## Mode dev (pour tester) : activé par un code secret, il donne de l'or et des gemmes infinis
+## et ouvre les outils du mode dev (Paramètres, et la fiche de chaque héros). Enregistré sur l'appareil :
+## il reste actif après « Recommencer la partie », jusqu'au bouton « Quitter le mode dev ».
+const DEV_CODE := "MODEDEV"
+var dev_mode := false
+
+## Émis quand le mode dev s'active ou se désactive.
+signal dev_mode_changed
+
+
+func _init() -> void:
+	# Lu dès la création (avant les autres scripts) : GameData en a besoin au lancement (or et gemmes).
+	load_settings()
+
 
 func _ready() -> void:
 	# Deux « bus » audio : la musique et les effets ont chacun leur volume.
@@ -25,7 +39,6 @@ func _ready() -> void:
 			AudioServer.add_bus(index)
 			AudioServer.set_bus_name(index, bus_name)
 			AudioServer.set_bus_send(index, "Master")
-	load_settings()
 	_apply_volumes()
 	# Sur le web, le navigateur n'autorise le plein écran qu'après un appui du joueur.
 	if fullscreen and not OS.has_feature("web"):
@@ -41,6 +54,11 @@ func change(setting: String, value: Variant) -> void:
 	save_settings()
 	if setting == "new_visuals":
 		visuals_changed.emit()
+	if setting == "dev_mode":
+		dev_mode_changed.emit()
+		# L'or et les gemmes affichés changent (infinis, ou les vraies réserves).
+		GameData.gold_changed.emit(GameData.gold)
+		GameData.gems_changed.emit(GameData.gems)
 
 
 ## Fait vibrer le téléphone (si les vibrations sont activées). « duration » en millisecondes.
@@ -72,6 +90,7 @@ func save_settings() -> void:
 	file.set_value("jeu", "vibrations", vibrations)
 	file.set_value("jeu", "plein_ecran", fullscreen)
 	file.set_value("affichage", "nouveaux_visuels", new_visuals)
+	file.set_value("jeu", "mode_dev", dev_mode)
 	file.save(FILE_PATH)
 
 
@@ -84,3 +103,4 @@ func load_settings() -> void:
 	vibrations = file.get_value("jeu", "vibrations", vibrations)
 	fullscreen = file.get_value("jeu", "plein_ecran", fullscreen)
 	new_visuals = file.get_value("affichage", "nouveaux_visuels", new_visuals)
+	dev_mode = file.get_value("jeu", "mode_dev", dev_mode)

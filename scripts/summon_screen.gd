@@ -134,20 +134,7 @@ func _build_ui() -> void:
 		_add_illustrated_summons(layout)
 	else:
 		_add_plain_summons(layout)
-
-	# Boutons temporaires pour tester sans limite d'or ni de gemmes.
-	var tests := HBoxContainer.new()
-	tests.add_theme_constant_override("separation", 16)
-	layout.add_child(tests)
-	var test_gems := UI.make_button("+1000 gemmes (test)", func(): GameData.add_gems(1000), 22)
-	var test_gold := UI.make_button("+50 000 or (test)", func(): GameData.add_gold(50000), 22)
-	var test_stones := UI.make_button("+5 pierres (test)", func():
-		GameData.add_material(GameData.PROMOTION_STONE, "F", 5)
-		GameData.save_game(), 22)
-	for button in [test_gems, test_gold, test_stones]:
-		button.custom_minimum_size.y = 64
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tests.add_child(button)
+	# (Les anciens boutons de test « +1000 gemmes »... sont remplacés par le mode dev.)
 
 
 ## Nouveaux visuels : une colonne par sorte d'invocation (nom, chances, « Détail des taux »),

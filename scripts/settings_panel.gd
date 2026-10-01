@@ -8,6 +8,9 @@ const DANGER_COLOR := Color("e05252")
 
 var code_pad: CodePad
 var reset_button: Button
+## Mode dev : son bouton (visible seulement en mode dev) et sa fenêtre d'outils.
+var dev_button: Button
+var dev_panel: DevPanel
 ## « Recommencer la partie » demande un deuxième appui pour confirmer.
 var reset_armed := false
 
@@ -68,6 +71,11 @@ func _ready() -> void:
 	var code_button := UI.make_button("Entrer un code", func(): code_pad.open(), 24)
 	code_button.custom_minimum_size.y = 80
 	content.add_child(code_button)
+	# Mode dev (activé par un code secret) : outils de test, or et gemmes infinis.
+	dev_button = UI.make_button("Outils du mode dev", func(): dev_panel.open(), 24)
+	dev_button.custom_minimum_size.y = 80
+	dev_button.add_theme_color_override("font_color", DANGER_COLOR)
+	content.add_child(dev_button)
 
 	_add_section(content, "Partie")
 	reset_button = UI.make_button("", _on_reset_pressed, 24)
@@ -86,12 +94,17 @@ func _ready() -> void:
 	# Le clavier des codes s'affiche par-dessus les paramètres.
 	code_pad = CodePad.new()
 	add_child(code_pad)
+	dev_panel = DevPanel.new()
+	add_child(dev_panel)
+	Settings.dev_mode_changed.connect(func(): dev_button.visible = Settings.dev_mode)
 
 
 func open() -> void:
 	reset_armed = false
 	reset_button.text = "Recommencer la partie"
 	code_pad.visible = false
+	dev_panel.visible = false
+	dev_button.visible = Settings.dev_mode
 	visible = true
 
 

@@ -74,6 +74,15 @@ func close() -> void:
 
 
 func _submit_code() -> void:
+	# Le code du mode dev (outils de test, or et gemmes infinis).
+	if input.text.strip_edges().to_upper() == Settings.DEV_CODE:
+		if Settings.dev_mode:
+			result.text = "Le mode dev est déjà actif."
+		else:
+			Settings.change("dev_mode", true)
+			result.text = "Mode dev activé : or et gemmes infinis. Outils dans Paramètres > « Outils du mode dev », et sur la fiche de chaque héros."
+		input.text = ""
+		return
 	var hero := GameData.redeem_code(input.text)
 	if hero.is_empty():
 		result.text = "Code invalide... ou déjà utilisé."

@@ -12,6 +12,11 @@ var grid: GridContainer
 var detail_overlay: Control
 ## Vrai quand on regarde les héros tombés au lieu des vivants.
 var show_dead := false
+## Fiche affichée : le héros et sa zone qui défile (pour la redessiner au même endroit en mode dev).
+var detail_hero: Dictionary = {}
+var detail_scroll: ScrollContainer
+## Annonce à montrer en haut de la fiche après un outil du mode dev (+1 étoile).
+var _dev_notice: Array = []
 
 
 func _ready() -> void:
@@ -128,15 +133,91 @@ func _add_promotion(content: VBoxContainer, hero: Dictionary) -> void:
 		why.add_theme_color_override("font_color", Color("e05252"))
 		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(why)
-	# Bouton temporaire pour tester sans monter les niveaux en combat.
-	if not GameData.is_max_level(hero):
-		var test := UI.make_button("+1 niveau (test)", func():
-			GameData.gain_xp(hero, GameData.xp_to_next(hero["level"]) - hero["xp"])
-			GameData.save_game()
-			_refresh()
-			_show_detail.call_deferred(hero), 20)
-		test.custom_minimum_size.y = 60
-		content.add_child(test)
+
+
+## Mode dev : outils de test sur ce héros (niveaux, expérience, étoiles, stats, compétences, résurrection).
+## Ils passent outre les règles du jeu (voir GameData, section « Mode dev »).
+func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
+	var title := UI.make_label("OUTILS DU MODE DEV", 24)
+	title.add_theme_color_override("font_color", Color("e05252"))
+	content.add_child(title)
+
+	_add_dev_row(content, [
+		["+1 niveau", func(): GameData.dev_add_levels(hero, 1)],
+		["+5 niveaux", func(): GameData.dev_add_levels(hero, 5)],
+		["Niveau max", func(): GameData.dev_add_levels(hero, GameData.MAX_LEVEL[hero["rarity"]])],
+	])
+	_add_dev_row(content, [
+		["+100 XP", func(): GameData.dev_add_xp(hero, 100)],
+		["+5 stats", func(): GameData.dev_add_stats(hero, 5)],
+		["-5 stats", func(): GameData.dev_add_stats(hero, -5)],
+	])
+	var star_row: Array = []
+	if hero["rarity"] < GameData.MAX_PROMOTION_RARITY:
+		star_row.append(["+1 étoile (gratuit)", func(): _dev_notice = GameData.dev_promote(hero)])
+	if not hero["alive"]:
+		star_row.append(["Ressusciter", func(): GameData.dev_revive(hero)])
+	if not star_row.is_empty():
+		_add_dev_row(content, star_row)
+
+	# Donner une compétence (toutes celles du jeu), ou la monter d'un niveau si le héros l'a déjà.
+	var give := HBoxContainer.new()
+	give.add_theme_constant_override("separation", 8)
+	content.add_child(give)
+	var menu := OptionButton.new()
+	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu.custom_minimum_size.y = 60
+	menu.add_theme_font_size_override("font_size", 18)
+	menu.get_popup().add_theme_font_size_override("font_size", 24)
+	for skill_name in GameData.SKILLS:
+		menu.add_item(skill_name)
+	give.add_child(menu)
+	give.add_child(_make_dev_button("Donner", func():
+		GameData.dev_give_skill(hero, menu.get_item_text(menu.selected))))
+
+	# Les compétences du héros : changer leur niveau, ou les retirer.
+	for skill in hero["skills"]:
+		var skill_name: String = skill["name"]
+		var label := UI.make_label("%s (niv. %d)" % [skill_name, skill["level"]], 18)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(label)
+		_add_dev_row(content, [
+			["-1", func(): GameData.dev_set_skill_level(hero, skill_name, skill["level"] - 1)],
+			["+1", func(): GameData.dev_set_skill_level(hero, skill_name, skill["level"] + 1)],
+			["Max", func(): GameData.dev_set_skill_level(hero, skill_name, GameData.SKILL_MAX_LEVEL)],
+			["Retirer", func(): GameData.dev_remove_skill(hero, skill_name)],
+		])
+
+
+## Une rangée de boutons du mode dev : [[texte, action], ...]. Après l'action, la fiche est redessinée.
+func _add_dev_row(content: VBoxContainer, entries: Array) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	content.add_child(row)
+	for entry in entries:
+		row.add_child(_make_dev_button(entry[0], entry[1]))
+
+
+func _make_dev_button(text: String, action: Callable) -> Button:
+	var button := UI.make_button(text, func():
+		action.call()
+		_redraw_detail.call_deferred(), 18)
+	button.custom_minimum_size.y = 56
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.add_theme_color_override("font_color", Color("ff9a8a"))
+	return button
+
+
+## Redessine la fiche du héros affiché (après un outil du mode dev), au même endroit de la page.
+func _redraw_detail() -> void:
+	var scroll_position := detail_scroll.scroll_vertical
+	var notice := _dev_notice
+	_dev_notice = []
+	_refresh()
+	_show_detail(detail_hero, notice)
+	if notice.is_empty():
+		await get_tree().process_frame
+		detail_scroll.scroll_vertical = scroll_position
 
 
 ## Affiche la fiche détaillée d'un héros. « notice » : une fenêtre système à montrer en haut
@@ -170,6 +251,8 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	# La fiche défile si elle est plus haute que l'écran (beaucoup de compétences...).
 	var scroll := UI.make_scroll()
 	panel.add_child(scroll)
+	detail_hero = hero
+	detail_scroll = scroll
 	var content := VBoxContainer.new()
 	content.custom_minimum_size.x = 496
 	content.add_theme_constant_override("separation", 16)
@@ -291,6 +374,8 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	content.add_child(status)
 
 	_add_promotion(content, hero)
+	if Settings.dev_mode:
+		_add_dev_tools(content, hero)
 
 	var close := UI.make_button("Fermer", func(): detail_overlay.visible = false)
 	close.custom_minimum_size.y = 90
