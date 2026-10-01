@@ -10,6 +10,11 @@ var music_volume := 80
 var sfx_volume := 80
 var vibrations := true
 var fullscreen := false
+## Nouveaux visuels (images de la « Piste graphique » du cahier des charges) ou anciens, pour comparer.
+var new_visuals := true
+
+## Émis quand on change de visuels : les écrans concernés se redessinent.
+signal visuals_changed
 
 
 func _ready() -> void:
@@ -34,6 +39,8 @@ func change(setting: String, value: Variant) -> void:
 	if setting == "fullscreen":
 		apply_fullscreen()
 	save_settings()
+	if setting == "new_visuals":
+		visuals_changed.emit()
 
 
 ## Fait vibrer le téléphone (si les vibrations sont activées). « duration » en millisecondes.
@@ -64,6 +71,7 @@ func save_settings() -> void:
 	file.set_value("son", "effets", sfx_volume)
 	file.set_value("jeu", "vibrations", vibrations)
 	file.set_value("jeu", "plein_ecran", fullscreen)
+	file.set_value("affichage", "nouveaux_visuels", new_visuals)
 	file.save(FILE_PATH)
 
 
@@ -75,3 +83,4 @@ func load_settings() -> void:
 	sfx_volume = file.get_value("son", "effets", sfx_volume)
 	vibrations = file.get_value("jeu", "vibrations", vibrations)
 	fullscreen = file.get_value("jeu", "plein_ecran", fullscreen)
+	new_visuals = file.get_value("affichage", "nouveaux_visuels", new_visuals)

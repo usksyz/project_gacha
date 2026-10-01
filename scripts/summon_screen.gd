@@ -4,6 +4,18 @@ extends Control
 ## chacune avec ses boutons x1 et x10, et l'affichage des héros obtenus.
 ## - normale : payée en or, héros de base ;
 ## - spéciale : payée en gemmes, meilleures chances de hauts rangs, seule à donner des mages.
+## Avec les nouveaux visuels (réglage Settings.new_visuals) : fond de portail, voile sombre, et
+## boutons illustrés (SummonButton) ; sinon, les anciens boutons simples, pour comparer.
+
+const PORTAL_IMAGE := preload("res://assets/ui/piste-fond-portail.jpg")
+## Voile sombre posé sur le portail, pour que les boutons et les textes restent lisibles.
+const VEIL_ALPHA := 0.4
+## Couleur du vortex de chaque bouton illustré : [rotation de teinte en degrés, saturation].
+## Normale (or) : vortex doré (x10) et cuivré (x1). Spéciale (gemmes) : rouge (x10) et violet (x1).
+const VORTEX_COLORS := {
+	"normal": {10: [-62.0, 1.0], 1: [-38.0, 0.8]},
+	"special": {10: [0.0, 1.0], 1: [58.0, 1.0]},
+}
 
 var pity_label: Label
 var roster_label: Label
@@ -17,6 +29,19 @@ func _ready() -> void:
 	_build_ui()
 	GameData.gems_changed.connect(func(_amount): _refresh_labels())
 	GameData.gold_changed.connect(func(_amount): _refresh_labels())
+	Settings.visuals_changed.connect(_rebuild)
+	_refresh_labels()
+
+
+## Changement de visuels (paramètres) : on reconstruit tout l'écran.
+func _rebuild() -> void:
+	if reveal_tween:
+		reveal_tween.kill()
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	summon_buttons.clear()
+	_build_ui()
 	_refresh_labels()
 
 
@@ -52,10 +77,29 @@ func _refresh_labels() -> void:
 	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %d invocations" % GameData.summons_before_pity()
 	roster_label.text = "Héros possédés : %d" % GameData.roster.size()
 	for entry in summon_buttons:
-		entry[2].disabled = not GameData.can_afford(entry[0], entry[1])
+		var affordable := GameData.can_afford(entry[0], entry[1])
+		if entry[2] is SummonButton:
+			entry[2].set_affordable(affordable)
+		else:
+			entry[2].disabled = not affordable
 
 
 func _build_ui() -> void:
+	if Settings.new_visuals:
+		# Le portail en plein écran (rogné sur les côtés s'il le faut, jamais déformé), puis le voile.
+		var portal := TextureRect.new()
+		portal.texture = PORTAL_IMAGE
+		portal.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portal.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portal.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(portal)
+		var veil := ColorRect.new()
+		veil.color = Color(0, 0, 0, VEIL_ALPHA)
+		veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+		veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(veil)
+
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
@@ -86,7 +130,76 @@ func _build_ui() -> void:
 	roster_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(roster_label)
 
-	# Une ligne par sorte d'invocation : son nom, ses chances, puis les boutons x1 et x10.
+	if Settings.new_visuals:
+		_add_illustrated_summons(layout)
+	else:
+		_add_plain_summons(layout)
+
+	# Boutons temporaires pour tester sans limite d'or ni de gemmes.
+	var tests := HBoxContainer.new()
+	tests.add_theme_constant_override("separation", 16)
+	layout.add_child(tests)
+	var test_gems := UI.make_button("+1000 gemmes (test)", func(): GameData.add_gems(1000), 22)
+	var test_gold := UI.make_button("+50 000 or (test)", func(): GameData.add_gold(50000), 22)
+	var test_stones := UI.make_button("+5 pierres (test)", func():
+		GameData.add_material(GameData.PROMOTION_STONE, "F", 5)
+		GameData.save_game(), 22)
+	for button in [test_gems, test_gold, test_stones]:
+		button.custom_minimum_size.y = 64
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tests.add_child(button)
+
+
+## Nouveaux visuels : une colonne par sorte d'invocation (nom, chances, « Détail des taux »),
+## avec ses deux boutons illustrés x1 et x10 côte à côte.
+func _add_illustrated_summons(layout: VBoxContainer) -> void:
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 24)
+	layout.add_child(columns)
+	for summon_type in GameData.SUMMON_TYPES:
+		var info: Dictionary = GameData.SUMMON_TYPES[summon_type]
+		var column := VBoxContainer.new()
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		column.add_theme_constant_override("separation", 6)
+		columns.add_child(column)
+		var name_label := UI.make_label(info["name"], 24)
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		name_label.add_theme_constant_override("outline_size", 4)
+		column.add_child(name_label)
+		var rates := UI.make_label(_rates_text(info), 15)
+		rates.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rates.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rates.modulate = Color(1, 1, 1, 0.75)
+		rates.custom_minimum_size.y = 48  # deux lignes, pour que les boutons des deux colonnes soient alignés
+		column.add_child(rates)
+		var details := UI.make_button("Détail des taux", func(): _show_rates(summon_type), 18)
+		column.add_child(details)
+		var buttons := HBoxContainer.new()
+		buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+		buttons.add_theme_constant_override("separation", 8)
+		column.add_child(buttons)
+		for count in [1, 10]:
+			var color: Array = VORTEX_COLORS[summon_type][count]
+			var button := SummonButton.new(count, _cost_text(info, count), color[0], color[1], 150)
+			button.pressed.connect(func(): _on_summon(summon_type, count))
+			buttons.add_child(button)
+			summon_buttons.append([summon_type, count, button])
+
+
+## « 50 000 or », « 1 000 gemmes ».
+func _cost_text(info: Dictionary, count: int) -> String:
+	var amount := str(info["cost"] * count)
+	var grouped := ""
+	for i in amount.length():
+		if i > 0 and (amount.length() - i) % 3 == 0:
+			grouped += " "
+		grouped += amount[i]
+	return "%s %s" % [grouped, "or" if info["currency"] == "gold" else "gemmes"]
+
+
+## Anciens visuels : une ligne par sorte d'invocation, son nom, ses chances, puis les boutons x1 et x10.
+func _add_plain_summons(layout: VBoxContainer) -> void:
 	for summon_type in GameData.SUMMON_TYPES:
 		var info: Dictionary = GameData.SUMMON_TYPES[summon_type]
 		var header := HBoxContainer.new()
@@ -107,20 +220,6 @@ func _build_ui() -> void:
 			var button := _make_summon_button(summon_type, count)
 			buttons.add_child(button)
 			summon_buttons.append([summon_type, count, button])
-
-	# Boutons temporaires pour tester sans limite d'or ni de gemmes.
-	var tests := HBoxContainer.new()
-	tests.add_theme_constant_override("separation", 16)
-	layout.add_child(tests)
-	var test_gems := UI.make_button("+1000 gemmes (test)", func(): GameData.add_gems(1000), 22)
-	var test_gold := UI.make_button("+50 000 or (test)", func(): GameData.add_gold(50000), 22)
-	var test_stones := UI.make_button("+5 pierres (test)", func():
-		GameData.add_material(GameData.PROMOTION_STONE, "F", 5)
-		GameData.save_game(), 22)
-	for button in [test_gems, test_gold, test_stones]:
-		button.custom_minimum_size.y = 64
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tests.add_child(button)
 
 
 ## Fenêtre du détail des taux : pour chaque rareté d'étoiles, la répartition des classes.

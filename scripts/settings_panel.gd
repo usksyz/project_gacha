@@ -58,6 +58,8 @@ func _ready() -> void:
 	_add_section(content, "Jeu")
 	_add_toggle_row(content, "Vibrations", "vibrations")
 	_add_toggle_row(content, "Plein écran", "fullscreen")
+	# Pour comparer les images de la piste graphique avec les anciens visuels.
+	_add_toggle_row(content, "Nouveaux visuels", "new_visuals")
 	var language := UI.make_label("Français", 24)
 	language.modulate = Color(1, 1, 1, 0.7)
 	_add_row(content, "Langue", language)
