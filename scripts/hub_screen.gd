@@ -90,6 +90,11 @@ func _on_zone_pressed(zone: Dictionary) -> void:
 		info_label.text = "%s : encore fermé. Il s'ouvre après %d armes tirées à l'Armurerie (%d / %d)." % [
 			zone["name"], GameData.TRAINING_UNLOCK_DRAWS, GameData.weapon_draws, GameData.TRAINING_UNLOCK_DRAWS]
 		return
+	# La chambre de synthèse se construit d'abord (bouton « Construction »).
+	if zone["target"] == "synthesis" and not "synthese" in GameData.buildings:
+		info_label.text = "%s : pas encore construite. Construis-la avec le bouton « Construction » (%d gemmes)." \
+			% [zone["name"], GameData.BUILDINGS["synthese"]["cost"]]
+		return
 	# Le laboratoire d'alchimie est un bâtiment de magie : il faut le construire (avec un mage).
 	if zone["name"] == GameData.BUILDINGS["laboratoire"]["name"]:
 		if "laboratoire" in GameData.buildings:

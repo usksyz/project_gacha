@@ -287,10 +287,14 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	# Compétences de promotion qui changent les valeurs de départ : Volonté de fer (vie), Coup précis (critiques).
 	var skills: Array = source.get("skills", [])
 	var max_hp := roundi(stats["hp"] * (1.0 + GameData.skill_level(skills, "Volonté de fer") * GameData.IRON_WILL_HP_PER_LEVEL))
-	var crit_bonus := GameData.skill_level(skills, "Coup précis") * GameData.PRECISE_STRIKE_CRIT_PER_LEVEL
+	var crit_bonus := GameData.skill_level(skills, "Coup précis") * GameData.PRECISE_STRIKE_CRIT_PER_LEVEL \
+		+ GameData.skill_level(skills, "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL
 	var reach := RANGED_RANGE if fighter_class in ["Archer", "Mage", "Soigneur"] else MELEE_RANGE
 	if not gear.is_empty():
 		reach = gear["reach"]
+	# Œil de faucon (synthèse) : les tireurs voient et tirent plus loin.
+	if reach > MELEE_REACH_MAX:
+		reach += GameData.skill_level(skills, "Œil de faucon") * GameData.HAWK_EYE_REACH_PER_LEVEL
 	return {
 		"name": source["name"],
 		"class": fighter_class,
@@ -756,8 +760,13 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
 ## « kind » : "hit" (corps à corps), "arrow" (flèche) ou "spell" (sort).
 func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false, kind := "hit") -> int:
-	# Mouvement souple : une chance d'éviter complètement le coup.
-	if randf() < GameData.skill_level(target["skills"], "Mouvement souple") * DODGE_PER_LEVEL:
+	# Mouvement souple : une chance d'éviter complètement le coup (moins face à la précision
+	# d'Analyse froide, et à celle d'Œil de faucon pour les flèches et les sorts).
+	var dodge: float = GameData.skill_level(target["skills"], "Mouvement souple") * DODGE_PER_LEVEL \
+		- GameData.skill_level(attacker["skills"], "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL
+	if kind != "hit":
+		dodge -= GameData.skill_level(attacker["skills"], "Œil de faucon") * GameData.HAWK_EYE_PRECISION_PER_LEVEL
+	if randf() < dodge:
 		return -1
 	# Maîtrise de l'arme que tient l'attaquant (épée, arc...) : chaque niveau renforce ses coups.
 	if kind != "spell" and attacker["weapon_skill"] != "":

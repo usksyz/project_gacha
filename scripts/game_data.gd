@@ -144,6 +144,8 @@ const SKILLS := {
 	"Indomptable": "Saignements et hémorragies : 10 % plus faibles par niveau. S'éveille chez un héros qui saigne en situation critique.",
 	"Tueur de gobelins": "Contre les gobelins : +10 % de dégâts par niveau. Exploit : coup fatal au boss de l'étage 5, ou 50 gobelins tués.",
 	"Esprit combatif": "Évolution de Résistance à la douleur (au niveau 10) : garde ses effets, et +5 % de dégâts par niveau sous la moitié de sa vie.",
+	"Analyse froide": "Observation logique : +10 % de précision (la cible esquive moins) et +10 % de coups critiques par niveau. Rare : 1 % de chances après une synthèse.",
+	"Œil de faucon": "Vision et précision à distance : pour les tirs (flèches et sorts), +0,3 case de portée et +5 % de précision par niveau. S'obtient en synthèse, pour ceux qui se battent de loin.",
 	"Volonté de fer": "Compétence de promotion : +10 % de vie maximum par niveau.",
 	"Second souffle": "Compétence de promotion : une fois par combat, sous 25 % de sa vie, reprend 15 % de sa vie (+5 % par niveau au-delà du premier).",
 	"Coup précis": "Compétence de promotion : +5 % de coups critiques par niveau.",
@@ -647,6 +649,9 @@ func gear_stats(hero: Dictionary) -> Dictionary:
 ## « cost » : prix en gemmes ; « mage » : il faut un mage pour le construire ;
 ## « info » : ce que fait le bâtiment ; « built » : l'annonce une fois construit.
 const BUILDINGS := {
+	"synthese": {"name": "Chambre de synthèse", "cost": 500, "mage": false, "needs_training": false,
+		"info": "On y sacrifie un héros pour en renforcer un autre (synthèse).",
+		"built": "La chambre de synthèse a été construite avec succès !"},
 	"forge": {"name": "Forge", "cost": 500, "mage": false,
 		"info": "Annexe de l'armurerie : fabrique des armes avec les matériaux du donjon journalier.",
 		"built": "La forge a été construite avec succès !"},
@@ -726,7 +731,7 @@ func has_magic_hall() -> bool:
 func build_problem(building_id: String) -> String:
 	if building_id in buildings:
 		return "Déjà construit."
-	if not training_unlocked():
+	if BUILDINGS[building_id].get("needs_training", true) and not training_unlocked():
 		return "Il faut d'abord le terrain d'entraînement."
 	if BUILDINGS[building_id]["mage"] and not has_mage():
 		return "Il faut un mage parmi tes héros."
@@ -1791,6 +1796,132 @@ func promote(hero: Dictionary) -> Array[String]:
 		hero["skills"].append({"name": skill_name, "rank": "Spéciale", "level": 1})
 		lines.append("Compétence spéciale : %s." % skill_name)
 	save_game()
+	return lines
+
+
+# ---------------------------------------------------------------------------
+# Synthèse de héros (chambre de synthèse)
+# ---------------------------------------------------------------------------
+# On sacrifie un ou plusieurs héros (de n'importe quel rang) pour en renforcer un autre (cahier :
+# « on fusionne 2 héros ou plus : un seul survit »). Les sacrifiés disparaissent pour toujours (comme
+# une mort, leurs armes sont perdues avec eux). Le héros renforcé :
+# - gagne de l'expérience, et au moins un niveau (cahier : « le héros renforcé monte de niveau »),
+#   sauf s'il est déjà au niveau maximum ;
+# - pour chaque sacrifié, a des chances de récupérer une de ses compétences, au niveau 1 (compétence héritée) ;
+# - s'il se bat de loin, a des chances de gagner Œil de faucon (cahier : Jenna l'obtient en synthèse) ;
+# - très rarement, gagne Analyse froide.
+# (Le cahier parle aussi d'une perte de moral : elle viendra avec le moral, en phase 5.)
+# Chiffres provisoires.
+
+## Nombre de héros qu'on peut sacrifier d'un coup.
+const SYNTHESIS_MAX_SACRIFICES := 5
+## Expérience gagnée par sacrifié : une base, plus (niveau x étoiles du sacrifié) x ce nombre.
+const SYNTHESIS_XP_BASE := 20
+const SYNTHESIS_XP_PER_LEVEL_STAR := 10
+## Chance de récupérer une compétence de chaque sacrifié (au niveau 1), et chance d'Analyse froide.
+const INHERIT_CHANCE := 0.2
+const COLD_ANALYSIS_CHANCE := 0.01
+## Analyse froide : précision et coups critiques en plus, par niveau (0.1 = 10 %).
+## La précision réduit les chances d'esquive de la cible.
+const COLD_ANALYSIS_PER_LEVEL := 0.1
+## Œil de faucon : chance à chaque synthèse (apprise, ou un niveau de plus) pour les classes qui
+## se battent de loin ; puis, pour les tirs (flèches et sorts), portée en plus (en cases) et
+## précision en plus, par niveau.
+const HAWK_EYE_CHANCE := 0.3
+const HAWK_EYE_CLASSES := ["Archer", "Mage", "Soigneur"]
+const HAWK_EYE_REACH_PER_LEVEL := 0.3
+const HAWK_EYE_PRECISION_PER_LEVEL := 0.05
+
+
+## Expérience que le héros renforcé gagne en sacrifiant « sacrifice ».
+func synthesis_xp(sacrifice: Dictionary) -> int:
+	return SYNTHESIS_XP_BASE + sacrifice["level"] * sacrifice["rarity"] * SYNTHESIS_XP_PER_LEVEL_STAR
+
+
+## Expérience totale d'une synthèse : celle de chaque sacrifié, et au moins de quoi monter
+## d'un niveau. 0 si le héros est déjà au niveau maximum.
+func synthesis_total_xp(target: Dictionary, sacrifices: Array) -> int:
+	if is_max_level(target):
+		return 0
+	var xp := 0
+	for sacrifice in sacrifices:
+		xp += synthesis_xp(sacrifice)
+	return maxi(xp, xp_to_next(target["level"]) - target["xp"])
+
+
+## Pourquoi ce héros ne peut pas être sacrifié pour renforcer « target » (texte), ou "" si c'est possible.
+func synthesis_problem(target: Dictionary, sacrifice: Dictionary) -> String:
+	if not "synthese" in buildings:
+		return "La chambre de synthèse n'est pas construite."
+	if target["id"] == sacrifice["id"]:
+		return "Un héros ne peut pas se sacrifier pour lui-même."
+	if not target["alive"] or not sacrifice["alive"]:
+		return "Les deux héros doivent être en vie."
+	if sacrifice.get("secret", false):
+		return "Un héros légendaire ne peut pas être sacrifié."
+	if is_away(target) or is_away(sacrifice):
+		return "Les deux héros doivent être à la cité."
+	return ""
+
+
+## Vrai si ce héros peut gagner Œil de faucon en synthèse (sa classe se bat de loin).
+func can_get_hawk_eye(hero: Dictionary) -> bool:
+	return hero["class"] in HAWK_EYE_CLASSES and _own_skill_level(hero["skills"], "Œil de faucon") < SKILL_MAX_LEVEL
+
+
+## La synthèse : « sacrifices » disparaissent pour renforcer « target ».
+## Renvoie les lignes à annoncer, ou [] si c'est impossible.
+func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
+	var lines: Array[String] = []
+	if sacrifices.is_empty() or sacrifices.size() > SYNTHESIS_MAX_SACRIFICES:
+		return lines
+	for sacrifice in sacrifices:
+		if synthesis_problem(target, sacrifice) != "":
+			return lines
+
+	var xp := synthesis_total_xp(target, sacrifices)
+	# Les sacrifiés disparaissent pour toujours.
+	for sacrifice in sacrifices:
+		sacrifice["alive"] = false
+		sacrifice["death_cause"] = "sacrifié en synthèse pour renforcer %s" % target["name"]
+		_remove_from_teams(sacrifice["id"])
+		lines.append("%s (%s) a disparu pour toujours." % [sacrifice["name"], "★".repeat(sacrifice["rarity"])])
+
+	if xp == 0:
+		lines.append("%s est déjà au niveau maximum : l'expérience est perdue (pense à la promotion)." % target["name"])
+	else:
+		var levels := gain_xp(target, xp)
+		lines.append("%s gagne %d d'expérience%s." % [target["name"], xp,
+			" et passe au niveau %d" % target["level"] if levels > 0 else ""])
+
+	# Compétence héritée : pour chaque sacrifié, une chance de récupérer une de ses compétences.
+	for sacrifice in sacrifices:
+		if randf() >= INHERIT_CHANCE:
+			continue
+		var candidates := []
+		for skill in sacrifice["skills"]:
+			if can_learn_skill(target, target["skills"], skill["name"]) and not skill["name"] in SKILL_FUSIONS:
+				candidates.append(skill["name"])
+		if not candidates.is_empty():
+			var inherited: String = candidates.pick_random()
+			target["skills"].append(new_skill(inherited))
+			lines.append("Compétence héritée de %s : %s (niveau 1) !" % [sacrifice["name"], inherited])
+	# Œil de faucon : pour ceux qui se battent de loin ; un niveau de plus s'ils l'ont déjà.
+	if can_get_hawk_eye(target) and randf() < HAWK_EYE_CHANCE:
+		var level := _own_skill_level(target["skills"], "Œil de faucon")
+		if level == 0:
+			target["skills"].append(new_skill("Œil de faucon"))
+			lines.append("Nouvelle compétence : Œil de faucon !")
+		else:
+			for skill in target["skills"]:
+				if skill["name"] == "Œil de faucon":
+					skill["level"] += 1
+			lines.append("Œil de faucon passe au niveau %d !" % (level + 1))
+	# Analyse froide : très rare, juste après une synthèse.
+	if randf() < COLD_ANALYSIS_CHANCE and can_learn_skill(target, target["skills"], "Analyse froide"):
+		target["skills"].append(new_skill("Analyse froide"))
+		lines.append("Compétence rare : Analyse froide !")
+	tidy_arsenal()  # les armes des sacrifiés sont perdues (et la partie est sauvegardée)
 	return lines
 
 

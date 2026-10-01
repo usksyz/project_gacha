@@ -19,6 +19,7 @@ const HUB_SCREENS := {
 	"training": "Terrain d'entraînement",
 	"armory": "Armurerie",
 	"forge": "Forge",
+	"synthesis": "Chambre de synthèse",
 }
 
 var screens := {}
@@ -64,6 +65,9 @@ func _ready() -> void:
 	var forge := ForgeScreen.new()
 	forge.navigate.connect(show_screen)
 	screens["forge"] = forge
+	var synthesis := SynthesisScreen.new()
+	synthesis.navigate.connect(show_screen)
+	screens["synthesis"] = synthesis
 	for screen in screens.values():
 		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 		content.add_child(screen)

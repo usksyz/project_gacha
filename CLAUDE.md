@@ -123,6 +123,15 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   chance affichée (Certaine... Infime) avec Oui / Non, production automatique ou puzzle
   (`scripts/forge_puzzle.gd`, 5 difficultés du cahier, 3 minutes, succès / grand / phénoménal).
   Les assistants de la forge deviennent artisans (compétence « Forge ») en travaillant.
+- Chambre de synthèse (`scripts/synthesis_screen.gd`, ouverte depuis le hub, construite 500 gemmes sans
+  attendre le terrain d'entraînement) : on choisit le héros à renforcer, puis 1 à `SYNTHESIS_MAX_SACRIFICES`
+  (5) héros à sacrifier, de n'importe quel rang (recherche `HeroFilter`) ; fenêtre rouge de confirmation.
+  Les sacrifiés meurent pour toujours (cause gardée, armes perdues). Le héros renforcé gagne l'expérience de
+  chaque sacrifié et au moins un niveau (cahier : « monte de niveau ») ; 20 % par sacrifié de récupérer une
+  de ses compétences au niveau 1 ; Œil de faucon (30 %, archers, mages, soigneurs : portée et précision des
+  tirs) ; Analyse froide (1 %). Règles et chiffres provisoires dans `GameData` (section « Synthèse de héros »).
+  Les héros secrets ne peuvent pas être sacrifiés. Reste : perte de moral (avec le moral, phase 5),
+  glisser-déposer du cahier (on touche les cartes pour l'instant), salle de promotion dans la chambre.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
 ## Avancement (phases du cahier des charges)
@@ -150,8 +159,8 @@ Ils sont immortels ; Han est présent dès le début, les autres s'obtiennent pa
   `MANA_REGEN_PER_INT` par seconde ; sort de zone et soin coûtent du mana, à sec le mage lance un petit
   trait gratuit et le soigneur ne soigne plus (compte surtout dans les longs combats). Écran de combat :
   encart de l'équipe sous la carte, demandé par le porteur du projet (héros côte à côte, PV actuels / max
-  et pourcentage, mana chiffrée, toucher = choisir le héros) et barre de vie du boss en haut : fait. Phase 1 terminée, sauf les compétences liées à la synthèse (compétence héritée,
-  Analyse froide), qui attendent la salle de synthèse (phase 4).
+  et pourcentage, mana chiffrée, toucher = choisir le héros) et barre de vie du boss en haut : fait. Phase 1 terminée, y compris les compétences liées à la synthèse
+  (compétence héritée, Analyse froide, Œil de faucon : voir la chambre de synthèse).
   Reste plus tard : autres fusions (Âme de l'épée...), rangs de compétence, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec
