@@ -113,11 +113,7 @@ func _draw_weapons(count: int) -> void:
 	for weapon in weapons:
 		lines.append(GameData.weapon_name(weapon))
 	result_box.add_child(UI.make_system_window("Tirage d'armes", lines))
-	# Annonce de l'ouverture du terrain d'entraînement, au tirage qui la déclenche.
-	var before: int = GameData.weapon_draws - weapons.size()
-	if before < GameData.TRAINING_UNLOCK_DRAWS and GameData.training_unlocked():
-		result_box.add_child(UI.make_system_window("Félicitations !",
-			["Le terrain d'entraînement a été construit avec succès !"]))
+	# (L'ouverture du terrain d'entraînement est annoncée par main.gd : GameData.facility_completed.)
 	info_label.text = "Les nouvelles armes sont dans l'arsenal : les héros les prendront en partant en mission."
 	_refresh()
 

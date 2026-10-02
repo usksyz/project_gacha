@@ -11,6 +11,9 @@ signal gold_changed(new_amount: int)
 signal training_updated
 ## Quelque chose a changé dans la cité sans que le joueur y touche (retour du donjon journalier...).
 signal lobby_updated
+## Un bâtiment s'est construit tout seul, sa condition remplie (terrain d'entraînement...) :
+## main.gd l'annonce dans une fenêtre, et le hub 3D joue l'animation de construction.
+signal facility_completed(title: String, lines: Array)
 
 # ---------------------------------------------------------------------------
 # Invocation
@@ -495,7 +498,10 @@ func draw_weapons(count: int) -> Array[Dictionary]:
 	if gold < WEAPON_DRAW_COST * count:
 		return results
 	gold -= WEAPON_DRAW_COST * count
+	var was_unlocked := training_unlocked()
 	weapon_draws += count
+	if not was_unlocked and training_unlocked():
+		_announce_training_ground()
 	for i in count:
 		var weapon := {"id": next_weapon_id, "type": WEAPON_TYPES.keys().pick_random(),
 			"grade": _roll_grade(), "owner": 0}
@@ -785,6 +791,14 @@ func build(building_id: String) -> Array[String]:
 # son programme) : le temps passé dans la Tour ne compte pas, et il reprend l'entraînement après.
 # Plus tard : le temps du lobby ira 3 fois plus vite que le temps réel, et les héros iront
 # d'eux-mêmes au terrain d'entraînement.
+
+## Le terrain d'entraînement vient de se construire tout seul (assez d'armes tirées) : on l'annonce.
+func _announce_training_ground() -> void:
+	facility_completed.emit("Construction terminée", [
+		"Le terrain d'entraînement a été construit avec succès !",
+		"Tes héros peuvent y apprendre des compétences, même quand le jeu est fermé.",
+	])
+
 
 ## Vrai quand le terrain d'entraînement est ouvert (assez d'armes tirées).
 func training_unlocked() -> bool:
@@ -2503,8 +2517,11 @@ func dev_set_floor(floor_number: int) -> void:
 
 
 func dev_unlock_training() -> void:
+	var was_unlocked := training_unlocked()
 	weapon_draws = maxi(weapon_draws, TRAINING_UNLOCK_DRAWS)
 	save_game()
+	if not was_unlocked:
+		_announce_training_ground()
 
 
 ## Les héros à l'entraînement (et à la cité) font une séance tout de suite.

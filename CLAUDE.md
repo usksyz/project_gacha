@@ -80,9 +80,16 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (`HubCity3D`, une `SubViewport` 3D faite de formes simples), affiché avec les nouveaux visuels ; les
   anciens gardent le plan 2D `HubMap`. Disposition d'après le plan du manhwa (`PLACES`, rues `CROSSINGS` /
   `STREETS`) : rempart à 12 pans, résidences à l'ouest, combat au nord, place en roue au nord-est face à
-  la faille (arche dans le rempart). Ombres, brume, halo ; arbres et créneaux en `MultiMesh` (téléphone).
-  Bâtiment pas construit : terrain balisé « à construire ». L'hologramme cyan n'est que l'animation de
-  construction (précision du porteur du projet) : le bâtiment monte du sol, des pixels scintillent.
+  la faille (arche dans le rempart). Demandes du porteur du projet : la cité vole dans le néant (ciel
+  étoilé en shader, rocher sous la cité, rochers et cristaux en suspension, courants cyan), style
+  médiéval sombre et détaillé (modèles et textures dessinées par le code dans `scripts/city_models.gd`,
+  `CityModels` : briques, pavés, tuiles, colombages, fenêtres éclairées). Arbres, créneaux, lanternes en
+  `MultiMesh` (téléphone). Un bâtiment pas construit n'apparaît pas dans la cité : on le voit en
+  hologramme qui tourne dans le menu Construction (`scripts/holo_preview.gd`). Une fois construit (payé,
+  ou condition remplie : terrain d'entraînement, annoncé par `GameData.facility_completed` et une fenêtre
+  de `main.gd`), la caméra va vers lui et il monte du sol en hologramme cyan, des pixels scintillent
+  (l'hologramme n'est que l'animation de construction). L'animation attend qu'aucune fenêtre ne couvre
+  la cité (`HubCity3D.paused`, `hold`).
   Les héros y vivent en suivant les rues (`AStar3D`) : terrain d'entraînement s'ils s'entraînent, devant
   leur bâtiment s'ils sont assistants, sinon promenade (place, rues des résidences) ; départ en mission
   par la faille, retour par la zone de débarquement,

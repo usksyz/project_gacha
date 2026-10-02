@@ -83,6 +83,37 @@ func _ready() -> void:
 	show_screen("hub")
 	if not GameData.absence_report.is_empty():
 		_show_absence_report()
+	GameData.facility_completed.connect(_show_facility_completed)
+
+
+## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle
+## est ouverte, le hub 3D garde son animation de construction pour après.
+func _show_facility_completed(title: String, lines: Array) -> void:
+	Settings.vibrate(150)
+	HubCity3D.paused = true
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.75)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	box.add_child(UI.make_system_window(title, lines))
+	var close := func(go_to_hub: bool):
+		overlay.queue_free()
+		HubCity3D.paused = false
+		if go_to_hub:
+			show_screen("hub")
+	var see := UI.make_button("Voir dans la cité", func(): close.call(true), 24)
+	see.custom_minimum_size.y = 80
+	box.add_child(see)
+	var later := UI.make_button("Plus tard", func(): close.call(false), 22)
+	later.custom_minimum_size.y = 70
+	box.add_child(later)
 
 
 ## Le jeu a été fermé en plein combat : on annonce comment les héros s'en sont sortis seuls.

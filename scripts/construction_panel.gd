@@ -3,6 +3,16 @@ extends Control
 ## Fenêtre de construction (bouton « Construction » du hub) : la forge et les bâtiments de magie
 ## (ceux-là seulement avec un mage parmi ses héros ; règles dans GameData, section
 ## « Construction »). S'affiche par-dessus l'écran ; on l'ouvre avec open().
+## Avec les nouveaux visuels, chaque bâtiment pas encore construit est montré en hologramme qui
+## tourne (HoloPreview) ; une fois construit, la fenêtre se ferme pour laisser voir son animation
+## de construction dans la cité.
+
+## Un bâtiment vient d'être construit (messages à afficher).
+signal built(messages: Array)
+
+## Modèle 3D (CityModels) de chaque bâtiment.
+const MODELS := {"synthese": "synthese", "forge": "forge", "atelier_magie": "atelier_magie",
+	"laboratoire": "lab", "bibliotheque": "bibliotheque"}
 
 var list: VBoxContainer
 var result: Label
@@ -71,7 +81,16 @@ func _refresh() -> void:
 		panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b"), Color("9b6be0"), 2))
 		var box := VBoxContainer.new()
 		box.add_theme_constant_override("separation", 6)
-		panel.add_child(box)
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if Settings.new_visuals and not building_id in GameData.buildings and MODELS.has(building_id):
+			# L'hologramme du bâtiment à gauche, sa fiche à droite.
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 12)
+			panel.add_child(row)
+			row.add_child(HoloPreview.new(MODELS[building_id]))
+			row.add_child(box)
+		else:
+			panel.add_child(box)
 		box.add_child(UI.make_label(info["name"], 24))
 		var role := UI.make_label(info["info"] + ("" if building_id == "forge" else " (fonction à venir)"), 18)
 		role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -102,3 +121,6 @@ func _build(building_id: String) -> void:
 	var messages := GameData.build(building_id)
 	result.text = "\n".join(messages)
 	_refresh()
+	if not messages.is_empty() and Settings.new_visuals:
+		visible = false  # on laisse voir l'animation de construction dans la cité
+		built.emit(messages)

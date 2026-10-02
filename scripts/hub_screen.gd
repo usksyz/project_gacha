@@ -75,6 +75,7 @@ func _ready() -> void:
 	code_pad = CodePad.new()
 	add_child(code_pad)
 	construction_panel = ConstructionPanel.new()
+	construction_panel.built.connect(_on_built)
 	add_child(construction_panel)
 	assignment_panel = AssignmentPanel.new()
 	add_child(assignment_panel)
@@ -122,6 +123,18 @@ func _on_hero_pressed(hero: Dictionary) -> void:
 		doing = "travaille comme assistant : %s" % GameData.BUILDINGS[hero["post"]]["name"]
 	info_label.text = "%s (%s, %s, niv. %d) %s." % [hero["name"], "★".repeat(hero["rarity"]),
 		hero["class"], hero["level"], doing]
+
+
+## La cité 3D garde ses animations de construction tant qu'une fenêtre du hub la couvre.
+func _process(_delta: float) -> void:
+	if map is HubCity3D:
+		map.hold = construction_panel.visible or assignment_panel.visible or code_pad.visible
+
+
+## Un bâtiment vient d'être construit (menu Construction, qui se ferme) : on l'annonce ici ;
+## la cité 3D joue son animation de construction.
+func _on_built(messages: Array) -> void:
+	info_label.text = " ".join(messages)
 
 
 func on_shown() -> void:
