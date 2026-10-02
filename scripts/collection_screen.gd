@@ -92,7 +92,7 @@ func _refresh() -> void:
 	var heroes := filter.apply(group)
 
 	for hero in heroes:
-		var card := UI.make_hero_card(hero)
+		var card := UI.make_card(hero)
 		card.pressed.connect(func(): _show_detail(hero))
 		grid.add_child(card)
 

@@ -288,12 +288,8 @@ func _refresh_teams_page() -> void:
 	# Taille d'une carte d'équipe (plus haute avec le cadre illustré des nouveaux visuels).
 	var slot_size := FramedHeroCard.size_for(108) if Settings.new_visuals else Vector2(108, 150)
 	for hero in members:
-		var card: Button
-		if Settings.new_visuals:
-			card = FramedHeroCard.new(hero, slot_size.x)
-		else:
-			card = UI.make_hero_card(hero)
-			card.custom_minimum_size = slot_size
+		var card := UI.make_card(hero, slot_size.x)
+		card.custom_minimum_size = slot_size
 		card.pressed.connect(_toggle_team_member.bind(hero["id"]))  # toucher une carte la retire
 		team_slots.add_child(card)
 	for i in GameData.TEAM_SIZE - members.size():
@@ -590,11 +586,9 @@ func _fill_hero_grid(grid: GridContainer, heroes: Array[Dictionary], chosen_ids:
 		grid.remove_child(child)
 		child.queue_free()
 	for hero in heroes:
-		var card := UI.make_hero_card(hero)
+		var card := UI.make_card(hero)
 		if hero["id"] in chosen_ids:
-			var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
-			var style := UI.make_panel_style(color.darkened(0.2), Color.WHITE, 8)
-			UI.set_button_style(card, style, style)
+			UI.mark_card_chosen(card, hero)
 		card.pressed.connect(on_press.bind(hero["id"]))
 		grid.add_child(card)
 

@@ -107,6 +107,22 @@ func _init(hero_data: Dictionary, width: float, detailed := false) -> void:
 		modulate = Color(0.45, 0.45, 0.45)
 
 
+## Carte choisie (équipe, sacrifice...) : un cadre lumineux de cette couleur par-dessus.
+func set_chosen(color: Color) -> void:
+	var glow := Panel.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(color, 0.12)
+	style.border_color = color
+	style.set_border_width_all(maxi(3, roundi(6 * scale_factor)))
+	style.set_corner_radius_all(roundi(14 * scale_factor))
+	style.shadow_color = Color(color, 0.6)
+	style.shadow_size = roundi(10 * scale_factor)
+	glow.add_theme_stylebox_override("panel", style)
+	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(glow)
+
+
 ## Taille d'une carte de cette largeur (la hauteur suit les proportions de l'image).
 static func size_for(width: float) -> Vector2:
 	return Vector2(width, roundf(width * CROP.size.y / CROP.size.x))

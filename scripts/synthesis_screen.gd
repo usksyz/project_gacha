@@ -187,10 +187,9 @@ func _fill_grid(heroes: Array, on_press: Callable) -> void:
 
 
 func _add_card(hero: Dictionary, on_press: Callable, chosen := false) -> void:
-	var card := UI.make_hero_card(hero)
+	var card := UI.make_card(hero)
 	if chosen:
-		var style := UI.make_panel_style(Color("5a1f1f"), Color("e05252"), 8)
-		UI.set_button_style(card, style, style)
+		UI.mark_card_chosen(card, hero, Color("e05252"))  # rouge : il sera sacrifié
 	card.pressed.connect(func():
 		on_press.call(hero)
 		_refresh.call_deferred())

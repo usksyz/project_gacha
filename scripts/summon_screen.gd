@@ -67,7 +67,7 @@ func _show_results(heroes: Array[Dictionary]) -> void:
 
 	reveal_tween = create_tween()
 	for hero in heroes:
-		var card := UI.make_hero_card(hero)
+		var card := UI.make_card(hero, 104)
 		card.modulate.a = 0.0
 		results_grid.add_child(card)
 		reveal_tween.tween_property(card, "modulate:a", 1.0, 0.15)

@@ -151,6 +151,24 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 	return windows
 
 
+## Carte d'un héros pour les listes : le cadre illustré (FramedHeroCard) avec les nouveaux visuels,
+## sinon l'ancienne carte simple (make_hero_card). « width » : largeur de la carte illustrée.
+static func make_card(hero: Dictionary, width := 120.0) -> Button:
+	if Settings.new_visuals:
+		return FramedHeroCard.new(hero, width)
+	return make_hero_card(hero)
+
+
+## Marque une carte comme choisie (dans une équipe, pour un sacrifice...), avec la couleur voulue.
+static func mark_card_chosen(card: Button, hero: Dictionary, color := Color.WHITE) -> void:
+	if card is FramedHeroCard:
+		card.set_chosen(color)
+		return
+	var rarity_color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+	var style := make_panel_style(rarity_color.darkened(0.2), color, 8)
+	set_button_style(card, style, style)
+
+
 ## Carte d'un héros (rareté, nom, classe). C'est un bouton : on peut appuyer dessus.
 static func make_hero_card(hero: Dictionary) -> Button:
 	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]

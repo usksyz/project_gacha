@@ -90,7 +90,7 @@ func _make_entry(hero: Dictionary) -> Control:
 	panel.add_child(row)
 
 	# La carte : toucher la carte choisit le héros, comme le bouton.
-	var card: Button = FramedHeroCard.new(hero, 120) if Settings.new_visuals else UI.make_hero_card(hero)
+	var card := UI.make_card(hero)
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	card.pressed.connect(_toggle.bind(hero["name"]))
 	card.disabled = owned
