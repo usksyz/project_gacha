@@ -231,9 +231,12 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Bouton « Détail des taux » sur l'écran d'invocation.
   Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;
   `_roll_stats`, `MAGE_STAT_MALUS`). Avoir un mage vivant permet de construire les bâtiments de magie
-  (`GameData.BUILDINGS` : atelier de magie, laboratoire d'alchimie, bibliothèque, en gemmes, après
-  l'ouverture du terrain d'entraînement ; les trois fusionnent en Hall de magie) : bouton « Construction »
-  du hub (`scripts/construction_panel.gd`). Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
+  (`GameData.BUILDINGS` : atelier de magie, laboratoire d'alchimie, bibliothèque ; les trois fusionnent en
+  Hall de magie) : bouton « Construction » du hub (`scripts/construction_panel.gd`). Choix du porteur du
+  projet : le premier, l'atelier de magie, se construit tout seul et gratuitement dès qu'un mage vivant
+  rejoint les héros (`"auto": "mage"`, `GameData.check_auto_buildings()`, appelée par `save_game()`),
+  avec la fenêtre « Construction terminée » et l'animation du hub 3D. Les deux autres : en gemmes, après
+  l'ouverture du terrain d'entraînement. Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : construction, affectations, donjon journalier, entrepôt
   et forge : premières versions faites. Reste : niveaux de bâtiment, autres donjons journaliers et matériaux

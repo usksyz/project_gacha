@@ -680,7 +680,9 @@ const BUILDINGS := {
 	"forge": {"name": "Forge", "cost": 500, "mage": false,
 		"info": "Annexe de l'armurerie : fabrique des armes avec les matériaux du donjon journalier.",
 		"built": "La forge a été construite avec succès !"},
-	"atelier_magie": {"name": "Atelier de magie", "cost": 500, "mage": true,
+	# Choix du porteur du projet : le premier bâtiment de magie se construit tout seul, gratuitement,
+	# quand un mage rejoint les héros (« auto »).
+	"atelier_magie": {"name": "Atelier de magie", "cost": 0, "mage": true, "auto": "mage", "needs_training": false,
 		"info": "Débloque la fonction « Recherche ».",
 		"built": "L'atelier de magie a été construit avec succès !"},
 	"laboratoire": {"name": "Laboratoire d'alchimie", "cost": 500, "mage": true,
@@ -744,6 +746,23 @@ func has_mage() -> bool:
 	return false
 
 
+## Les bâtiments qui se construisent tout seuls quand leur condition est remplie (atelier de magie :
+## un mage parmi les héros). Appelée à chaque sauvegarde (donc après tout changement) et au lancement.
+## Renvoie vrai si quelque chose a été construit.
+func check_auto_buildings() -> bool:
+	var done := false
+	for building_id in BUILDINGS:
+		var info: Dictionary = BUILDINGS[building_id]
+		if info.get("auto", "") == "mage" and not building_id in buildings and has_mage():
+			buildings.append(building_id)
+			done = true
+			var lines: Array = [info["built"], "Un mage a rejoint tes héros : le premier bâtiment de magie est né."]
+			if has_magic_hall():
+				lines.append("Les trois bâtiments fusionnent : le %s est né !" % MAGIC_HALL_NAME)
+			facility_completed.emit.call_deferred("Construction terminée", lines)
+	return done
+
+
 ## Vrai quand les trois bâtiments de magie sont construits (ils forment alors le Hall de magie).
 func has_magic_hall() -> bool:
 	for building_id in MAGIC_BUILDINGS:
@@ -756,6 +775,8 @@ func has_magic_hall() -> bool:
 func build_problem(building_id: String) -> String:
 	if building_id in buildings:
 		return "Déjà construit."
+	if BUILDINGS[building_id].get("auto", "") == "mage":
+		return "Se construit tout seul quand un mage rejoint tes héros."
 	if BUILDINGS[building_id].get("needs_training", true) and not training_unlocked():
 		return "Il faut d'abord le terrain d'entraînement."
 	if BUILDINGS[building_id]["mage"] and not has_mage():
@@ -1415,7 +1436,7 @@ func _ready() -> void:
 	# puis on les fait avancer toutes les 5 secondes.
 	update_expedition()
 	update_training()
-	tidy_arsenal()  # (anciennes sauvegardes) les héros à la cité reposent leurs armes
+	tidy_arsenal()  # (anciennes sauvegardes) les héros à la cité reposent leurs armes ; voir aussi check_auto_buildings
 	var timer := Timer.new()
 	timer.wait_time = 5.0
 	timer.timeout.connect(func():
@@ -1473,6 +1494,7 @@ const SAVE_VERSION := 1
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
 func save_game() -> void:
+	check_auto_buildings()  # un changement peut remplir la condition d'un bâtiment (nouveau mage...)
 	var file := ConfigFile.new()
 	file.set_value("partie", "version", SAVE_VERSION)
 	file.set_value("partie", "gemmes", real_gems)
