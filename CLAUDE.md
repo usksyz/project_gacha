@@ -191,7 +191,11 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
   impossible au niveau de départ). C'est un palier réservé aux héros équipés, avec des compétences
   et de l'expérience : ne pas l'adoucir sans lui demander.
-  Reste : matériaux gradés, glisser-déposer, équipes de 3 et quêtes à deux équipes,
+  Écran de fin : or, gemmes, matériaux gradés de la Tour (`tower_materials`, grade selon le palier
+  `TOWER_MATERIAL_GRADES`, provisoire : le cahier montre du C dès l'étage 1 ; le charbon remplace le cuir,
+  qui n'existe pas encore ; rien en rejouant un étage), pierres d'attribut des boss, une case par objet
+  (`UI.make_reward_items`), armes perdues avec les morts (`report["lost_weapons"]`), niveaux, MVP : fait.
+  Reste : glisser-déposer, équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
   mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.

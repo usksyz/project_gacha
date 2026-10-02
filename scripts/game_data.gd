@@ -2157,6 +2157,26 @@ func tower_rewards(floor_number: int) -> Dictionary:
 	}
 
 
+## Grade des matériaux gagnés dans la Tour, selon le palier (étages 1-4, 5-9, 10-14...).
+## Chiffres provisoires : le cahier montre du « Fer (C) » dès l'étage 1, mais à la forge le grade du minerai
+## donne le rang de l'arme : du C si tôt rendrait le tirage d'armes inutile. À valider avec le porteur du projet.
+const TOWER_MATERIAL_GRADES := ["E", "D", "C-", "C", "C+"]
+
+
+## Matériaux gagnés en conquérant un étage (cahier : « Fer (C) x1, Cuir (C) x3 » à l'étage 1,
+## « Fer (C) x2, Cuir (C) x3 » à l'étage 4). Le cuir n'existe pas encore dans le jeu : le charbon le
+## remplace. Un étage de boss donne en plus un cristal brut. Renvoie [{"name", "grade", "count"}].
+func tower_materials(floor_number: int) -> Array[Dictionary]:
+	var grade: String = TOWER_MATERIAL_GRADES[mini(floor_tier(floor_number), TOWER_MATERIAL_GRADES.size() - 1)]
+	var items: Array[Dictionary] = [
+		{"name": "Minerai de fer", "grade": grade, "count": 1 + floor_number / 4},
+		{"name": "Charbon", "grade": grade, "count": 3 + floor_number / 6},
+	]
+	if is_boss_floor(floor_number):
+		items.append({"name": "Cristal brut", "grade": grade, "count": 1})
+	return items
+
+
 ## Quête d'un étage : son type, son objectif et ses règles.
 ## Étage 1 : extermination ; étage 2 : subjugation ; ensuite annihilation ;
 ## tous les 5 étages : survie face à une horde (niveau des ennemis caché) ;
@@ -2319,6 +2339,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"level_ups": [],  # [{"hero": ..., "levels": ...}]
 		"skills": [],     # compétences apprises ou améliorées pendant le combat (textes)
 		"notices": [],    # annonces spéciales (déblocages...)
+		"items": [],      # objets gagnés, rangés dans l'entrepôt : [{"name", "grade", "count"}]
+		"lost_weapons": [],  # armes perdues avec les héros morts (textes)
 		"mvp": battle.mvp(),
 		"floor": floor_number,
 		"replay": replay,  # étage déjà conquis, rejoué pour s'entraîner
@@ -2333,6 +2355,10 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			# La cause est gardée sur la fiche du héros (et donc dans la sauvegarde).
 			fighter["source"]["death_cause"] = fighter["killer"]
 			report["dead"].append({"hero": fighter["source"], "cause": fighter["killer"]})
+			# Ses armes sont perdues avec lui (tidy_arsenal les retire plus bas).
+			for weapon in arsenal:
+				if weapon["owner"] == fighter["source"]["id"]:
+					report["lost_weapons"].append("%s : %s" % [fighter["source"]["name"], weapon_name(weapon)])
 
 	var rewards := tower_rewards(floor_number)
 	if replay:
@@ -2343,10 +2369,13 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		report.merge(rewards, true)
 		if not replay:
 			tower_floor += 1
+			# Matériaux gradés, rangés dans l'entrepôt (pas en rejouant un étage : on ne les gagne qu'une fois).
+			report["items"].append_array(tower_materials(floor_number))
 			# Objet de promotion : un étage de boss conquis donne des pierres d'attribut.
 			if is_boss_floor(floor_number):
-				add_material(PROMOTION_STONE, "F", BOSS_STONES)
-				report["stones"] = BOSS_STONES
+				report["items"].append({"name": PROMOTION_STONE, "grade": "F", "count": BOSS_STONES})
+			for item in report["items"]:
+				add_material(item["name"], item["grade"], item["count"])
 		add_gold(rewards["gold"])
 		add_gems(rewards["gems"])
 	else:

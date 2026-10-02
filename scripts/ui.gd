@@ -126,6 +126,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 			"%s (%s) a quitté ce monde pour toujours." % [hero["name"], rarity_text(hero["rarity"])],
 			"Cause : %s." % death["cause"],
 		], true))
+	if not report.get("lost_weapons", []).is_empty():
+		windows.append(make_system_window("Armes perdues", report["lost_weapons"], true))
 	if not report["notices"].is_empty():
 		windows.append(make_system_window("Félicitations !", report["notices"]))
 	if not report["skills"].is_empty():
@@ -133,9 +135,11 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 
 	var lines := []
 	if report["victory"]:
-		lines.append(make_gem_amount("+%d or   +%d" % [report["gold"], report["gems"]], 22))
-		if report.get("stones", 0) > 0:
-			lines.append("+%d %s (pour la promotion)" % [report["stones"], GameData.PROMOTION_STONE])
+		lines.append(make_gem_amount("+%s or   +%d" % [format_number(report["gold"]), report["gems"]], 22))
+		var items: Array = report.get("items", [])
+		if not items.is_empty():
+			lines.append(make_reward_items(items))
+			lines.append("Rangés dans l'entrepôt.")
 	else:
 		lines.append("Les survivants sont ramenés à la cité.")
 	lines.append("+%d expérience pour chaque survivant" % report["xp"])
@@ -149,6 +153,62 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		title = "Étage réussi (entraînement)" if report.get("replay", false) else "Étage conquis !"
 	windows.append(make_system_window(title, lines))
 	return windows
+
+
+## Icônes provisoires des objets (en attendant de vraies images) ; sinon, l'initiale du nom.
+const ITEM_ICONS := {"Minerai de fer": "Fe", "Charbon": "Ch", "Cristal brut": "Cr", "Pierre d'attribut": "◆"}
+
+
+## Les objets gagnés, une case par objet (cahier : « les récompenses s'affichent avec une icône par objet »).
+## « items » : [{"name", "grade", "count"}].
+static func make_reward_items(items: Array) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = mini(items.size(), 4)
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	for item in items:
+		grid.add_child(make_reward_item(item["name"], item["grade"], item["count"]))
+	return grid
+
+
+## Une case d'objet : l'icône (provisoire : l'initiale du matériau), le grade dans le coin,
+## la quantité en bas et le nom dessous. Le cadre a la couleur du grade.
+static func make_reward_item(item_name: String, grade: String, count: int) -> VBoxContainer:
+	var color := ArmoryScreen.grade_color(grade)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = Vector2(92, 92)
+	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	slot.add_theme_stylebox_override("panel", make_panel_style(color.darkened(0.75), color, 3))
+	box.add_child(slot)
+
+	var letter := make_label(ITEM_ICONS.get(item_name, item_name.left(1).to_upper()), 40)
+	letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	letter.add_theme_color_override("font_color", color.lightened(0.3))
+	slot.add_child(letter)
+
+	var grade_label := make_label(grade, 16)
+	grade_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	grade_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	grade_label.add_theme_color_override("font_color", color.lightened(0.4))
+	slot.add_child(grade_label)
+
+	var count_label := make_label("x%d" % count, 18)
+	count_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	count_label.size_flags_vertical = Control.SIZE_SHRINK_END
+	slot.add_child(count_label)
+
+	var name_label := make_label(item_name, 14)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.custom_minimum_size.x = 100
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(name_label)
+	return box
 
 
 ## Carte d'un héros pour les listes : le cadre illustré (FramedHeroCard) avec les nouveaux visuels,
