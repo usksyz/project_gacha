@@ -267,10 +267,12 @@ func _on_portraits_input(event: InputEvent) -> void:
 func _update_clock() -> void:
 	var limit: float = battle.quest["seconds"]
 	var text := ""
-	if battle.quest["lasting"]:
-		text = "Encore %s" % _format_time(limit - battle.time)
+	if battle.clock_start < 0:
+		text = "Décompte de %s au premier contact" %_format_time(limit)  # survie : le décompte attend
+	elif battle.quest["lasting"]:
+		text = "Encore %s" % _format_time(limit - battle.clock_time())
 	else:
-		text = "%s / %s" % [_format_time(battle.time), _format_time(limit)]
+		text = "%s / %s" % [_format_time(battle.clock_time()), _format_time(limit)]
 	if battle.quest["walls"] > 0:
 		text += "   Remparts %d" % battle.walls
 	clock_label.text = text

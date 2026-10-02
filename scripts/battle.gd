@@ -68,6 +68,9 @@ const REINFORCE_DELAY := 2.0
 
 ## Quête utilisée quand on n'en donne pas : tuer tous les ennemis en 90 secondes au plus.
 const DEFAULT_QUEST := {"type": "extermination", "lasting": false, "seconds": 90, "hidden_level": false, "walls": 0}
+## Quête de survie : si aucun coup n'est échangé au bout de ce temps (secondes),
+## le compte à rebours démarre quand même (pour qu'un combat ne dure jamais sans fin).
+const CONTACT_WAIT_MAX := 60.0
 
 # --- Déplacements et attaques ---
 
@@ -162,6 +165,10 @@ var events: Array[Dictionary] = []
 ## "text": « -12 », « esquive ! », « +20 »..., "crit": bool}.
 var effects: Array[Dictionary] = []
 
+## Moment où le compte à rebours a démarré (-1 : pas encore). En survie, il attend le premier
+## contact avec les ennemis (premier coup donné ou reçu) ; sinon, il démarre tout de suite.
+var clock_start := 0.0
+
 var victory := false
 ## Vrai quand le combat est terminé (victoire, défaite, temps écoulé).
 var finished := false
@@ -177,6 +184,8 @@ var _free_since := {}
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
 	quest = floor_quest
 	walls = quest["walls"]
+	if quest.get("wait_contact", false):
+		clock_start = -1.0
 	for hero in team:
 		heroes.append(_make_fighter(hero, true))
 	for enemy in foes:
@@ -201,7 +210,10 @@ func step() -> void:
 		unit["prev_pos"] = unit["pos"]  # pour que l'écran glisse en douceur d'un pas à l'autre
 	_step()
 	time += TICK
-	if not finished and time >= quest["seconds"]:
+	# Sécurité : si personne ne s'est encore touché après CONTACT_WAIT_MAX, le décompte démarre quand même.
+	if clock_start < 0 and time >= CONTACT_WAIT_MAX:
+		_start_clock()
+	if not finished and clock_time() >= quest["seconds"]:
 		if quest["lasting"]:
 			victory = true
 			_log("Le compte à rebours est terminé : ton équipe a tenu bon ! Victoire !")
@@ -215,6 +227,19 @@ func run() -> void:
 	start()
 	while not finished:
 		step()
+
+
+## Temps écoulé sur le compte à rebours (0 tant qu'il n'a pas démarré).
+func clock_time() -> float:
+	return 0.0 if clock_start < 0 else time - clock_start
+
+
+## Démarre le compte à rebours (survie : au premier contact avec les ennemis).
+func _start_clock() -> void:
+	if clock_start >= 0:
+		return
+	clock_start = time
+	_log("Premier contact avec la horde : le compte à rebours commence !")
 
 
 func _finish() -> void:
@@ -760,6 +785,7 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
 ## « kind » : "hit" (corps à corps), "arrow" (flèche) ou "spell" (sort).
 func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false, kind := "hit") -> int:
+	_start_clock()  # premier coup échangé : c'est le contact (rien ne change si le décompte tourne déjà)
 	# Mouvement souple : une chance d'éviter complètement le coup (moins face à la précision
 	# d'Analyse froide, et à celle d'Œil de faucon pour les flèches et les sorts).
 	var dodge: float = GameData.skill_level(target["skills"], "Mouvement souple") * DODGE_PER_LEVEL \

@@ -2177,6 +2177,8 @@ func floor_quest(floor_number: int) -> Dictionary:
 	quest["seconds"] = SURVIVAL_SECONDS if quest["lasting"] else KILL_QUEST_SECONDS
 	quest["warnings"] = 3 if type == "defense" else 0
 	quest["hidden_level"] = type == "survival"
+	# Survie (cahier) : « le décompte ne démarre qu'au premier contact avec les ennemis ».
+	quest["wait_contact"] = type == "survival"
 	quest["walls"] = DEFENSE_WALLS if type == "defense" else 0
 	return quest
 

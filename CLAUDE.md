@@ -182,7 +182,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Reste plus tard : autres fusions (Âme de l'épée...), rangs de compétence, consignes en combat.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec
-  renforts, survie à la horde tous les 5 étages (niveau caché), défense de la cité tous les 10 étages
+  renforts, survie à la horde tous les 5 étages (niveau caché, ruelles, compte à rebours lancé au premier
+  coup échangé : `quest["wait_contact"]`, `Battle.clock_time()`), défense de la cité tous les 10 étages
   (remparts, triple avertissement), limite de tours, annonce du donjon journalier après l'étage 5 : fait.
   Au combat, 6 ennemis au plus à la fois, les autres arrivent en renfort.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus

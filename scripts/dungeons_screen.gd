@@ -373,6 +373,8 @@ func _play_announce(floor_number: int) -> void:
 	]
 	if floor_quest["lasting"]:
 		lines.append("Compte à rebours : %d secondes à tenir." % floor_quest["seconds"])
+		if floor_quest.get("wait_contact", false):
+			lines.append("Le décompte ne démarre qu'au premier contact avec les ennemis.")
 	else:
 		lines.append("Limite de temps : %d secondes." % floor_quest["seconds"])
 	if floor_quest["walls"] > 0:
