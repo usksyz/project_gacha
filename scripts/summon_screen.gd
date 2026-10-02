@@ -75,9 +75,13 @@ func _show_results(heroes: Array[Dictionary]) -> void:
 
 func _refresh_labels() -> void:
 	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %d invocations" % GameData.summons_before_pity()
-	roster_label.text = "Héros possédés : %d" % GameData.roster.size()
+	var alive := GameData.alive_heroes().size()
+	roster_label.text = "Héros : %d / %d" % [alive, GameData.HERO_LIMIT]
+	if GameData.free_hero_slots() == 0:
+		roster_label.text += " — résidences pleines"
 	for entry in summon_buttons:
-		var affordable := GameData.can_afford(entry[0], entry[1])
+		# On ne peut invoquer que si l'on peut payer ET s'il reste assez de place dans les résidences.
+		var affordable: bool = GameData.can_afford(entry[0], entry[1]) and entry[1] <= GameData.free_hero_slots()
 		if entry[2] is SummonButton:
 			entry[2].set_affordable(affordable)
 		else:

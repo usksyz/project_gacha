@@ -15,6 +15,9 @@ const OUTSIDE_ZONES := [
 ]
 
 var info_label: Label
+## La cité (HubCity3D ou HubMap) et la colonne qui la contient.
+var map: Control
+var map_layout: VBoxContainer
 
 ## Clavier des codes secrets, ouvert par la Place publique (aussi disponible dans les paramètres).
 var code_pad: CodePad
@@ -36,10 +39,10 @@ func _ready() -> void:
 	layout.add_theme_constant_override("separation", 16)
 	margin.add_child(layout)
 
-	var map := HubMap.new()
-	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	map.zone_pressed.connect(_on_zone_pressed)
+	map_layout = layout
+	map = _make_map()
 	layout.add_child(map)
+	Settings.visuals_changed.connect(_swap_map)
 
 	var outside := HBoxContainer.new()
 	outside.add_theme_constant_override("separation", 16)
@@ -64,7 +67,7 @@ func _ready() -> void:
 	info_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b")))
 	info_panel.custom_minimum_size.y = 100
 	layout.add_child(info_panel)
-	info_label = UI.make_label("Appuie sur un lieu de la cité.", 22)
+	info_label = UI.make_label(_default_info(), 22)
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	info_panel.add_child(info_label)
@@ -75,6 +78,50 @@ func _ready() -> void:
 	add_child(construction_panel)
 	assignment_panel = AssignmentPanel.new()
 	add_child(assignment_panel)
+
+
+## La cité : en 3D avec les nouveaux visuels (HubCity3D, où l'on voit vivre les héros),
+## sinon l'ancien plan dessiné (HubMap), gardé pour comparer.
+func _make_map() -> Control:
+	var new_map: Control
+	if Settings.new_visuals:
+		var city := HubCity3D.new()
+		city.zone_pressed.connect(_on_zone_pressed)
+		city.hero_pressed.connect(_on_hero_pressed)
+		new_map = city
+	else:
+		var plan := HubMap.new()
+		plan.zone_pressed.connect(_on_zone_pressed)
+		new_map = plan
+	new_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	return new_map
+
+
+## Changement de visuels (paramètres) : on remplace la cité par l'autre version.
+func _swap_map() -> void:
+	var index := map.get_index()
+	map.queue_free()
+	map = _make_map()
+	map_layout.add_child(map)
+	map_layout.move_child(map, index)
+	info_label.text = _default_info()
+
+
+func _default_info() -> String:
+	if Settings.new_visuals:
+		return "Glisse pour te déplacer, pince pour zoomer. Touche un lieu ou un héros."
+	return "Appuie sur un lieu de la cité."
+
+
+## Un héros touché dans la cité 3D : ce qu'il est en train de faire.
+func _on_hero_pressed(hero: Dictionary) -> void:
+	var doing := "se promène dans la cité"
+	if hero.get("training", "") != "" and GameData.training_unlocked():
+		doing = "s'entraîne au terrain (%s)" % hero["training"]
+	elif hero.get("post", "") != "" and GameData.BUILDINGS.has(hero["post"]):
+		doing = "travaille comme assistant : %s" % GameData.BUILDINGS[hero["post"]]["name"]
+	info_label.text = "%s (%s, %s, niv. %d) %s." % [hero["name"], "★".repeat(hero["rarity"]),
+		hero["class"], hero["level"], doing]
 
 
 func on_shown() -> void:

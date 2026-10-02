@@ -25,10 +25,15 @@ signal lobby_updated
 ## « rates » : probabilité de chaque rareté (le total fait 1.0, soit 100 %). Chiffres provisoires.
 const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
-		"rates": {5: 0.0, 4: 0.01, 3: 0.08, 2: 0.31, 1: 0.60}},
+		"rates": {5: 0.0, 4: 0.10, 3: 0.15, 2: 0.25, 1: 0.50}},  # taux choisis par le porteur du projet
 	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
 		"rates": {5: 0.02, 4: 0.08, 3: 0.20, 2: 0.30, 1: 0.40}},
 }
+
+## Nombre maximum de héros vivants pour invoquer, choix du porteur du projet (les morts ne comptent pas ;
+## les héros secrets comptent, mais s'obtiennent toujours par code, même plein). Chiffre provisoire : plus tard, il grandira
+## avec le niveau des résidences (cahier : « la résidence a atteint le niv. 2, sa capacité d'accueil a augmenté »).
+const HERO_LIMIT := 50
 
 ## Pity de l'invocation spéciale : un héros 5 étoiles est garanti au bout de ce nombre
 ## d'invocations spéciales sans 5 étoiles.
@@ -1609,11 +1614,16 @@ func can_afford(summon_type: String, count: int) -> bool:
 	return money >= info["cost"] * count
 
 
+## Places libres dans les résidences : combien de héros on peut encore invoquer (voir HERO_LIMIT).
+func free_hero_slots() -> int:
+	return maxi(0, HERO_LIMIT - alive_heroes().size())
+
+
 ## Invoque « count » héros (invocation « normal » ou « special ») et renvoie la liste des héros
 ## obtenus (liste vide si on n'a pas de quoi payer).
 func summon(summon_type: String, count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	if not can_afford(summon_type, count):
+	if not can_afford(summon_type, count) or count > free_hero_slots():
 		return results
 
 	var info: Dictionary = SUMMON_TYPES[summon_type]

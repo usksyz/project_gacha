@@ -76,6 +76,14 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
   `MAX_ROWS` résultats, on demande d'affiner la recherche. La collection cache les héros morts (bouton « Tombés »).
+- Hub 3D (demande du porteur du projet, d'après le plan de la cité du manhwa) : `scripts/hub_city_3d.gd`
+  (`HubCity3D`, une `SubViewport` 3D faite de formes simples), affiché avec les nouveaux visuels ; les
+  anciens gardent le plan 2D `HubMap`. Bâtiments pas encore construits en hologramme cyan. Les héros y
+  vivent : terrain d'entraînement s'ils s'entraînent, devant leur bâtiment s'ils sont assistants, sinon
+  promenade (place, résidences) ; départ en mission par la faille, retour par la zone de débarquement,
+  nouveaux héros par la salle d'invocation. Un doigt : déplacer ; deux doigts / molette : zoom ;
+  toucher un lieu (même fonctionnement que `HubMap`) ou un héros (ce qu'il fait). Noms en texte 2D
+  par-dessus la 3D. Reste : vrais modèles, temps du lobby x3, héros qui choisissent d'eux-mêmes.
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
   `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, composition des
@@ -200,7 +208,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
   mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
   L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
-  en jeu, précision du porteur du projet) : 1 % de 4 étoiles, pas de 5 étoiles. Autres taux provisoires.
+  en jeu, précision du porteur du projet). Taux de l'invocation en or choisis par le porteur du projet :
+  1 étoile 50 %, 2 étoiles 25 %, 3 étoiles 15 %, 4 étoiles 10 %, pas de 5 étoiles. Autres taux provisoires.
+  Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
+  niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
   Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice ;
   mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (environ 0,3 % des invocations).
   Bouton « Détail des taux » sur l'écran d'invocation.
