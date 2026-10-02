@@ -27,7 +27,8 @@ const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
 		"rates": {5: 0.0, 4: 0.10, 3: 0.15, 2: 0.25, 1: 0.50}},  # taux choisis par le porteur du projet
 	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
-		"rates": {5: 0.02, 4: 0.08, 3: 0.20, 2: 0.30, 1: 0.40}},
+		# Choix du porteur du projet : comme l'or, mais moins de 1 étoile, un peu plus des autres, et des 5 étoiles.
+		"rates": {5: 0.03, 4: 0.15, 3: 0.20, 2: 0.27, 1: 0.35}},
 }
 
 ## Nombre maximum de héros vivants pour invoquer, choix du porteur du projet (les morts ne comptent pas ;
@@ -52,8 +53,8 @@ const RARITY_COLORS := {
 ## on tire la classe selon ce tableau (le total de chaque ligne fait 1.0, soit 100 %).
 ## Les 1 et 2 étoiles sont des gens ordinaires : tous « Novice ».
 ## Les mages ne s'obtiennent que par invocation spéciale, avec une très très faible chance :
-## 1 % des 3 étoiles et plus. Comme 30 % des invocations spéciales donnent un 3 étoiles ou plus,
-## environ 0,3 % des invocations spéciales donnent un mage (à peu près 1 toutes les 330).
+## 1 % des 3 étoiles et plus. Comme 38 % des invocations spéciales donnent un 3 étoiles ou plus,
+## environ 0,4 % des invocations spéciales donnent un mage (à peu près 1 toutes les 260).
 ## Dans l'invocation normale, la part des mages est simplement retirée du tirage.
 ## Chiffres provisoires, à régler.
 const CLASS_RATES := {

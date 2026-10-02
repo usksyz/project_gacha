@@ -213,7 +213,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
   niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
   Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice ;
-  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (environ 0,3 % des invocations).
+  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (environ 0,4 % des invocations).
+  Taux de l'invocation spéciale (choix du porteur du projet) : 1 étoile 35 %, 2 étoiles 27 %,
+  3 étoiles 20 %, 4 étoiles 15 %, 5 étoiles 3 % (pity de 50 en plus).
   Bouton « Détail des taux » sur l'écran d'invocation.
   Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;
   `_roll_stats`, `MAGE_STAT_MALUS`). Avoir un mage vivant permet de construire les bâtiments de magie
