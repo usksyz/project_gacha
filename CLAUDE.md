@@ -78,9 +78,14 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   `MAX_ROWS` résultats, on demande d'affiner la recherche. La collection cache les héros morts (bouton « Tombés »).
 - Hub 3D (demande du porteur du projet, d'après le plan de la cité du manhwa) : `scripts/hub_city_3d.gd`
   (`HubCity3D`, une `SubViewport` 3D faite de formes simples), affiché avec les nouveaux visuels ; les
-  anciens gardent le plan 2D `HubMap`. Bâtiments pas encore construits en hologramme cyan. Les héros y
-  vivent : terrain d'entraînement s'ils s'entraînent, devant leur bâtiment s'ils sont assistants, sinon
-  promenade (place, résidences) ; départ en mission par la faille, retour par la zone de débarquement,
+  anciens gardent le plan 2D `HubMap`. Disposition d'après le plan du manhwa (`PLACES`, rues `CROSSINGS` /
+  `STREETS`) : rempart à 12 pans, résidences à l'ouest, combat au nord, place en roue au nord-est face à
+  la faille (arche dans le rempart). Ombres, brume, halo ; arbres et créneaux en `MultiMesh` (téléphone).
+  Bâtiment pas construit : terrain balisé « à construire ». L'hologramme cyan n'est que l'animation de
+  construction (précision du porteur du projet) : le bâtiment monte du sol, des pixels scintillent.
+  Les héros y vivent en suivant les rues (`AStar3D`) : terrain d'entraînement s'ils s'entraînent, devant
+  leur bâtiment s'ils sont assistants, sinon promenade (place, rues des résidences) ; départ en mission
+  par la faille, retour par la zone de débarquement,
   nouveaux héros par la salle d'invocation. Un doigt : déplacer ; deux doigts / molette : zoom ;
   toucher un lieu (même fonctionnement que `HubMap`) ou un héros (ce qu'il fait). Noms en texte 2D
   par-dessus la 3D. Reste : vrais modèles, temps du lobby x3, héros qui choisissent d'eux-mêmes.
