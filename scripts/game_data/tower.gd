@@ -364,7 +364,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if mental_line != "":
 				report["mental"].append(mental_line)
 	# Les ambitieux laissés à la cité stressent (voir personality.gd).
-	mental_left_out(battle.heroes.map(func(fighter): return fighter["source"]["id"]), report["mental"])
+	mental_left_out(battle.heroes.map(func(fighter): return fighter["source"]), report["mental"])
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 

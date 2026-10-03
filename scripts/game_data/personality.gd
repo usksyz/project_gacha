@@ -55,7 +55,7 @@ const TRAITS := {
 	"Paresseux": "(Plus tard : refuse parfois l'entraînement ou une affectation.)",
 	"Querelleur": "(Plus tard : crée des hostilités au lobby.)",
 	"Protecteur": "Stresse deux fois plus quand un allié meurt. (Plus tard : couvre ses alliés.)",
-	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un combat de la Tour se fait sans lui.",
+	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un héros plus faible part dans la Tour à sa place.",
 	"Mauvais": "(Plus tard : baisse l'efficacité du lobby.)",
 }
 ## Chance d'avoir un deuxième trait (sinon un seul).
@@ -65,11 +65,13 @@ const INCOMPATIBLE_TRAITS := [["Courageux", "Lâche"]]
 ## Un trait encore caché se révèle tous les TRAIT_REVEAL_FIGHTS combats de la Tour finis.
 const TRAIT_REVEAL_FIGHTS := 5
 ## Effets sur le stress : face aux boss (Courageux, Lâche), à la mort d'un allié (Protecteur),
-## et perte d'un Ambitieux pour chaque combat de la Tour fait sans lui.
+## et perte d'un Ambitieux quand un héros plus faible (niveau × étoiles) part dans la Tour à sa place,
+## jamais en dessous de MENTAL_LEFT_OUT_FLOOR.
 const BRAVE_BOSS_FACTOR := 0.5
 const COWARD_BOSS_FACTOR := 2.0
 const PROTECTOR_DEATH_FACTOR := 2.0
 const MENTAL_LOSS_LEFT_OUT := 3.0
+const MENTAL_LEFT_OUT_FLOOR := 40.0
 
 
 ## Tire les traits d'un nouveau héros : 1, ou 2 (TRAIT_TWO_CHANCE), compatibles, tous cachés.
@@ -118,13 +120,25 @@ func _trait_acts(hero: Dictionary, trait_name: String, news: Array) -> void:
 		news.append(line)
 
 
-## Ambitieux : chaque héros ambitieux à la cité, laissé hors d'un combat de la Tour (« fighting_ids »),
-## perd un peu de santé mentale (et son trait se révèle).
-func mental_left_out(fighting_ids: Array, news: Array) -> void:
+## La force d'un héros pour Ambitieux : niveau × étoiles.
+func hero_power(hero: Dictionary) -> int:
+	return hero["level"] * hero["rarity"]
+
+
+## Ambitieux : un héros ambitieux resté à la cité perd un peu de santé mentale si un héros plus faible
+## que lui (hero_power) est parti à sa place dans la Tour (« fighters » : les héros du combat), sans jamais
+## descendre sous MENTAL_LEFT_OUT_FLOOR à cause de ça. Son trait se révèle.
+func mental_left_out(fighters: Array, news: Array) -> void:
+	var fighting_ids := fighters.map(func(hero): return hero["id"])
+	var weakest := INF
+	for hero in fighters:
+		weakest = minf(weakest, hero_power(hero))
 	for hero in alive_heroes():
 		if hero["id"] in fighting_ids or is_away(hero) or not has_trait(hero, "Ambitieux"):
 			continue
-		mental_loss(hero, MENTAL_LOSS_LEFT_OUT)
+		if hero_power(hero) <= weakest or mental(hero) <= MENTAL_LEFT_OUT_FLOOR:
+			continue
+		mental_loss(hero, minf(MENTAL_LOSS_LEFT_OUT, mental(hero) - MENTAL_LEFT_OUT_FLOOR))
 		_trait_acts(hero, "Ambitieux", news)
 
 
