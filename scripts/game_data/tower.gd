@@ -360,9 +360,11 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 				report["level_ups"].append({"hero": hero, "levels": levels})
 			# Santé mentale : ce que le combat lui a coûté (voir personality.gd).
 			var mental_line := mental_after_battle(hero, fighter, battle.quest, is_boss_floor(floor_number),
-				report["dead"].size(), battle.victory)
+				report["dead"].size(), battle.victory, report["mental"])
 			if mental_line != "":
 				report["mental"].append(mental_line)
+	# Les ambitieux laissés à la cité stressent (voir personality.gd).
+	mental_left_out(battle.heroes.map(func(fighter): return fighter["source"]["id"]), report["mental"])
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 

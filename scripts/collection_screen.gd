@@ -385,6 +385,14 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 			var malus := UI.make_label("En combat : attaque et défense -%d %%" % roundi((1.0 - GameData.mental_combat_factor(hero)) * 100), 18)
 			malus.modulate = Color(1, 1, 1, 0.7)
 			content.add_child(malus)
+	# Traits de caractère : « ? » tant qu'ils ne se sont pas révélés en jouant.
+	content.add_child(UI.make_label("Caractère : %s" % GameData.traits_text(hero), 22))
+	for t in hero.get("traits", []):
+		if t["known"]:
+			var trait_info := UI.make_label("%s : %s" % [t["name"], GameData.TRAITS.get(t["name"], "")], 18)
+			trait_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			trait_info.modulate = Color(1, 1, 1, 0.6)
+			content.add_child(trait_info)
 
 	# Mana (mages et soigneurs) : la réserve, et ce qu'elle regagne chaque seconde en combat.
 	var mana: int = GameData.combat_stats(hero)["mana"]

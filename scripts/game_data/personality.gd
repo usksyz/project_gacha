@@ -39,6 +39,95 @@ const MENTAL_MALUS_START := 60.0
 const MENTAL_MALUS_MAX := 0.3
 
 
+# ---------------------------------------------------------------------------
+# Traits de caractère
+# ---------------------------------------------------------------------------
+# Chaque héros a 1 ou 2 traits fixes (hero["traits"] : [{"name", "known"}]), tirés à l'invocation et
+# cachés au début (« ? »). Un trait se révèle la première fois qu'il agit, ou après quelques combats.
+# Pour l'instant, seuls les effets sur le stress sont branchés (Courageux, Lâche, Protecteur, Ambitieux) ;
+# les autres viendront avec la désobéissance et la vie au lobby.
+
+## Les traits et ce qu'ils font (affiché sur la fiche une fois révélés).
+const TRAITS := {
+	"Courageux": "Stresse moitié moins face aux boss. (Plus tard : résiste à la panique.)",
+	"Lâche": "Stresse deux fois plus face aux boss. (Plus tard : peut fuir.)",
+	"Loyal": "(Plus tard : obéit même avec une santé mentale basse.)",
+	"Paresseux": "(Plus tard : refuse parfois l'entraînement ou une affectation.)",
+	"Querelleur": "(Plus tard : crée des hostilités au lobby.)",
+	"Protecteur": "Stresse deux fois plus quand un allié meurt. (Plus tard : couvre ses alliés.)",
+	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un combat de la Tour se fait sans lui.",
+	"Mauvais": "(Plus tard : baisse l'efficacité du lobby.)",
+}
+## Chance d'avoir un deuxième trait (sinon un seul).
+const TRAIT_TWO_CHANCE := 0.4
+## Traits qui ne vont pas ensemble.
+const INCOMPATIBLE_TRAITS := [["Courageux", "Lâche"]]
+## Un trait encore caché se révèle tous les TRAIT_REVEAL_FIGHTS combats de la Tour finis.
+const TRAIT_REVEAL_FIGHTS := 5
+## Effets sur le stress : face aux boss (Courageux, Lâche), à la mort d'un allié (Protecteur),
+## et perte d'un Ambitieux pour chaque combat de la Tour fait sans lui.
+const BRAVE_BOSS_FACTOR := 0.5
+const COWARD_BOSS_FACTOR := 2.0
+const PROTECTOR_DEATH_FACTOR := 2.0
+const MENTAL_LOSS_LEFT_OUT := 3.0
+
+
+## Tire les traits d'un nouveau héros : 1, ou 2 (TRAIT_TWO_CHANCE), compatibles, tous cachés.
+func roll_traits() -> Array:
+	var names: Array = TRAITS.keys()
+	var first: String = names.pick_random()
+	var traits := [{"name": first, "known": false}]
+	if randf() < TRAIT_TWO_CHANCE:
+		var others := names.filter(func(name): return name != first and _traits_compatible(first, name))
+		traits.append({"name": others.pick_random(), "known": false})
+	return traits
+
+
+func _traits_compatible(a: String, b: String) -> bool:
+	for pair in INCOMPATIBLE_TRAITS:
+		if a in pair and b in pair:
+			return false
+	return true
+
+
+func has_trait(hero: Dictionary, trait_name: String) -> bool:
+	return hero.get("traits", []).any(func(t): return t["name"] == trait_name)
+
+
+## Révèle un trait (s'il était caché). Renvoie l'annonce « Trait révélé : ... », ou "" s'il était déjà connu.
+func reveal_trait(hero: Dictionary, trait_name: String) -> String:
+	for t in hero.get("traits", []):
+		if t["name"] == trait_name and not t["known"]:
+			t["known"] = true
+			return "Trait révélé : %s est %s !" % [hero["name"], trait_name]
+	return ""
+
+
+## Les traits tels que le joueur les voit : « Courageux, ? » (« ? » = pas encore révélé).
+func traits_text(hero: Dictionary) -> String:
+	var parts := []
+	for t in hero.get("traits", []):
+		parts.append(t["name"] if t["known"] else "?")
+	return ", ".join(parts) if not parts.is_empty() else "?"
+
+
+## Un trait agit : il se révèle s'il était caché (l'annonce va dans « news »).
+func _trait_acts(hero: Dictionary, trait_name: String, news: Array) -> void:
+	var line := reveal_trait(hero, trait_name)
+	if line != "":
+		news.append(line)
+
+
+## Ambitieux : chaque héros ambitieux à la cité, laissé hors d'un combat de la Tour (« fighting_ids »),
+## perd un peu de santé mentale (et son trait se révèle).
+func mental_left_out(fighting_ids: Array, news: Array) -> void:
+	for hero in alive_heroes():
+		if hero["id"] in fighting_ids or is_away(hero) or not has_trait(hero, "Ambitieux"):
+			continue
+		mental_loss(hero, MENTAL_LOSS_LEFT_OUT)
+		_trait_acts(hero, "Ambitieux", news)
+
+
 ## La santé mentale d'un héros (100 pour ceux qui n'en ont pas encore).
 func mental(hero: Dictionary) -> float:
 	return hero.get("mental", MENTAL_MAX)
@@ -79,20 +168,33 @@ func mental_text(hero: Dictionary) -> String:
 
 
 ## Fin d'un combat de la Tour, pour un héros qui a survécu : ses pertes (blessures, saignement, boss,
-## avertissements, alliés tombés, défaite, Berserk), puis le gain de la victoire.
+## avertissements, alliés tombés, défaite, Berserk), puis le gain de la victoire. Ses traits agissent
+## (Courageux, Lâche, Protecteur) et peuvent se révéler ; les révélations vont dans « news ».
 ## « fighter » : ce qu'il était dans le combat (battle.gd) ; « dead_allies » : héros tombés.
 ## Renvoie le texte « Han : santé mentale 100 → 84 » (ou "" si rien n'a changé).
 func mental_after_battle(hero: Dictionary, fighter: Dictionary, quest: Dictionary, boss: bool,
-		dead_allies: int, victory: bool) -> String:
+		dead_allies: int, victory: bool, news: Array) -> String:
 	var before := mental(hero)
 	var loss := MENTAL_LOSS_WOUNDS * (1.0 - clampf(float(fighter["hp"]) / fighter["max_hp"], 0.0, 1.0))
 	if fighter["has_bled"]:
 		loss += MENTAL_LOSS_BLEEDING
 	if boss:
-		loss += MENTAL_LOSS_BOSS
+		var boss_loss := MENTAL_LOSS_BOSS
+		if has_trait(hero, "Courageux"):
+			boss_loss *= BRAVE_BOSS_FACTOR
+			_trait_acts(hero, "Courageux", news)
+		if has_trait(hero, "Lâche"):
+			boss_loss *= COWARD_BOSS_FACTOR
+			_trait_acts(hero, "Lâche", news)
+		loss += boss_loss
 	if quest.get("warnings", 0) > 0:
 		loss += MENTAL_LOSS_WARNINGS
-	loss += MENTAL_LOSS_ALLY_DEATH * dead_allies
+	if dead_allies > 0:
+		var death_loss := MENTAL_LOSS_ALLY_DEATH * dead_allies
+		if has_trait(hero, "Protecteur"):
+			death_loss *= PROTECTOR_DEATH_FACTOR
+			_trait_acts(hero, "Protecteur", news)
+		loss += death_loss
 	if not victory:
 		loss += MENTAL_LOSS_DEFEAT
 	if fighter["berserk"]:
@@ -100,6 +202,12 @@ func mental_after_battle(hero: Dictionary, fighter: Dictionary, quest: Dictionar
 	mental_loss(hero, loss)
 	if victory:
 		change_mental(hero, MENTAL_GAIN_VICTORY)
+	# Avec le temps, on apprend à connaître un héros : un trait caché se révèle tous les quelques combats.
+	hero["fights"] = hero.get("fights", 0) + 1
+	if hero["fights"] % TRAIT_REVEAL_FIGHTS == 0:
+		var hidden: Array = hero.get("traits", []).filter(func(t): return not t["known"])
+		if not hidden.is_empty():
+			_trait_acts(hero, hidden.pick_random()["name"], news)
 	if roundi(mental(hero)) == roundi(before):
 		return ""
 	return "%s : santé mentale %d → %d" % [hero["name"], roundi(before), roundi(mental(hero))]

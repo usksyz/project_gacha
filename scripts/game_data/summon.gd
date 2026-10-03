@@ -204,6 +204,8 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"immortal": false,
 		"secret": false,
 		"favorite": false,     # mis en favori par le Maître (voir FAVORITES_MAX)
+		"mental": MENTAL_MAX,  # santé mentale (voir personality.gd)
+		"traits": roll_traits(),  # traits de caractère, cachés au début
 	}
 	next_hero_id += 1
 	return hero

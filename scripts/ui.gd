@@ -133,7 +133,7 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 	if not report["skills"].is_empty():
 		windows.append(make_system_window("Progrès des compétences !", report["skills"]))
 	if not report.get("mental", []).is_empty():
-		windows.append(make_system_window("Santé mentale", report["mental"]))
+		windows.append(make_system_window("Personnalité", report["mental"]))
 
 	var lines := []
 	if report["victory"]:
