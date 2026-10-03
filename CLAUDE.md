@@ -15,7 +15,7 @@ Seule exception : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron, la m
 Edith...), clins d'œil au manhwa (stats du tableau du cahier quand on les connaît : clé « stats »).
 Ils sont immortels et s'obtiennent tous par code secret, Han compris (code « HAN », choix du porteur du
 projet ; avant, Han était donné au début), dans Paramètres > Codes secrets ou sur la Place publique du hub.
-Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois. Ils sont définis dans `SECRET_HEROES` (`game_data.gd`).
+Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois. Ils sont définis dans `SECRET_HEROES` (`game_data/heroes.gd`).
 Le code « SECRET_HERO » (`GameData.SECRET_MENU_CODE`, réutilisable) ouvre `SecretHeroMenu` (`scripts/secret_hero_menu.gd`) :
 la fiche de chaque héros secret (stats tirées à l'ouverture : ce sont celles qu'il aura), on en choisit un
 ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchent toujours.
@@ -31,11 +31,23 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 ## Structure
 - `scenes/main.tscn` + `scripts/main.gd` : scène de départ ; barre du haut (or, gemmes),
   écran actif, barre de menus en bas (Hub, Invocation, Collection, Donjons).
-- `scripts/game_data.gd` : autoload `GameData`, données et règles (invocation, fiche de héros :
-  force/intelligence/santé/dextérité, niveaux et expérience, croissance cachée, héros secrets,
-  ennemis et récompenses de la Tour). Il gère aussi la sauvegarde de la partie (`user://sauvegarde.cfg`) :
-  relue au lancement, réécrite par `save_game()` après chaque changement (toute nouvelle fonction qui
-  modifie la partie doit l'appeler), effacée par « Recommencer la partie ».
+- `scripts/game_data.gd` : autoload `GameData`, données et règles du jeu. Le code est rangé par thème
+  dans `scripts/game_data/`, en une pile de classes : chaque fichier `extends` le précédent et
+  `game_data.gd` est en haut, donc on écrit toujours `GameData.xxx` partout. De bas en haut :
+  `game_state.gd` (`GameState` : variables enregistrées, or et gemmes, signaux), `heroes.gd` (`GameHeroes` :
+  fiche, stats, héros secrets, compétences, expérience, équipes, favoris, `is_away`), `training.gd`
+  (`GameTraining` : terrain d'entraînement), `items.gd` (`GameItems` : armes, arsenal, équipement,
+  matériaux de l'entrepôt), `summon.gd` (`GameSummon` : invocation, codes secrets), `lobby.gd`
+  (`GameLobby` : construction, postes d'assistant, donjon journalier, forge), `synthesis.gd`
+  (`GameSynthesis` : promotion, synthèse), `tower.gd` (`GameTower` : Tour, quêtes, ennemis, combat et
+  récompenses), `save.gd` (`GameSave` : sauvegarde, partie neuve), puis `game_data.gd` (lancement et
+  outils du mode dev). Un fichier ne peut utiliser que ce qui est en dessous de lui dans la pile : une
+  nouvelle fonction va dans le fichier de son thème, ou plus haut si elle a besoin d'un thème du dessus.
+  Sauvegarde de la partie (`user://sauvegarde.cfg`) : relue au lancement, réécrite par `save_game()` après
+  chaque changement (toute nouvelle fonction qui modifie la partie doit l'appeler), effacée par
+  « Recommencer la partie ». `save_game()` est déclarée vide dans `game_state.gd` (pour que tous les
+  fichiers puissent l'appeler) et remplacée par la vraie dans `save.gd`. Une nouvelle variable enregistrée
+  va dans `game_state.gd`, et dans `save_game()` / `load_game()` / `_new_game()` (`save.gd`).
 - `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran),
   enregistrés dans `user://parametres.cfg`.
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
@@ -171,7 +183,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Les sacrifiés meurent pour toujours (cause gardée, armes perdues). Le héros renforcé gagne l'expérience de
   chaque sacrifié et au moins un niveau (cahier : « monte de niveau ») ; 20 % par sacrifié de récupérer une
   de ses compétences au niveau 1 ; Œil de faucon (30 %, archers, mages, soigneurs : portée et précision des
-  tirs) ; Analyse froide (1 %). Règles et chiffres provisoires dans `GameData` (section « Synthèse de héros »).
+  tirs) ; Analyse froide (1 %). Règles et chiffres provisoires dans `game_data/synthesis.gd`.
   Les héros secrets ne peuvent pas être sacrifiés. Reste : perte de moral (avec le moral, phase 5),
   glisser-déposer du cahier (on touche les cartes pour l'instant), salle de promotion dans la chambre.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
@@ -203,7 +215,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   encart de l'équipe sous la carte, demandé par le porteur du projet (héros côte à côte, PV actuels / max
   et pourcentage, mana chiffrée, toucher = choisir le héros) et barre de vie du boss en haut : fait. Phase 1 terminée, y compris les compétences liées à la synthèse
   (compétence héritée, Analyse froide, Œil de faucon : voir la chambre de synthèse).
-  Reste plus tard : autres fusions (Âme de l'épée...), rangs de compétence, consignes en combat.
+  Reste plus tard : autres fusions (Âme de l'épée...), rangs de compétence, formations entraînées par une
+  IA dans la salle d'opération.
 - Phase 2 (Tour) : étages, équipes de 5, boss tous les 5 étages, or/gemmes/XP, MVP : fait.
   Quêtes d'étage (`GameData.floor_quest`) : extermination (1), subjugation (2), annihilation avec
   renforts, survie à la horde tous les 5 étages (niveau caché, ruelles, compte à rebours lancé au premier
