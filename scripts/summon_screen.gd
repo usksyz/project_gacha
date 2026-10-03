@@ -206,7 +206,10 @@ func _add_plain_summons(layout: VBoxContainer) -> void:
 ## Fenêtre du détail des taux : pour chaque rareté d'étoiles, la répartition des classes.
 func _show_rates(summon_type: String) -> void:
 	var info: Dictionary = GameData.SUMMON_TYPES[summon_type]
-	var lines := []
+	var rarities: Array = info["rates"].keys().filter(func(r): return info["rates"][r] > 0.0)
+	var lines := ["Héros de %d à %d étoiles." % [rarities.min(), rarities.max()]]
+	if summon_type == "special":
+		lines.append("Pity : un 5★ garanti au bout de %d invocations spéciales sans 5★." % GameData.PITY_LIMIT)
 	for rarity in info["rates"]:
 		if info["rates"][rarity] <= 0.0:
 			continue

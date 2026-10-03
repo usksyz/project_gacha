@@ -8,19 +8,20 @@ extends GameItems
 # Invocation
 # ---------------------------------------------------------------------------
 
-## Deux sortes d'invocation (cahier des charges) :
+## Deux sortes d'invocation, comme dans l'œuvre (choix du porteur du projet, aligné sur l'œuvre :
+## « invocation gratuite : 1 à 3 étoiles ; invocation payante : 3 à 5 étoiles ») :
 ## - « normal » : héros de base, payée en or, la monnaie gagnée en jouant. C'est l'invocation
-##   « gratuite » du cahier (sans argent réel) : 1 % de chances d'un 4 étoiles, et pas de 5 étoiles ;
-## - « special » : héros spéciaux, payée en gemmes, avec de meilleures chances de hauts rangs.
+##   « gratuite » du cahier (sans argent réel) : de 1 à 3 étoiles ;
+## - « special » : héros spéciaux, payée en gemmes : de 3 à 5 étoiles.
 ##   C'est la seule qui peut donner un mage, et elle a un pity (5 étoiles garanti).
 ## « cost » : prix d'une invocation ; « currency » : "gold" ou "gems" ;
-## « rates » : probabilité de chaque rareté (le total fait 1.0, soit 100 %). Chiffres provisoires.
+## « rates » : probabilité de chaque rareté, de la plus haute à la plus basse (le total fait 1.0,
+## soit 100 %). Une rareté absente ne peut pas sortir. Taux provisoires.
 const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
-		"rates": {5: 0.0, 4: 0.10, 3: 0.15, 2: 0.25, 1: 0.50}},  # taux choisis par le porteur du projet
+		"rates": {3: 0.10, 2: 0.30, 1: 0.60}},
 	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
-		# Choix du porteur du projet : comme l'or, mais moins de 1 étoile, un peu plus des autres, et des 5 étoiles.
-		"rates": {5: 0.03, 4: 0.15, 3: 0.20, 2: 0.27, 1: 0.35}},
+		"rates": {5: 0.04, 4: 0.21, 3: 0.75}},
 }
 
 ## Nombre maximum de héros vivants pour invoquer, choix du porteur du projet (les morts ne comptent pas ;
@@ -45,9 +46,9 @@ const RARITY_COLORS := {
 ## on tire la classe selon ce tableau (le total de chaque ligne fait 1.0, soit 100 %).
 ## Les 1 et 2 étoiles sont des gens ordinaires : tous « Novice ».
 ## Les mages ne s'obtiennent que par invocation spéciale, avec une très très faible chance :
-## 1 % des 3 étoiles et plus. Comme 38 % des invocations spéciales donnent un 3 étoiles ou plus,
-## environ 0,4 % des invocations spéciales donnent un mage (à peu près 1 toutes les 260).
-## Dans l'invocation normale, la part des mages est simplement retirée du tirage.
+## 1 % des 3 étoiles et plus. Comme toutes les invocations spéciales donnent un 3 étoiles ou plus,
+## 1 % des invocations spéciales donnent un mage (à peu près 1 toutes les 100).
+## Dans l'invocation normale (ses 3 étoiles), la part des mages est simplement retirée du tirage.
 ## Chiffres provisoires, à régler.
 const CLASS_RATES := {
 	1: {"Novice": 1.0},
@@ -124,7 +125,7 @@ func _roll_rarity(summon_type: String) -> int:
 			if rarity == 5 and special:
 				pity_counter = 0
 			return rarity
-	return 1
+	return rates.keys().back()  # (arrondi des taux) la plus basse rareté de cette invocation
 
 
 ## Chances de chaque classe pour une rareté (voir CLASS_RATES). Sans les mages (invocation

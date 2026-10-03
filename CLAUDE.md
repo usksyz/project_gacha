@@ -237,15 +237,15 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
   mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
   L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
-  en jeu, précision du porteur du projet). Taux de l'invocation en or choisis par le porteur du projet :
-  1 étoile 50 %, 2 étoiles 25 %, 3 étoiles 15 %, 4 étoiles 10 %, pas de 5 étoiles. Autres taux provisoires.
+  en jeu, précision du porteur du projet). Raretés (choix du porteur du projet, aligné sur l'œuvre ; onglet
+  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles (provisoire : 1 étoile 60 %,
+  2 étoiles 30 %, 3 étoiles 10 %), invocation en gemmes de 3 à 5 étoiles (provisoire : 3 étoiles 75 %,
+  4 étoiles 21 %, 5 étoiles 4 %, pity de 50). Ancien réglage : or de 1 à 4 étoiles, gemmes de 1 à 5.
   Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
   niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
   Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice ;
-  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (environ 0,4 % des invocations).
-  Taux de l'invocation spéciale (choix du porteur du projet) : 1 étoile 35 %, 2 étoiles 27 %,
-  3 étoiles 20 %, 4 étoiles 15 %, 5 étoiles 3 % (pity de 50 en plus).
-  Bouton « Détail des taux » sur l'écran d'invocation.
+  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (donc 1 % des invocations spéciales).
+  Bouton « Détail des taux » sur l'écran d'invocation (étoiles possibles, pity, taux et classes).
   Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;
   `_roll_stats`, `MAGE_STAT_MALUS`). Avoir un mage vivant permet de construire les bâtiments de magie
   (`GameData.BUILDINGS` : atelier de magie, laboratoire d'alchimie, bibliothèque ; les trois fusionnent en
