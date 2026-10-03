@@ -82,6 +82,12 @@ func load_game() -> bool:
 	var old_report: Dictionary = file.get_value("partie", "retour_expedition", {})
 	if not old_report.is_empty() and not file.has_section_key("partie", "retours_expeditions"):
 		expedition_reports = [old_report]
+	# Héros d'avant la personnalité : ils reçoivent leurs traits (cachés) et une santé mentale à 100.
+	for hero in roster:
+		if not hero.has("traits"):
+			hero["traits"] = roll_traits()
+		if not hero.has("mental"):
+			hero["mental"] = MENTAL_MAX
 	return not roster.is_empty()
 
 

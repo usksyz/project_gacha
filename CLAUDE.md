@@ -36,7 +36,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   dans `scripts/game_data/`, en une pile de classes : chaque fichier `extends` le précédent et
   `game_data.gd` est en haut, donc on écrit toujours `GameData.xxx` partout. De bas en haut :
   `game_state.gd` (`GameState` : variables enregistrées, or et gemmes, signaux), `heroes.gd` (`GameHeroes` :
-  fiche, stats, héros secrets, compétences, expérience, changement de classe, équipes, favoris, `is_away`), `training.gd`
+  fiche, stats, héros secrets, compétences, expérience, changement de classe, équipes, favoris, `is_away`),
+  `personality.gd` (`GamePersonality` : santé mentale, traits de caractère), `training.gd`
   (`GameTraining` : terrain d'entraînement), `items.gd` (`GameItems` : armes, arsenal, équipement,
   matériaux de l'entrepôt), `summon.gd` (`GameSummon` : invocation, codes secrets), `lobby.gd`
   (`GameLobby` : construction, postes d'assistant, donjon journalier, forge), `synthesis.gd`
@@ -102,6 +103,24 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   possible, pas pour un héros parti), fenêtre de choix, puis fenêtre système qui annonce la nouvelle classe.
   Rien de neuf dans la sauvegarde (la classe était déjà enregistrée). Reste : classes supérieures (Grand
   chevalier...), Maîtrise de la dague (pas encore apprenable : la voie du voleur passe par l'arc).
+- Personnalité (cahier, onglet « Personnalité », sections 1 et 3 ; `personality.gd`, chiffres provisoires).
+  Santé mentale `hero["mental"]` (0 à `MENTAL_MAX` 100, départ 100, nombre à virgule) : baisse à la fin d'un
+  combat de la Tour (blessures selon la vie perdue, saignement, boss, quête à avertissements, chaque allié
+  tombé, défaite, Berserk : `mental_after_battle`) et pour tous les vivants à chaque synthèse
+  (`MENTAL_LOSS_SYNTHESIS` par sacrifié) ; remonte avec la victoire et à la cité par heure de temps réel
+  (repos `MENTAL_REST_PER_HOUR`, travail = poste ou entraînement `MENTAL_WORK_PER_HOUR`, rien si parti :
+  `update_mental()`, appelée toutes les 5 s et avant chaque sauvegarde, `mental_updated_at` sauvegardé).
+  Calme réduit les pertes (5 % par niveau). Sous `MENTAL_MALUS_START` (60), attaque et défense baissent en
+  combat jusqu'à -30 % à 0 (`mental_combat_factor`, battle.gd). Barre sur la fiche et les cartes d'équipe
+  (`UI.add_mental_bar`, `TeamSlots` et grilles de l'écran Donjons), fenêtre « Personnalité » en fin de combat.
+  Traits `hero["traits"]` ([{"name", "known"}]) : 1 ou 2 tirés à l'invocation (`roll_traits`, `TRAITS` :
+  Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais ; Courageux et Lâche
+  incompatibles), « ? » tant qu'ils sont cachés ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
+  (5) combats (`hero["fights"]`). Effets branchés : Courageux (moitié) / Lâche (double) face aux boss,
+  Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un combat de la Tour se fait sans lui.
+  Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
+  -20 santé mentale, santé mentale 100. Reste : rupture à 0 (effondrement, éveil, mort par stress), liens
+  entre héros, désobéissance et autres effets des traits, repas de la cafétéria, perte au donjon journalier.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -213,7 +232,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   chaque sacrifié et au moins un niveau (cahier : « monte de niveau ») ; 20 % par sacrifié de récupérer une
   de ses compétences au niveau 1 ; Œil de faucon (30 %, archers, mages, soigneurs : portée et précision des
   tirs) ; Analyse froide (1 %). Règles et chiffres provisoires dans `game_data/synthesis.gd`.
-  Les héros secrets ne peuvent pas être sacrifiés. Reste : perte de moral (avec le moral, phase 5),
+  Les héros secrets ne peuvent pas être sacrifiés. Chaque synthèse fait baisser la santé mentale des héros
+  vivants (voir « Personnalité »). Reste :
   glisser-déposer du cahier (on touche les cartes pour l'instant), salle de promotion dans la chambre.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
 
