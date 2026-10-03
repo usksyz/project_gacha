@@ -90,8 +90,8 @@ var last_expedition_day := ""
 var expedition_report: Dictionary = {}
 
 
-## Enregistre la partie. La vraie fonction est plus haut dans la pile (section « Sauvegarde ») et
-## remplace celle-ci : elle est déclarée ici pour que tous les fichiers puissent demander une sauvegarde.
+## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace
+## celle-ci : elle est déclarée ici pour que tous les fichiers puissent demander une sauvegarde.
 func save_game() -> void:
 	pass
 
