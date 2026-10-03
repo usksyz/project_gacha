@@ -419,6 +419,10 @@ const CLASS_LOST_SKILLS := {
 ## Les autres compétences de débutant évoluent : elles passent à ce rang (leurs effets ne changent pas).
 const EVOLVED_SKILL_RANK := "Intermédiaire"
 
+## Classes réservées à l'invocation (cahier : « les mages ne s'obtiennent que par invocation ; la magie
+## est un savoir ») : aucun changement de classe n'y mène, même si une voie les proposait un jour.
+const INVOCATION_ONLY_CLASSES := ["Mage", "Soigneur"]
+
 
 ## Les compétences d'arme d'une voie que le héros possède au moins au niveau « min_level ».
 func _path_skills(hero: Dictionary, path: String, min_level: int) -> Array:
@@ -437,6 +441,8 @@ func class_change_options(hero: Dictionary) -> Array[String]:
 	elif hero["class"] in CLASS_FINALS and hero["level"] >= SECOND_CLASS_CHANGE_LEVEL:
 		if not _path_skills(hero, hero["class"], SECOND_CLASS_CHANGE_SKILL_LEVEL).is_empty():
 			options.assign(CLASS_FINALS[hero["class"]])
+	for reserved in INVOCATION_ONLY_CLASSES:
+		options.erase(reserved)
 	return options
 
 
@@ -467,7 +473,7 @@ func class_change_problem(hero: Dictionary) -> String:
 ## Renvoie les lignes à annoncer dans la fenêtre système, ou [] si c'est impossible.
 func change_class(hero: Dictionary, new_class: String) -> Array[String]:
 	var lines: Array[String] = []
-	if not new_class in class_change_options(hero) or is_away(hero):
+	if new_class in INVOCATION_ONLY_CLASSES or not new_class in class_change_options(hero) or is_away(hero):
 		return lines
 	var old_class: String = hero["class"]
 	hero["class"] = new_class
