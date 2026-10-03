@@ -11,8 +11,9 @@ C'est la référence pour les règles du jeu et l'ordre de développement (6 pha
 concernée avant de coder, et signaler les écarts plutôt que trancher seul.
 
 Noms : les mécaniques peuvent copier Pick Me Up, mais les noms et l'univers restent originaux.
-Seule exception : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron, la magicienne Yvolka, la voleuse
-Edith...), clins d'œil au manhwa (stats du tableau du cahier quand on les connaît : clé « stats »).
+Exceptions : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron, la magicienne Yvolka, la voleuse
+Edith...), clins d'œil au manhwa (stats du tableau du cahier quand on les connaît : clé « stats ») ; et les
+trois donjons journaliers (Mine d'Isralta, Forêt Kenout, Plateau Sinmiel, choix du porteur du projet).
 Ils sont immortels et s'obtiennent tous par code secret, Han compris (code « HAN », choix du porteur du
 projet ; avant, Han était donné au début), dans Paramètres > Codes secrets ou sur la Place publique du hub.
 Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois. Ils sont définis dans `SECRET_HEROES` (`game_data/heroes.gd`).
@@ -184,11 +185,22 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - Affectations (bouton du hub, `scripts/assignment_panel.gd`) : `POSTS_PER_BUILDING` = 2 postes
   d'assistant par bâtiment construit (`hero["post"]`) ; un poste et l'entraînement s'excluent.
   Un héros parti (Tour ou donjon journalier, `GameData.is_away`) ne s'entraîne pas et ne compte pas à son poste.
-- Donjon journalier (carte de l'écran Donjons) : un seul pour l'instant, la Mine de Brumefer (noms originaux,
-  le cahier en prévoit trois selon le jour). Une équipe composée part récolter `EXPEDITION_SECONDS` en temps
-  réel (même jeu fermé), une fois par jour ; ramassages tirés au départ et annoncés au fil du temps
-  (`expedition["log"]`), matériaux gradés, déchets, plans de forge rares ; retour dans l'entrepôt
-  (`GameData.warehouse`).
+- Donjon journalier (carte de l'écran Donjons, `lobby.gd`) : calendrier selon le jour réel de l'appareil
+  (`DAILY_DUNGEONS`, `open_daily_dungeons()`) : lundi-mardi Mine d'Isralta, mercredi-jeudi Forêt Kenout,
+  vendredi-samedi Plateau Sinmiel, dimanche tous (on choisit le donjon). Chacun a ses trois matériaux
+  (provisoires : la mine garde fer, charbon, cristal ; forêt bois, peau de bête, herbe médicinale ;
+  plateau pierre de taille, plume, lin — pas encore utilisés par la forge). Quatre cartes de calendrier à cadre
+  argenté, celle du jour dorée. Choix du porteur du projet : autant d'expéditions qu'on veut, plusieurs groupes
+  à la fois (`GameData.expeditions`, liste ; plus de limite par jour ; les anciennes sauvegardes à une seule
+  expédition sont reprises). Une équipe composée part récolter `EXPEDITION_SECONDS` en temps réel (même jeu
+  fermé), avec ses héros libres ; fenêtre système à l'entrée (« Le groupe X est entré dans le donjon journalier,
+  [nom] ([difficulté]). Ils reviendront après avoir acquis des matériaux ! ») ; ramassages tirés au départ et
+  annoncés au fil du temps (`expedition["log"]`), matériaux gradés, déchets, plans de forge rares ; retour dans
+  l'entrepôt (`GameData.warehouse`, rapports dans `expedition_reports`). Monstres rares : un par donjon
+  (Reine de la forêt du cahier ; Taupe de cristal et Aigle d'argent inventés), `RARE_MONSTER_CHANCE` (10 %)
+  par expédition, `RARE_MONSTER_STONES` (2) pierres d'attribut pour la promotion. Mode dev : terminer les
+  expéditions, monstre rare garanti, jour simulé (« jour suivant »). Reste : héros qui y vont d'eux-mêmes
+  (avec les héros autonomes du lobby), fermeture du donjon du jour (les « 10 heures » du cahier), chasse.
 - Forge (annexe de l'armurerie, `scripts/forge_screen.gd`, construite 500 gemmes) : recettes
   `FORGE_RECIPES`, rang de base = grade du minerai (+1 avec un plan), malus infrastructures / artisan / plan,
   chance affichée (Certaine... Infime) avec Oui / Non, production automatique ou puzzle
@@ -274,6 +286,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   l'ouverture du terrain d'entraînement. Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : construction, affectations, donjon journalier, entrepôt
-  et forge : premières versions faites. Reste : niveaux de bâtiment, autres donjons journaliers et matériaux
-  (bois, cuir), monstres rares, fonctions des bâtiments de magie, cafétéria, etc. Sauvegarde de la partie : faite
+  et forge : premières versions faites ; donjon journalier complet (calendrier, trois donjons, monstres rares,
+  fenêtre d'entrée). Reste : niveaux de bâtiment, recettes avec les nouveaux matériaux (bois, peau de bête...),
+  fonctions des bâtiments de magie, cafétéria, etc. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).

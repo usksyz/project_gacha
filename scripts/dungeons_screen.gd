@@ -33,8 +33,6 @@ var floor_label: Label
 var daily_label: Label
 ## Contenu changeant de la carte du donjon journalier (boutons, ramassages, retour).
 var daily_box: VBoxContainer
-## Annonce de l'entrée d'une équipe dans le donjon, montrée tant qu'elle y est.
-var daily_notice := ""
 ## Le donjon journalier choisi pour la prochaine expédition (le dimanche, ils sont tous ouverts).
 var daily_choice := ""
 var team_title: Label
@@ -179,8 +177,6 @@ func _refresh_daily() -> void:
 			day, GameData.dungeon_title(daily_choice), GameData.EXPEDITION_SECONDS / 60]
 	_add_daily_team_buttons(daily_choice)
 
-	if daily_notice != "" and not GameData.expeditions.is_empty():
-		daily_box.add_child(UI.make_system_window("Donjon journalier", [daily_notice]))
 	for expedition in GameData.expeditions:
 		var remaining := GameData.expedition_remaining(expedition)
 		var title := UI.make_label("Équipe %d — %s : récolte en cours, rappel dans %d:%02d." % [
@@ -263,15 +259,38 @@ func _add_daily_team_buttons(dungeon_id: String) -> void:
 	daily_box.add_child(buttons)
 	for index in GameData.TEAM_COUNT:
 		var members := GameData.expedition_members(index)
-		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()], func():
-			if GameData.start_expedition(index, dungeon_id):
-				daily_notice = "L'équipe %d est entrée dans le donjon journalier, %s. Ils reviendront après avoir acquis des matériaux !" \
-					% [index + 1, GameData.dungeon_title(dungeon_id)]
-			_refresh_daily.call_deferred(), 22)
+		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()],
+			_on_daily_team_pressed.bind(index, dungeon_id), 22)
 		button.custom_minimum_size.y = 70
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.disabled = members.is_empty()
 		buttons.add_child(button)
+
+
+## Envoie une équipe au donjon, puis la fenêtre système annonce son entrée (cahier : « Le groupe 4
+## est entré dans le donjon journalier, la forêt de Kenout (super facile). Ils reviendront... »).
+func _on_daily_team_pressed(team_index: int, dungeon_id: String) -> void:
+	if not GameData.start_expedition(team_index, dungeon_id):
+		return
+	_refresh_daily.call_deferred()
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.8)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	box.add_child(UI.make_system_window("Donjon journalier", [
+		"Le groupe %d est entré dans le donjon journalier, %s. Ils reviendront après avoir acquis des matériaux !"
+			% [team_index + 1, GameData.dungeon_title(dungeon_id)],
+	]))
+	var ok := UI.make_button("Compris", func(): overlay.queue_free(), 24)
+	ok.custom_minimum_size.y = 84
+	box.add_child(ok)
 
 
 ## Crée une carte (titre + description) dans « parent » et renvoie son contenu,
