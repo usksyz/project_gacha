@@ -156,16 +156,29 @@ func build(building_id: String) -> Array[String]:
 # automatiquement et les matériaux vont dans l'entrepôt. Pas de limite (choix du porteur du projet) :
 # autant d'expéditions qu'on veut, plusieurs groupes à la fois (expeditions), tant qu'il reste des héros.
 # Les ramassages sont tirés au départ (expedition["log"]) et annoncés au fil du temps.
-# Pour l'instant, un seul donjon journalier (le cahier en prévoit trois, un par jour de la semaine).
+# Trois donjons selon le jour réel (cahier : calendrier du donjon journalier), tous ouverts le dimanche.
 
 ## Étage à franchir pour débloquer le donjon journalier.
 const DAILY_UNLOCK_FLOOR := 5
 
-const DAILY_DUNGEON := {
-	"name": "Mine de Brumefer",
-	"difficulty": "super facile",
-	"materials": ["Minerai de fer", "Charbon", "Cristal brut"],
+## Les donjons journaliers. Noms du manhwa : exception à la règle des noms originaux, choix du porteur
+## du projet. « days » : jours d'ouverture (1 = lundi... 6 = samedi, comme Time) ; le dimanche, tous.
+## Chacun a ses trois matériaux. Provisoire : le cahier ne donne que la difficulté de la forêt
+## (« super facile ») et ne nomme pas les matériaux (sauf des branches d'arbres dans la forêt).
+const DAILY_DUNGEONS := {
+	"mine": {"name": "Mine d'Isralta", "difficulty": "super facile", "days": [1, 2],
+		"materials": ["Minerai de fer", "Charbon", "Cristal brut"]},
+	"foret": {"name": "Forêt Kenout", "difficulty": "super facile", "days": [3, 4],
+		"materials": ["Bois", "Peau de bête", "Herbe médicinale"]},
+	"plateau": {"name": "Plateau Sinmiel", "difficulty": "super facile", "days": [5, 6],
+		"materials": ["Pierre de taille", "Plume", "Lin"]},
 }
+## Le dimanche (0 pour Time), tous les donjons sont ouverts.
+const SUNDAY := 0
+const WEEKDAY_NAMES := ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
+
+## Mode dev : jour de la semaine simulé (0 = dimanche... 6 = samedi), -1 = le vrai jour. Pas enregistré.
+var dev_daily_weekday := -1
 ## Ce qu'on peut aussi ramasser de temps en temps : un déchet inutile, ou (rarement) un plan de forge.
 const JUNK_NAME := "Poubelle"
 const JUNK_CHANCE := 0.12
@@ -187,6 +200,33 @@ func daily_unlocked() -> bool:
 	return tower_floor > DAILY_UNLOCK_FLOOR
 
 
+## Le jour de la semaine (0 = dimanche, 1 = lundi... 6 = samedi), selon l'horloge de l'appareil.
+func daily_weekday() -> int:
+	if dev_daily_weekday >= 0:
+		return dev_daily_weekday
+	return Time.get_datetime_dict_from_system()["weekday"]
+
+
+## Les donjons journaliers ouverts aujourd'hui (identifiants de DAILY_DUNGEONS) : tous le dimanche.
+func open_daily_dungeons() -> Array[String]:
+	var result: Array[String] = []
+	var day := daily_weekday()
+	for dungeon_id in DAILY_DUNGEONS:
+		if day == SUNDAY or day in DAILY_DUNGEONS[dungeon_id]["days"]:
+			result.append(dungeon_id)
+	return result
+
+
+## Le donjon d'une expédition (« mine » pour celles des anciennes sauvegardes, avant le calendrier).
+func expedition_dungeon(expedition: Dictionary) -> Dictionary:
+	return DAILY_DUNGEONS[expedition.get("dungeon", "mine")]
+
+
+## « Forêt Kenout (super facile) ».
+func dungeon_title(dungeon_id: String) -> String:
+	return "%s (%s)" % [DAILY_DUNGEONS[dungeon_id]["name"], DAILY_DUNGEONS[dungeon_id]["difficulty"]]
+
+
 ## Pourquoi on ne peut pas partir au donjon journalier (texte), ou "" si c'est possible.
 func expedition_problem() -> String:
 	if not daily_unlocked():
@@ -203,11 +243,11 @@ func expedition_members(team_index: int) -> Array[Dictionary]:
 	return result
 
 
-## Envoie une équipe au donjon journalier. Tous les ramassages sont tirés maintenant,
-## avec le moment où ils arrivent. Renvoie faux si c'est impossible.
-func start_expedition(team_index: int) -> bool:
+## Envoie une équipe dans un donjon journalier ouvert aujourd'hui (« dungeon_id »). Tous les
+## ramassages sont tirés maintenant, avec le moment où ils arrivent. Renvoie faux si c'est impossible.
+func start_expedition(team_index: int, dungeon_id: String) -> bool:
 	var team := expedition_members(team_index)
-	if expedition_problem() != "" or team.is_empty():
+	if expedition_problem() != "" or team.is_empty() or not dungeon_id in open_daily_dungeons():
 		return false
 	update_training()  # les séances terminées avant le départ sont comptées
 	var now := Time.get_unix_time_from_system()
@@ -215,17 +255,17 @@ func start_expedition(team_index: int) -> bool:
 	for hero in team:
 		var t := randf_range(20.0, PICKUP_SECONDS)
 		while t < EXPEDITION_SECONDS:
-			pickups.append(_roll_pickup(hero, t))
+			pickups.append(_roll_pickup(hero, t, dungeon_id))
 			t += PICKUP_SECONDS * randf_range(0.7, 1.3)
 	pickups.sort_custom(func(a, b): return a["t"] < b["t"])
 	expeditions.append({"team": team.map(func(hero): return hero["id"]), "team_index": team_index,
-		"start": now, "end": now + EXPEDITION_SECONDS, "log": pickups})
+		"dungeon": dungeon_id, "start": now, "end": now + EXPEDITION_SECONDS, "log": pickups})
 	gear_up(team)  # les héros prennent leurs armes dans l'arsenal (et la partie est sauvegardée)
 	return true
 
 
-## Un ramassage : un matériau gradé, un déchet, ou (rarement) un plan de forge.
-func _roll_pickup(hero: Dictionary, t: float) -> Dictionary:
+## Un ramassage : un matériau gradé du donjon, un déchet, ou (rarement) un plan de forge.
+func _roll_pickup(hero: Dictionary, t: float, dungeon_id: String) -> Dictionary:
 	var who := "%s (%s)" % [hero["name"], "★".repeat(hero["rarity"])]
 	var roll := randf()
 	if roll < PLAN_CHANCE:
@@ -238,7 +278,7 @@ func _roll_pickup(hero: Dictionary, t: float) -> Dictionary:
 	if roll < PLAN_CHANCE + STONE_PICKUP_CHANCE + JUNK_CHANCE:
 		return {"t": t, "kind": "junk", "name": JUNK_NAME, "grade": "F",
 			"text": "%s a collecté « %s (F) ». Astuce : la poubelle est inutile, jetez-la." % [who, JUNK_NAME]}
-	var material: String = DAILY_DUNGEON["materials"].pick_random()
+	var material: String = DAILY_DUNGEONS[dungeon_id]["materials"].pick_random()
 	var grade := _roll_from(MATERIAL_GRADE_RATES)
 	return {"t": t, "kind": "material", "name": material, "grade": grade,
 		"text": "%s a collecté « %s (%s) »." % [who, material, grade]}
@@ -296,7 +336,8 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 				if not entry["name"] in plans:
 					plans.append(entry["name"])
 				totals["Plan : %s" % entry["name"]] = 1
-	var lines := ["L'équipe %d est revenue du donjon journalier (%s)." % [expedition["team_index"] + 1, DAILY_DUNGEON["name"]]]
+	var lines := ["L'équipe %d est revenue du donjon journalier (%s)." % [expedition["team_index"] + 1,
+		expedition_dungeon(expedition)["name"]]]
 	if totals.is_empty():
 		lines.append("Elle n'a rien rapporté d'utile.")
 	var keys := totals.keys()

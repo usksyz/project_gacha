@@ -156,7 +156,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 
 
 ## Icônes provisoires des objets (en attendant de vraies images) ; sinon, l'initiale du nom.
-const ITEM_ICONS := {"Minerai de fer": "Fe", "Charbon": "Ch", "Cristal brut": "Cr", "Pierre d'attribut": "◆"}
+const ITEM_ICONS := {"Minerai de fer": "Fe", "Charbon": "Ch", "Cristal brut": "Cr", "Pierre d'attribut": "◆",
+	"Bois": "Bo", "Peau de bête": "Pe", "Herbe médicinale": "He", "Pierre de taille": "Pi", "Plume": "Pl", "Lin": "Li"}
 
 
 ## Les objets gagnés, une case par objet (cahier : « les récompenses s'affichent avec une icône par objet »).

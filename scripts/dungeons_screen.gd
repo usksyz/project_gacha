@@ -35,6 +35,8 @@ var daily_label: Label
 var daily_box: VBoxContainer
 ## Annonce de l'entrée d'une équipe dans le donjon, montrée tant qu'elle y est.
 var daily_notice := ""
+## Le donjon journalier choisi pour la prochaine expédition (le dimanche, ils sont tous ouverts).
+var daily_choice := ""
 var team_title: Label
 var enemies_box: VBoxContainer
 var pick_label: Label
@@ -149,7 +151,7 @@ func _refresh_daily() -> void:
 		daily_box.remove_child(child)
 		child.queue_free()
 
-	var dungeon := "%s (%s)" % [GameData.DAILY_DUNGEON["name"], GameData.DAILY_DUNGEON["difficulty"]]
+	_add_daily_calendar()
 	if not GameData.expedition_reports.is_empty():
 		for report in GameData.expedition_reports:
 			daily_box.add_child(UI.make_system_window("Donjon journalier", report["lines"]))
@@ -164,16 +166,26 @@ func _refresh_daily() -> void:
 	if problem != "":
 		daily_label.text = problem
 		return
-	daily_label.text = "Aujourd'hui : %s. Envoie un groupe (%d minutes de récolte), autant de fois que tu veux :" % [
-		dungeon, GameData.EXPEDITION_SECONDS / 60]
-	_add_daily_team_buttons(dungeon)
+	var open := GameData.open_daily_dungeons()
+	if not daily_choice in open:
+		daily_choice = open[0]
+	var day: String = GameData.WEEKDAY_NAMES[GameData.daily_weekday()]
+	if open.size() > 1:
+		daily_label.text = "%s : tous les donjons sont ouverts. Choisis-en un, puis envoie un groupe " % day \
+			+ "(%d minutes de récolte), autant de fois que tu veux :" % (GameData.EXPEDITION_SECONDS / 60)
+		_add_daily_choice(open)
+	else:
+		daily_label.text = "%s : %s. Envoie un groupe (%d minutes de récolte), autant de fois que tu veux :" % [
+			day, GameData.dungeon_title(daily_choice), GameData.EXPEDITION_SECONDS / 60]
+	_add_daily_team_buttons(daily_choice)
 
 	if daily_notice != "" and not GameData.expeditions.is_empty():
 		daily_box.add_child(UI.make_system_window("Donjon journalier", [daily_notice]))
 	for expedition in GameData.expeditions:
 		var remaining := GameData.expedition_remaining(expedition)
-		var title := UI.make_label("Équipe %d : récolte en cours, rappel dans %d:%02d." % [
-			expedition["team_index"] + 1, remaining / 60, remaining % 60], 20)
+		var title := UI.make_label("Équipe %d — %s : récolte en cours, rappel dans %d:%02d." % [
+			expedition["team_index"] + 1, GameData.expedition_dungeon(expedition)["name"],
+			remaining / 60, remaining % 60], 20)
 		title.add_theme_color_override("font_color", Color("f5b82e"))
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		daily_box.add_child(title)
@@ -185,17 +197,76 @@ func _refresh_daily() -> void:
 			daily_box.add_child(line)
 
 
-## Un bouton par équipe composée pour l'envoyer au donjon (grisé si aucun de ses héros n'est libre).
-func _add_daily_team_buttons(dungeon: String) -> void:
+## Calendrier (cahier) : une carte à cadre argenté par donjon, les jours dans un bandeau au-dessus,
+## le nom et les matériaux dessous ; la carte du dimanche les réunit tous. La carte du jour est dorée.
+func _add_daily_calendar() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	daily_box.add_child(row)
+	var today := GameData.daily_weekday()
+	var short := func(day: int) -> String: return GameData.WEEKDAY_NAMES[day].left(3)
+	for dungeon_id in GameData.DAILY_DUNGEONS:
+		var info: Dictionary = GameData.DAILY_DUNGEONS[dungeon_id]
+		var days: Array = info["days"]
+		row.add_child(_make_calendar_card(" · ".join(days.map(short)), info["name"],
+			"\n".join(info["materials"]), today in days))
+	row.add_child(_make_calendar_card(short.call(GameData.SUNDAY), "Tous les donjons",
+		"Les matériaux des trois", today == GameData.SUNDAY))
+
+
+func _make_calendar_card(days: String, title: String, materials: String, is_today: bool) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var border := Color("f5b82e") if is_today else Color("aab2c0")  # doré aujourd'hui, argenté sinon
+	var style := UI.make_panel_style(Color("2f3447") if is_today else Color("1d2030"), border, 4 if is_today else 2)
+	style.set_content_margin_all(8)
+	card.add_theme_stylebox_override("panel", style)
+	card.modulate = Color.WHITE if is_today else Color(1, 1, 1, 0.65)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	card.add_child(box)
+	var banner := UI.make_label(("Aujourd'hui\n" if is_today else "\n") + days, 15)
+	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner.add_theme_color_override("font_color", border)
+	box.add_child(banner)
+	for text in [[title, 17, 1.0], [materials, 13, 0.7]]:
+		var label := UI.make_label(text[0], text[1])
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.modulate = Color(1, 1, 1, text[2])
+		box.add_child(label)
+	return card
+
+
+## Le dimanche : un bouton par donjon ouvert, pour choisir où envoyer le prochain groupe.
+func _add_daily_choice(open: Array[String]) -> void:
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	daily_box.add_child(buttons)
+	for dungeon_id in open:
+		var button := UI.make_button(GameData.DAILY_DUNGEONS[dungeon_id]["name"], func():
+			daily_choice = dungeon_id
+			_refresh_daily.call_deferred(), 18)
+		button.custom_minimum_size.y = 60
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if dungeon_id == daily_choice:
+			button.add_theme_color_override("font_color", Color("f5b82e"))
+			button.text = "▶ " + button.text
+		buttons.add_child(button)
+
+
+## Un bouton par équipe composée pour l'envoyer dans le donjon « dungeon_id » (grisé si aucun de ses
+## héros n'est libre).
+func _add_daily_team_buttons(dungeon_id: String) -> void:
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	daily_box.add_child(buttons)
 	for index in GameData.TEAM_COUNT:
 		var members := GameData.expedition_members(index)
 		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()], func():
-			if GameData.start_expedition(index):
+			if GameData.start_expedition(index, dungeon_id):
 				daily_notice = "L'équipe %d est entrée dans le donjon journalier, %s. Ils reviendront après avoir acquis des matériaux !" \
-					% [index + 1, dungeon]
+					% [index + 1, GameData.dungeon_title(dungeon_id)]
 			_refresh_daily.call_deferred(), 22)
 		button.custom_minimum_size.y = 70
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL

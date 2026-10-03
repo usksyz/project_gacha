@@ -88,6 +88,13 @@ func _ready() -> void:
 			return "Aucune expédition en cours (le donjon journalier s'ouvre après l'étage %d)." % GameData.DAILY_UNLOCK_FLOOR
 		GameData.dev_finish_expedition()
 		return "Les groupes sont revenus (voir l'écran Donjons)."]])
+	_add_row(content, [["Donjon journalier : jour suivant", func():
+		# Jour simulé (le vrai jour, puis dimanche, lundi... samedi, puis de nouveau le vrai jour).
+		GameData.dev_daily_weekday = GameData.dev_daily_weekday + 1 if GameData.dev_daily_weekday < 6 else -1
+		if GameData.dev_daily_weekday < 0:
+			return "Donjon journalier : retour au vrai jour (%s)." % GameData.WEEKDAY_NAMES[GameData.daily_weekday()]
+		return "Donjon journalier : on fait comme si on était %s (jusqu'à la fermeture du jeu)." \
+			% GameData.WEEKDAY_NAMES[GameData.dev_daily_weekday].to_lower()]])
 	_add_row(content, [["Construire tous les bâtiments", func():
 		GameData.dev_build_all()
 		return "Tous les bâtiments sont construits."]])

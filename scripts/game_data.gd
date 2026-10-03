@@ -172,10 +172,11 @@ func dev_build_all() -> void:
 	save_game()
 
 
-## Ajoute « count » de chaque matériau du donjon journalier (au grade voulu) et des pierres d'attribut.
+## Ajoute « count » de chaque matériau des donjons journaliers (au grade voulu) et des pierres d'attribut.
 func dev_add_materials(grade: String, count: int) -> void:
-	for material in DAILY_DUNGEON["materials"]:
-		add_material(material, grade, count)
+	for dungeon_id in DAILY_DUNGEONS:
+		for material in DAILY_DUNGEONS[dungeon_id]["materials"]:
+			add_material(material, grade, count)
 	add_material(PROMOTION_STONE, "F", count)
 	save_game()
 
