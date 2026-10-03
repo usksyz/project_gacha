@@ -61,8 +61,12 @@ const CLASS_WEAPONS := {
 	"Chevalier": ["Épée", "Lance"],
 	"Assassin": ["Dague", "Épée", "Fouet"],
 	"Archer": ["Arc"],
+	# Apprentis (premier changement de classe), provisoire : les armes de leur famille (cahier :
+	# guerriers « épée, lance… », voleurs « dague, arc… »).
+	"Apprenti guerrier": ["Épée", "Lance", "Fouet"],
+	"Apprenti voleur": ["Dague", "Arc", "Épée"],
 }
-const SHIELD_CLASSES := ["Novice", "Guerrier", "Chevalier"]
+const SHIELD_CLASSES := ["Novice", "Guerrier", "Chevalier", "Apprenti guerrier"]
 
 
 ## Numéro du grade (F = 0, E- = 1...) : sert à comparer et à calculer les bonus.

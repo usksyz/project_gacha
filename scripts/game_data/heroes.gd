@@ -26,6 +26,9 @@ const CLASS_MAIN_STAT := {
 	"Assassin": "dex",
 	"Mage": "int",
 	"Soigneur": "int",
+	# Classes d'apprenti (premier changement de classe, voir « Changement de classe »).
+	"Apprenti guerrier": "str",
+	"Apprenti voleur": "dex",
 }
 
 ## Mages : leurs statistiques autres que l'Intelligence partent plus bas (voir _roll_stats).
@@ -371,6 +374,74 @@ func _level_up(hero: Dictionary) -> void:
 		if stats[down] > 1:
 			stats[down] -= 1
 			stats[choices.pick_random()] += 1
+
+
+# ---------------------------------------------------------------------------
+# Changement de classe
+# ---------------------------------------------------------------------------
+# La voie du 1 étoile, « déchet à trésor » (cahier, onglet « Invocations et classes ») : tout le monde
+# commence Novice, puis change de classe en plusieurs étapes, selon les compétences d'arme acquises.
+# - Premier changement : un Novice au niveau FIRST_CLASS_CHANGE_LEVEL devient apprenti (guerrier ou
+#   voleur) s'il a au moins une compétence d'arme de cette voie (CLASS_PATHS). S'il a les deux, le
+#   Maître choisit ; s'il n'en a aucune, il reste Novice.
+# Les statistiques ne changent pas : la nouvelle classe change ce qui monte à chaque niveau
+# (CLASS_MAIN_STAT) et les armes que le héros prend dans l'arsenal (CLASS_WEAPONS). Chiffres provisoires.
+
+## Niveau du premier changement de classe (Novice → apprenti).
+const FIRST_CLASS_CHANGE_LEVEL := 10
+
+## Les voies du premier changement : la classe d'apprenti, et les compétences d'arme qui y mènent.
+## L'« épée courte » du cahier n'existe pas dans le jeu (elle est comptée dans Maîtrise de l'épée) ;
+## Maîtrise de la dague ne s'apprend pas encore.
+const CLASS_PATHS := {
+	"Apprenti guerrier": ["Maîtrise de l'épée", "Utilisation du bouclier"],
+	"Apprenti voleur": ["Maîtrise de la dague", "Maîtrise de l'arc"],
+}
+
+
+## Les compétences d'arme d'une voie que le héros possède au moins au niveau « min_level ».
+func _path_skills(hero: Dictionary, path: String, min_level: int) -> Array:
+	return CLASS_PATHS[path].filter(func(skill_name): return skill_level(hero["skills"], skill_name) >= min_level)
+
+
+## Les classes que ce héros peut prendre maintenant (son prochain changement de classe), ou [].
+func class_change_options(hero: Dictionary) -> Array[String]:
+	var options: Array[String] = []
+	if not hero["alive"]:
+		return options
+	if hero["class"] == "Novice" and hero["level"] >= FIRST_CLASS_CHANGE_LEVEL:
+		for path in CLASS_PATHS:
+			if not _path_skills(hero, path, 1).is_empty():
+				options.append(path)
+	return options
+
+
+## Pourquoi ce héros, arrivé au niveau d'un changement de classe, ne peut pas en changer
+## (texte pour sa fiche), ou "" (il peut, ou ce n'est pas encore le moment).
+func class_change_problem(hero: Dictionary) -> String:
+	if not hero["alive"]:
+		return ""
+	if hero["class"] == "Novice" and hero["level"] >= FIRST_CLASS_CHANGE_LEVEL:
+		if class_change_options(hero).is_empty():
+			return ("Niveau %d atteint, mais aucune compétence d'arme : reste Novice. Épée ou bouclier " \
+				+ "(terrain d'entraînement) pour devenir Apprenti guerrier ; dague ou arc " \
+				+ "(tirer à l'arc en combat) pour devenir Apprenti voleur.") % FIRST_CLASS_CHANGE_LEVEL
+	if not class_change_options(hero).is_empty() and is_away(hero):
+		return "Changement de classe possible au retour (%s)." % ("Tour" if in_tower(hero) else "donjon journalier")
+	return ""
+
+
+## Change la classe d'un héros (« new_class » doit être une de ses options).
+## Renvoie les lignes à annoncer dans la fenêtre système, ou [] si c'est impossible.
+func change_class(hero: Dictionary, new_class: String) -> Array[String]:
+	var lines: Array[String] = []
+	if not new_class in class_change_options(hero) or is_away(hero):
+		return lines
+	var old_class: String = hero["class"]
+	hero["class"] = new_class
+	lines.append("Changement de classe : %s passe de %s à %s !" % [hero["name"], old_class, new_class])
+	save_game()
+	return lines
 
 
 # ---------------------------------------------------------------------------
