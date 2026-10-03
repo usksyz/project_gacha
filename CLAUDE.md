@@ -35,7 +35,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   dans `scripts/game_data/`, en une pile de classes : chaque fichier `extends` le précédent et
   `game_data.gd` est en haut, donc on écrit toujours `GameData.xxx` partout. De bas en haut :
   `game_state.gd` (`GameState` : variables enregistrées, or et gemmes, signaux), `heroes.gd` (`GameHeroes` :
-  fiche, stats, héros secrets, compétences, expérience, équipes, favoris, `is_away`), `training.gd`
+  fiche, stats, héros secrets, compétences, expérience, changement de classe, équipes, favoris, `is_away`), `training.gd`
   (`GameTraining` : terrain d'entraînement), `items.gd` (`GameItems` : armes, arsenal, équipement,
   matériaux de l'entrepôt), `summon.gd` (`GameSummon` : invocation, codes secrets), `lobby.gd`
   (`GameLobby` : construction, postes d'assistant, donjon journalier, forge), `synthesis.gd`
@@ -84,6 +84,23 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (`GameData.FAVORITES_MAX`, choix du porteur du projet ; seuls les vivants comptent). Bouton sur la fiche
   du héros, cœur ♥ sur les cartes, bouton ♥ dans `HeroFilter` pour ne garder que les favoris.
   Un favori ne peut pas être sacrifié en synthèse.
+- Changement de classe (cahier, onglet « Invocations et classes », section « Classes et changements de
+  classe » ; demande du porteur du projet : la voie du 1 étoile « déchet à trésor ») : `heroes.gd`, section
+  « Changement de classe », chiffres provisoires. 1er changement : un Novice au niveau
+  `FIRST_CLASS_CHANGE_LEVEL` (10) devient Apprenti guerrier (Maîtrise de l'épée ou Utilisation du bouclier)
+  ou Apprenti voleur (Maîtrise de la dague ou de l'arc ; l'« épée courte » du cahier est comptée dans
+  Maîtrise de l'épée), au choix s'il a les deux (`CLASS_PATHS`) ; sans compétence d'arme, il reste Novice et
+  la fiche explique pourquoi (`class_change_problem`). 2e changement : apprenti au niveau
+  `SECOND_CLASS_CHANGE_LEVEL` (20) avec une compétence d'arme de sa voie au niveau 5 → une des deux classes
+  de sa voie, au choix (`CLASS_FINALS` : Guerrier / Chevalier, Archer / Assassin) ; ses compétences de rang
+  Débutant passent Intermédiaire (rang affiché, mêmes effets) ou disparaissent (`CLASS_LOST_SKILLS` :
+  Mouvement souple pour Guerrier et Chevalier, comme Han qui perd Mouvement secret). Mages et soigneurs :
+  jamais par changement de classe (`INVOCATION_ONLY_CLASSES`). Les statistiques ne changent pas ; la classe
+  change la stat favorisée (`CLASS_MAIN_STAT`) et les armes prises dans l'arsenal (`CLASS_WEAPONS`, bouclier
+  pour l'apprenti guerrier). Fiche du héros : bouton « Changer de classe » (visible seulement quand c'est
+  possible, pas pour un héros parti), fenêtre de choix, puis fenêtre système qui annonce la nouvelle classe.
+  Rien de neuf dans la sauvegarde (la classe était déjà enregistrée). Reste : classes supérieures (Grand
+  chevalier...), Maîtrise de la dague (pas encore apprenable : la voie du voleur passe par l'arc).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -243,7 +260,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   4 étoiles 21 %, 5 étoiles 4 %, pity de 50). Ancien réglage : or de 1 à 4 étoiles, gemmes de 1 à 5.
   Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
   niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
-  Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice ;
+  Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice (ils
+  changent de classe ensuite, voir « Changement de classe ») ;
   mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (donc 1 % des invocations spéciales).
   Bouton « Détail des taux » sur l'écran d'invocation (étoiles possibles, pity, taux et classes).
   Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;

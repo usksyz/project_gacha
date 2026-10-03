@@ -135,6 +135,59 @@ func _add_promotion(content: VBoxContainer, hero: Dictionary) -> void:
 		content.add_child(why)
 
 
+## Bouton « Changer de classe » : visible seulement quand le héros peut en changer (voir GameData,
+## section « Changement de classe »). Sinon, s'il a atteint le niveau mais qu'il lui manque quelque chose
+## (compétence d'arme, ou il est parti), la fiche explique pourquoi.
+func _add_class_change(content: VBoxContainer, hero: Dictionary) -> void:
+	var problem := GameData.class_change_problem(hero)
+	if problem != "":
+		var why := UI.make_label(problem, 19)
+		why.add_theme_color_override("font_color", Color("e0a052"))
+		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(why)
+		return
+	var options := GameData.class_change_options(hero)
+	if options.is_empty():
+		return
+	var button := UI.make_button("Changer de classe", func(): _show_class_choice(hero, options), 24)
+	button.custom_minimum_size.y = 90
+	button.add_theme_color_override("font_color", Color("9ad1ff"))
+	content.add_child(button)
+
+
+## Fenêtre du choix de la nouvelle classe (une ou deux classes proposées), par-dessus la fiche.
+## Une fois la classe choisie, la fiche se rouvre avec la fenêtre système qui l'annonce.
+func _show_class_choice(hero: Dictionary, options: Array[String]) -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.8)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	detail_overlay.add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	var question := "Quelle voie pour %s ?" % hero["name"] if options.size() > 1 \
+		else "%s peut devenir %s." % [hero["name"], options[0]]
+	box.add_child(UI.make_system_window("Changement de classe", [
+		"%s (%s, niveau %d) est prêt à changer de classe." % [hero["name"], hero["class"], hero["level"]],
+		question,
+	]))
+	for new_class in options:
+		var choose := UI.make_button("Devenir %s" % new_class, func():
+			var lines := GameData.change_class(hero, new_class)
+			overlay.queue_free()
+			_refresh()
+			_show_detail.call_deferred(hero, lines, "Changement de classe !"), 24)
+		choose.custom_minimum_size.y = 84
+		box.add_child(choose)
+	var cancel := UI.make_button("Annuler", func(): overlay.queue_free(), 24)
+	cancel.custom_minimum_size.y = 84
+	box.add_child(cancel)
+
+
 ## Bouton « Favori » : met le héros en favori (cœur sur sa carte, protégé de la synthèse) ou l'en retire.
 ## Grisé, avec la raison, quand les GameData.FAVORITES_MAX places sont prises.
 func _add_favorite_button(content: VBoxContainer, hero: Dictionary) -> void:
@@ -244,8 +297,8 @@ func _redraw_detail() -> void:
 
 
 ## Affiche la fiche détaillée d'un héros. « notice » : une fenêtre système à montrer en haut
-## (le résultat d'une promotion, par exemple).
-func _show_detail(hero: Dictionary, notice: Array = []) -> void:
+## (le résultat d'une promotion, par exemple), avec le titre « notice_title ».
+func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promotion !") -> void:
 	for child in detail_overlay.get_children():
 		detail_overlay.remove_child(child)
 		child.queue_free()
@@ -282,7 +335,7 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	scroll.add_child(content)
 
 	if not notice.is_empty():
-		content.add_child(UI.make_system_window("Promotion !", notice))
+		content.add_child(UI.make_system_window(notice_title, notice))
 
 	if Settings.new_visuals:
 		# Nouveaux visuels : la carte avec son cadre (étoiles, portrait, nom, niveau et stats).
@@ -397,6 +450,7 @@ func _show_detail(hero: Dictionary, notice: Array = []) -> void:
 	content.add_child(status)
 
 	_add_favorite_button(content, hero)
+	_add_class_change(content, hero)
 	_add_promotion(content, hero)
 	if Settings.dev_mode:
 		_add_dev_tools(content, hero)
