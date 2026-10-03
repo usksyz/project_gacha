@@ -83,14 +83,11 @@ func _ready() -> void:
 	_add_row(content, [["Séance d'entraînement maintenant", func():
 		GameData.dev_training_session()
 		return "Les héros à l'entraînement ont fait une séance (voir le terrain)."]])
-	_add_row(content, [["Rouvrir le donjon journalier", func():
-		GameData.dev_reset_daily()
-		return "Le donjon journalier peut être refait aujourd'hui (il s'ouvre après l'étage %d)." % GameData.DAILY_UNLOCK_FLOOR]])
-	_add_row(content, [["Terminer l'expédition en cours", func():
-		if GameData.expedition.is_empty():
-			return "Aucune expédition en cours."
+	_add_row(content, [["Terminer les expéditions en cours", func():
+		if GameData.expeditions.is_empty():
+			return "Aucune expédition en cours (le donjon journalier s'ouvre après l'étage %d)." % GameData.DAILY_UNLOCK_FLOOR
 		GameData.dev_finish_expedition()
-		return "L'expédition est revenue (voir l'écran Donjons)."]])
+		return "Les groupes sont revenus (voir l'écran Donjons)."]])
 	_add_row(content, [["Construire tous les bâtiments", func():
 		GameData.dev_build_all()
 		return "Tous les bâtiments sont construits."]])

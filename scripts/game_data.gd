@@ -155,19 +155,12 @@ func dev_training_session() -> void:
 	save_game()
 
 
-## Le donjon journalier peut être refait aujourd'hui.
-func dev_reset_daily() -> void:
-	last_expedition_day = ""
-	save_game()
-
-
-## L'expédition en cours se termine tout de suite (tous ses ramassages compris).
+## Les expéditions en cours se terminent tout de suite (tous leurs ramassages compris).
 func dev_finish_expedition() -> void:
-	if expedition.is_empty():
-		return
-	var shift := float(expedition_remaining())
-	expedition["start"] -= shift
-	expedition["end"] -= shift
+	for expedition in expeditions:
+		var shift := float(expedition_remaining(expedition))
+		expedition["start"] -= shift
+		expedition["end"] -= shift
 	update_expedition()
 
 

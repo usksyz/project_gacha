@@ -620,4 +620,7 @@ func is_away(hero: Dictionary) -> bool:
 
 ## Vrai si le héros est parti récolter au donjon journalier.
 func on_expedition(hero: Dictionary) -> bool:
-	return not expedition.is_empty() and hero["id"] in expedition["team"]
+	for expedition in expeditions:
+		if hero["id"] in expedition["team"]:
+			return true
+	return false

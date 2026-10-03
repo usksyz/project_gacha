@@ -153,7 +153,8 @@ func build(building_id: String) -> Array[String]:
 # Les matériaux s'accumulent dans l'entrepôt (warehouse : {nom: {grade: nombre}}).
 # Le donjon journalier (débloqué après l'étage DAILY_UNLOCK_FLOOR) n'est pas un combat : une équipe
 # y part récolter pendant EXPEDITION_SECONDS de temps réel (même jeu fermé), puis elle est rappelée
-# automatiquement et les matériaux vont dans l'entrepôt. Une expédition par jour.
+# automatiquement et les matériaux vont dans l'entrepôt. Pas de limite (choix du porteur du projet) :
+# autant d'expéditions qu'on veut, plusieurs groupes à la fois (expeditions), tant qu'il reste des héros.
 # Les ramassages sont tirés au départ (expedition["log"]) et annoncés au fil du temps.
 # Pour l'instant, un seul donjon journalier (le cahier en prévoit trois, un par jour de la semaine).
 
@@ -186,18 +187,10 @@ func daily_unlocked() -> bool:
 	return tower_floor > DAILY_UNLOCK_FLOOR
 
 
-func _today() -> String:
-	return Time.get_date_string_from_system()
-
-
 ## Pourquoi on ne peut pas partir au donjon journalier (texte), ou "" si c'est possible.
 func expedition_problem() -> String:
 	if not daily_unlocked():
 		return "Verrouillé : franchis l'étage %d." % DAILY_UNLOCK_FLOOR
-	if not expedition.is_empty():
-		return "Une équipe est déjà dans le donjon."
-	if last_expedition_day == _today():
-		return "Déjà visité aujourd'hui : reviens demain."
 	return ""
 
 
@@ -225,9 +218,8 @@ func start_expedition(team_index: int) -> bool:
 			pickups.append(_roll_pickup(hero, t))
 			t += PICKUP_SECONDS * randf_range(0.7, 1.3)
 	pickups.sort_custom(func(a, b): return a["t"] < b["t"])
-	expedition = {"team": team.map(func(hero): return hero["id"]), "team_index": team_index,
-		"start": now, "end": now + EXPEDITION_SECONDS, "log": pickups}
-	last_expedition_day = _today()
+	expeditions.append({"team": team.map(func(hero): return hero["id"]), "team_index": team_index,
+		"start": now, "end": now + EXPEDITION_SECONDS, "log": pickups})
 	gear_up(team)  # les héros prennent leurs armes dans l'arsenal (et la partie est sauvegardée)
 	return true
 
@@ -263,26 +255,36 @@ func _roll_from(rates: Dictionary) -> String:
 	return rates.keys()[0]
 
 
-## Secondes écoulées depuis le départ de l'expédition, et secondes restantes.
-func expedition_elapsed() -> float:
+## Secondes écoulées depuis le départ d'une expédition, et secondes restantes.
+func expedition_elapsed(expedition: Dictionary) -> float:
 	return Time.get_unix_time_from_system() - expedition.get("start", 0.0)
 
 
-func expedition_remaining() -> int:
+func expedition_remaining(expedition: Dictionary) -> int:
 	return maxi(0, ceili(expedition.get("end", 0.0) - Time.get_unix_time_from_system()))
 
 
-## Les ramassages déjà faits (ceux dont le moment est passé).
-func expedition_log_so_far() -> Array:
-	var elapsed := expedition_elapsed()
+## Les ramassages déjà faits d'une expédition (ceux dont le moment est passé).
+func expedition_log_so_far(expedition: Dictionary) -> Array:
+	var elapsed := expedition_elapsed(expedition)
 	return expedition.get("log", []).filter(func(entry): return entry["t"] <= elapsed)
 
 
-## À la fin du temps, le groupe est rappelé : les matériaux vont dans l'entrepôt,
+## À la fin du temps, chaque groupe est rappelé : les matériaux vont dans l'entrepôt,
 ## les plans sont gardés, les déchets jetés. Appelée régulièrement (et au lancement).
 func update_expedition() -> void:
-	if expedition.is_empty() or expedition_remaining() > 0:
+	var finished := expeditions.filter(func(expedition): return expedition_remaining(expedition) <= 0)
+	if finished.is_empty():
 		return
+	for expedition in finished:
+		expeditions.erase(expedition)
+		expedition_reports.append(_finish_expedition(expedition))
+	tidy_arsenal()  # les héros reposent leurs armes dans l'arsenal (et la partie est sauvegardée)
+	lobby_updated.emit()
+
+
+## Le retour d'un groupe : ce qu'il a rapporté va dans l'entrepôt. Renvoie le rapport à annoncer.
+func _finish_expedition(expedition: Dictionary) -> Dictionary:
 	var totals := {}
 	for entry in expedition["log"]:
 		match entry["kind"]:
@@ -305,10 +307,7 @@ func update_expedition() -> void:
 	for hero in alive_heroes():
 		if hero["id"] in expedition["team"]:
 			hero["training_since"] = Time.get_unix_time_from_system()
-	expedition_report = {"lines": lines}
-	expedition = {}
-	tidy_arsenal()  # les héros reposent leurs armes dans l'arsenal (et la partie est sauvegardée)
-	lobby_updated.emit()
+	return {"lines": lines}
 
 
 # ---------------------------------------------------------------------------

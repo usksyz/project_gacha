@@ -82,12 +82,11 @@ var buildings: Array = []
 var warehouse: Dictionary = {}
 ## Plans de forge possédés (types d'armes), trouvés au donjon journalier.
 var plans: Array = []
-## Expédition en cours (vide s'il n'y en a pas) : {"team": [id], "start": t, "end": t, "log": [...]}.
-var expedition: Dictionary = {}
-## Jour (AAAA-MM-JJ) de la dernière expédition : une seule par jour.
-var last_expedition_day := ""
-## Résultat d'une expédition revenue, pas encore montré au joueur : {"lines": [...], "items": [...]}.
-var expedition_report: Dictionary = {}
+## Expéditions en cours (autant qu'on veut, plusieurs groupes à la fois) :
+## [{"team": [id], "team_index": n, "start": t, "end": t, "log": [...]}, ...].
+var expeditions: Array = []
+## Retours d'expédition pas encore montrés au joueur : [{"lines": [...]}, ...].
+var expedition_reports: Array = []
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace

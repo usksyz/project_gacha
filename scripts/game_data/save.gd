@@ -41,9 +41,8 @@ func save_game() -> void:
 	file.set_value("partie", "batiments", buildings)
 	file.set_value("partie", "entrepot", warehouse)
 	file.set_value("partie", "plans", plans)
-	file.set_value("partie", "expedition", expedition)
-	file.set_value("partie", "derniere_expedition", last_expedition_day)
-	file.set_value("partie", "retour_expedition", expedition_report)
+	file.set_value("partie", "expeditions", expeditions)
+	file.set_value("partie", "retours_expeditions", expedition_reports)
 	file.save(SAVE_PATH)
 
 
@@ -71,9 +70,15 @@ func load_game() -> bool:
 	buildings = file.get_value("partie", "batiments", [])
 	warehouse = file.get_value("partie", "entrepot", {})
 	plans = file.get_value("partie", "plans", [])
-	expedition = file.get_value("partie", "expedition", {})
-	last_expedition_day = file.get_value("partie", "derniere_expedition", "")
-	expedition_report = file.get_value("partie", "retour_expedition", {})
+	expeditions = file.get_value("partie", "expeditions", [])
+	expedition_reports = file.get_value("partie", "retours_expeditions", [])
+	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
+	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
+	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
+		expeditions = [old_expedition]
+	var old_report: Dictionary = file.get_value("partie", "retour_expedition", {})
+	if not old_report.is_empty() and not file.has_section_key("partie", "retours_expeditions"):
+		expedition_reports = [old_report]
 	return not roster.is_empty()
 
 
@@ -112,7 +117,6 @@ func _new_game() -> void:
 	buildings = []
 	warehouse = {}
 	plans = []
-	expedition = {}
-	last_expedition_day = ""
-	expedition_report = {}
+	expeditions = []
+	expedition_reports = []
 	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.

@@ -123,7 +123,7 @@ func _build_list_page() -> Control:
 	var timer := Timer.new()
 	timer.wait_time = 1.0
 	timer.timeout.connect(func():
-		if list_page.visible and is_visible_in_tree() and not GameData.expedition.is_empty():
+		if list_page.visible and is_visible_in_tree() and not GameData.expeditions.is_empty():
 			_refresh_daily())
 	add_child(timer)
 	timer.start()
@@ -140,8 +140,9 @@ func _build_list_page() -> Control:
 	return margin
 
 
-## Carte du donjon journalier : verrouillé, prêt (un bouton par équipe), en cours
-## (compte à rebours et derniers ramassages), ou revenu (ce qui a été rapporté).
+## Carte du donjon journalier : verrouillé, ou prêt (un bouton par équipe, autant d'expéditions
+## qu'on veut) ; en dessous, les groupes en cours (compte à rebours et derniers ramassages) ;
+## au-dessus, les groupes revenus (ce qu'ils ont rapporté).
 func _refresh_daily() -> void:
 	GameData.update_expedition()
 	for child in daily_box.get_children():
@@ -149,37 +150,43 @@ func _refresh_daily() -> void:
 		child.queue_free()
 
 	var dungeon := "%s (%s)" % [GameData.DAILY_DUNGEON["name"], GameData.DAILY_DUNGEON["difficulty"]]
-	if not GameData.expedition_report.is_empty():
-		daily_label.text = "Le groupe est revenu !"
-		daily_box.add_child(UI.make_system_window("Donjon journalier", GameData.expedition_report["lines"]))
+	if not GameData.expedition_reports.is_empty():
+		for report in GameData.expedition_reports:
+			daily_box.add_child(UI.make_system_window("Donjon journalier", report["lines"]))
 		var ok := UI.make_button("Compris", func():
-			GameData.expedition_report = {}
+			GameData.expedition_reports.clear()
 			GameData.save_game()
 			_refresh_daily(), 22)
 		ok.custom_minimum_size.y = 70
 		daily_box.add_child(ok)
-		return
-
-	if not GameData.expedition.is_empty():
-		var remaining := GameData.expedition_remaining()
-		daily_label.text = "%s : l'équipe %d récolte. Rappel dans %d:%02d." % [dungeon,
-			GameData.expedition["team_index"] + 1, remaining / 60, remaining % 60]
-		if daily_notice != "":
-			daily_box.add_child(UI.make_system_window("Donjon journalier", [daily_notice]))
-		var entries := GameData.expedition_log_so_far()
-		for entry in entries.slice(maxi(0, entries.size() - 6)):
-			var line := UI.make_label(entry["text"], 18)
-			line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			line.modulate = Color(1, 1, 1, 0.5 if entry["kind"] == "junk" else 0.85)
-			daily_box.add_child(line)
-		return
 
 	var problem := GameData.expedition_problem()
 	if problem != "":
 		daily_label.text = problem
 		return
-	daily_label.text = "Aujourd'hui : %s. Envoie une équipe (%d minutes de récolte) :" % [
+	daily_label.text = "Aujourd'hui : %s. Envoie un groupe (%d minutes de récolte), autant de fois que tu veux :" % [
 		dungeon, GameData.EXPEDITION_SECONDS / 60]
+	_add_daily_team_buttons(dungeon)
+
+	if daily_notice != "" and not GameData.expeditions.is_empty():
+		daily_box.add_child(UI.make_system_window("Donjon journalier", [daily_notice]))
+	for expedition in GameData.expeditions:
+		var remaining := GameData.expedition_remaining(expedition)
+		var title := UI.make_label("Équipe %d : récolte en cours, rappel dans %d:%02d." % [
+			expedition["team_index"] + 1, remaining / 60, remaining % 60], 20)
+		title.add_theme_color_override("font_color", Color("f5b82e"))
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		daily_box.add_child(title)
+		var entries := GameData.expedition_log_so_far(expedition)
+		for entry in entries.slice(maxi(0, entries.size() - 3)):
+			var line := UI.make_label(entry["text"], 18)
+			line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			line.modulate = Color(1, 1, 1, 0.5 if entry["kind"] == "junk" else 0.85)
+			daily_box.add_child(line)
+
+
+## Un bouton par équipe composée pour l'envoyer au donjon (grisé si aucun de ses héros n'est libre).
+func _add_daily_team_buttons(dungeon: String) -> void:
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	daily_box.add_child(buttons)
