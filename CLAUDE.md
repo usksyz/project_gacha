@@ -104,6 +104,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   mort les quitte). Taille d'une équipe de combat, choix du porteur du projet : 1 héros au minimum,
   5 au maximum (`TEAM_SIZE`), même si le cahier montre des équipes de 3. Donjons > « Composer les
   équipes » pour les modifier ; avant un étage, un bouton par équipe la sélectionne d'un toucher.
+  Glisser-déposer (cahier : « Formation de groupe ») : `TeamSlots` (`scripts/team_slots.gd`), les cases
+  du groupe ; maintenir une carte 0,3 s puis la glisser sur une case (ajout, remplacement, échange),
+  la relâcher sur la liste pour la retirer ; toucher marche toujours. `DragScroll` ne défile pas pendant
+  un glisser. Avant l'étage, une fenêtre « Formation de groupe » confirme le groupe.
 - `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
   de 0,1 s (`start()` puis `step()`) : grille avec décor, recherche de chemin `AStarGrid2D`, ligne de
   vue pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
@@ -215,7 +219,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   `TOWER_MATERIAL_GRADES`, provisoire : le cahier montre du C dès l'étage 1 ; le charbon remplace le cuir,
   qui n'existe pas encore ; rien en rejouant un étage), pierres d'attribut des boss, une case par objet
   (`UI.make_reward_items`), armes perdues avec les morts (`report["lost_weapons"]`), niveaux, MVP : fait.
-  Reste : glisser-déposer, équipes de 3 et quêtes à deux équipes,
+  Glisser-déposer des héros dans le groupe : fait. Reste : équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
   mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.

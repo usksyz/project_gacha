@@ -60,6 +60,9 @@ func _input(event: InputEvent) -> void:
 				_hide_from_buttons(event)
 
 	elif event is InputEventMouseMotion and pressing and target != null:
+		# Une carte est en train d'être glissée-déposée (TeamSlots) : la liste ne défile pas.
+		if get_viewport().gui_is_dragging():
+			return
 		if not dragging:
 			if event.position.distance_to(press_position) < DRAG_THRESHOLD:
 				return  # petit tremblement du doigt : c'est encore un simple appui

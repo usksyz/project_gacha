@@ -1590,6 +1590,21 @@ func toggle_team_member(index: int, hero_id: int) -> bool:
 	return true
 
 
+## Remplace toute une équipe (glisser-déposer de la composition) : « hero_ids » dans l'ordre voulu,
+## TEAM_SIZE héros au plus.
+func set_team(index: int, hero_ids: Array) -> void:
+	teams[index] = hero_ids.slice(0, TEAM_SIZE)
+	save_game()
+
+
+## Le héros qui porte ce numéro (vide s'il n'existe pas).
+func hero_by_id(hero_id: int) -> Dictionary:
+	for hero in roster:
+		if hero["id"] == hero_id:
+			return hero
+	return {}
+
+
 ## Un héros mort quitte toutes les équipes.
 func _remove_from_teams(hero_id: int) -> void:
 	for members in teams:

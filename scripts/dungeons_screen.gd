@@ -21,7 +21,7 @@ var announce_button: Button
 ## ses places, et la grille des héros.
 var edited_team := 0
 var team_tabs: HBoxContainer
-var team_slots: HBoxContainer
+var team_slots: TeamSlots
 var team_hint: Label
 var compose_grid: GridContainer
 var presets_box: HBoxContainer
@@ -38,6 +38,8 @@ var daily_notice := ""
 var team_title: Label
 var enemies_box: VBoxContainer
 var pick_label: Label
+## Formation de groupe avant l'étage : les places du groupe (glisser-déposer).
+var group_slots: TeamSlots
 var heroes_grid: GridContainer
 var no_hero_label: Label
 var fight_button: Button
@@ -235,11 +237,11 @@ func _build_teams_page() -> Control:
 	var slots_panel := PanelContainer.new()
 	slots_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b")))
 	layout.add_child(slots_panel)
-	var slots_center := CenterContainer.new()
-	slots_panel.add_child(slots_center)
-	team_slots = HBoxContainer.new()
-	team_slots.add_theme_constant_override("separation", 8)
-	slots_center.add_child(team_slots)
+	team_slots = TeamSlots.new()
+	team_slots.changed.connect(func(ids: Array):
+		GameData.set_team(edited_team, ids)
+		_refresh_teams_page.call_deferred())
+	slots_panel.add_child(team_slots)
 
 	team_hint = UI.make_label("", 22)
 	team_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -247,6 +249,8 @@ func _build_teams_page() -> Control:
 
 	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
+	# Lâcher une carte de l'équipe sur la liste la retire de l'équipe.
+	TeamSlots.make_removal_zone(scroll, func(hero_id: int): _remove_team_member(hero_id))
 	var centered := CenterContainer.new()
 	centered.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(centered)
@@ -269,10 +273,9 @@ func _open_teams() -> void:
 
 
 func _refresh_teams_page() -> void:
-	for box in [team_tabs, team_slots]:
-		for child in box.get_children():
-			box.remove_child(child)
-			child.queue_free()
+	for child in team_tabs.get_children():
+		team_tabs.remove_child(child)
+		child.queue_free()
 
 	for index in GameData.TEAM_COUNT:
 		var tab := UI.make_button("Équipe %d" % (index + 1), _select_team.bind(index), 24)
@@ -285,27 +288,10 @@ func _refresh_teams_page() -> void:
 		team_tabs.add_child(tab)
 
 	var members := GameData.team_members(edited_team)
-	# Taille d'une carte d'équipe (plus haute avec le cadre illustré des nouveaux visuels).
-	var slot_size := FramedHeroCard.size_for(108) if Settings.new_visuals else Vector2(108, 150)
-	for hero in members:
-		var card := UI.make_card(hero, slot_size.x)
-		card.custom_minimum_size = slot_size
-		card.pressed.connect(_toggle_team_member.bind(hero["id"]))  # toucher une carte la retire
-		team_slots.add_child(card)
-	for i in GameData.TEAM_SIZE - members.size():
-		var empty := PanelContainer.new()
-		empty.custom_minimum_size = slot_size
-		empty.add_theme_stylebox_override("panel", UI.make_panel_style(Color("1b1d2a"), Color("3a3f55"), 2))
-		var plus := UI.make_label("+", 40)
-		plus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		plus.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		plus.modulate = Color(1, 1, 1, 0.3)
-		empty.add_child(plus)
-		team_slots.add_child(empty)
-
 	var member_ids := members.map(func(hero): return hero["id"])
-	_fill_hero_grid(compose_grid, _sorted_heroes(), member_ids, _toggle_team_member)
-	team_hint.text = "Équipe %d : %d/%d héros. Touche un héros pour l'ajouter ou le retirer. Tout est enregistré." \
+	team_slots.set_heroes(member_ids)
+	_fill_hero_grid(compose_grid, _sorted_heroes(), member_ids, _toggle_team_member, _remove_team_member)
+	team_hint.text = "Équipe %d : %d/%d héros. Conseil du Système : maintiens une carte puis glisse-la dans l'équipe, ou touche-la. Tout est enregistré." \
 		% [edited_team + 1, members.size(), GameData.TEAM_SIZE]
 
 
@@ -320,6 +306,14 @@ func _toggle_team_member(hero_id: int) -> void:
 			% [edited_team + 1, GameData.TEAM_SIZE]
 		return
 	# « call_deferred » : on reconstruit juste après, pas pendant l'appui sur la carte.
+	_refresh_teams_page.call_deferred()
+
+
+## Retire un héros de l'équipe en cours (carte du groupe lâchée sur la liste).
+func _remove_team_member(hero_id: int) -> void:
+	var ids: Array = GameData.teams[edited_team].duplicate()
+	ids.erase(hero_id)
+	GameData.set_team(edited_team, ids)
 	_refresh_teams_page.call_deferred()
 
 
@@ -416,12 +410,30 @@ func _build_team_page() -> Control:
 	presets_box.add_theme_constant_override("separation", 8)
 	layout.add_child(presets_box)
 
+	# Formation de groupe (cahier) : on glisse-dépose les héros dans les places du groupe.
+	var group_panel := PanelContainer.new()
+	group_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b"), Color("3d8fe0"), 2))
+	layout.add_child(group_panel)
+	var group_box := VBoxContainer.new()
+	group_panel.add_child(group_box)
+	var group_title := UI.make_label("Formation de groupe", 22)
+	group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	group_title.add_theme_color_override("font_color", Color("9ad1ff"))
+	group_box.add_child(group_title)
+	group_slots = TeamSlots.new()
+	group_slots.slot_width = 96
+	group_slots.changed.connect(func(ids: Array):
+		selected_ids.assign(ids)
+		_refresh_team.call_deferred())
+	group_box.add_child(group_slots)
+
 	no_hero_label = UI.make_label("Aucun héros en vie.\nVa en invoquer dans la Salle d'invocation !", 24)
 	no_hero_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(no_hero_label)
 
 	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
+	TeamSlots.make_removal_zone(scroll, func(hero_id: int): _remove_selected(hero_id))
 	var centered := CenterContainer.new()
 	centered.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(centered)
@@ -437,7 +449,7 @@ func _build_team_page() -> Control:
 	var back := UI.make_button("Retour", func(): _show_page(list_page))
 	back.custom_minimum_size = Vector2(200, 90)
 	buttons.add_child(back)
-	fight_button = UI.make_button("", _start_fight)
+	fight_button = UI.make_button("", _confirm_group)
 	fight_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(fight_button)
 	return margin
@@ -542,7 +554,8 @@ func _refresh_team() -> void:
 	for hero in _sorted_heroes():
 		if not GameData.is_away(hero):
 			heroes.append(hero)
-	_fill_hero_grid(heroes_grid, heroes, selected_ids, _toggle_hero)
+	_fill_hero_grid(heroes_grid, heroes, selected_ids, _toggle_hero, _remove_selected)
+	group_slots.set_heroes(selected_ids)
 
 	# Boutons des équipes composées à l'avance (grisés si l'équipe est vide).
 	for child in presets_box.get_children():
@@ -557,7 +570,7 @@ func _refresh_team() -> void:
 		presets_box.add_child(button)
 
 	no_hero_label.visible = heroes.is_empty()
-	pick_label.text = "Choisis une équipe, ou jusqu'à %d héros :" % GameData.TEAM_SIZE
+	pick_label.text = "Choisis une équipe, ou glisse jusqu'à %d héros dans le groupe :" % GameData.TEAM_SIZE
 	fight_button.text = "Combattre (%d/%d)" % [selected_ids.size(), GameData.TEAM_SIZE]
 	fight_button.disabled = selected_ids.is_empty()
 
@@ -581,9 +594,11 @@ func _sorted_heroes() -> Array[Dictionary]:
 	return heroes
 
 
-## Remplit une grille de cartes de héros. Les héros de « chosen_ids » ont une épaisse
-## bordure blanche ; toucher une carte appelle « on_press » avec le numéro du héros.
-func _fill_hero_grid(grid: GridContainer, heroes: Array[Dictionary], chosen_ids: Array, on_press: Callable) -> void:
+## Remplit une grille de cartes de héros. Les héros de « chosen_ids » ont un cadre lumineux ;
+## toucher une carte appelle « on_press » avec le numéro du héros. Les cartes se glissent dans le
+## groupe (TeamSlots) ; une carte du groupe lâchée sur la grille appelle « on_remove ».
+func _fill_hero_grid(grid: GridContainer, heroes: Array[Dictionary], chosen_ids: Array, on_press: Callable,
+		on_remove: Callable) -> void:
 	for child in grid.get_children():
 		grid.remove_child(child)
 		child.queue_free()
@@ -591,8 +606,18 @@ func _fill_hero_grid(grid: GridContainer, heroes: Array[Dictionary], chosen_ids:
 		var card := UI.make_card(hero)
 		if hero["id"] in chosen_ids:
 			UI.mark_card_chosen(card, hero)
-		card.pressed.connect(on_press.bind(hero["id"]))
+		card.pressed.connect(func():
+			if not card.get_meta("dragged", false):
+				on_press.call(hero["id"]))
+		TeamSlots.make_draggable(card, hero, "grid")
+		TeamSlots.make_removal_zone(card, on_remove)
 		grid.add_child(card)
+
+
+## Retire un héros du groupe avant l'étage (carte du groupe lâchée sur la liste).
+func _remove_selected(hero_id: int) -> void:
+	selected_ids.erase(hero_id)
+	_refresh_team.call_deferred()
 
 
 ## Ajoute ou retire un héros de l'équipe.
@@ -603,6 +628,43 @@ func _toggle_hero(hero_id: int) -> void:
 		selected_ids.append(hero_id)
 	# « call_deferred » : on reconstruit la grille juste après, pas pendant l'appui sur la carte.
 	_refresh_team.call_deferred()
+
+
+## Avant le combat, une fenêtre confirme le groupe (cahier : « ex. Han ★ et Shei ★★★★ »).
+func _confirm_group() -> void:
+	var names: Array[String] = []
+	for hero_id in selected_ids:
+		var hero := GameData.hero_by_id(hero_id)
+		names.append("%s %s" % [hero["name"], "★".repeat(hero["rarity"])])
+	var group := ", ".join(names.slice(0, -1)) + " et " + names[-1] if names.size() > 1 else names[0]
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.8)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	box.add_child(UI.make_system_window("Formation de groupe", [
+		"Le groupe est formé : %s." % group,
+		"Étage %d — %s. Partir au combat ?" % [chosen_floor, floor_quest["name"]],
+	]))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	var cancel := UI.make_button("Annuler", func(): overlay.queue_free(), 24)
+	cancel.custom_minimum_size = Vector2(0, 84)
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(cancel)
+	var go := UI.make_button("Confirmer", func():
+		overlay.queue_free()
+		_start_fight(), 24)
+	go.custom_minimum_size = Vector2(0, 84)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(go)
 
 
 # --- Page 3 : combat ---
