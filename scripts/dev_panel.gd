@@ -88,6 +88,10 @@ func _ready() -> void:
 			return "Aucune expédition en cours (le donjon journalier s'ouvre après l'étage %d)." % GameData.DAILY_UNLOCK_FLOOR
 		GameData.dev_finish_expedition()
 		return "Les groupes sont revenus (voir l'écran Donjons)."]])
+	_add_row(content, [["Monstre rare garanti (oui / non)", func():
+		GameData.dev_force_rare = not GameData.dev_force_rare
+		return "Monstre rare à chaque expédition : %s (jusqu'à la fermeture du jeu)." \
+			% ("oui" if GameData.dev_force_rare else "non")]])
 	_add_row(content, [["Donjon journalier : jour suivant", func():
 		# Jour simulé (le vrai jour, puis dimanche, lundi... samedi, puis de nouveau le vrai jour).
 		GameData.dev_daily_weekday = GameData.dev_daily_weekday + 1 if GameData.dev_daily_weekday < 6 else -1

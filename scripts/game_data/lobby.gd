@@ -167,12 +167,24 @@ const DAILY_UNLOCK_FLOOR := 5
 ## (« super facile ») et ne nomme pas les matériaux (sauf des branches d'arbres dans la forêt).
 const DAILY_DUNGEONS := {
 	"mine": {"name": "Mine d'Isralta", "difficulty": "super facile", "days": [1, 2],
-		"materials": ["Minerai de fer", "Charbon", "Cristal brut"]},
+		"materials": ["Minerai de fer", "Charbon", "Cristal brut"],
+		"rare": {"name": "Taupe de cristal", "info": "une taupe géante couverte de cristaux"}},
 	"foret": {"name": "Forêt Kenout", "difficulty": "super facile", "days": [3, 4],
-		"materials": ["Bois", "Peau de bête", "Herbe médicinale"]},
+		"materials": ["Bois", "Peau de bête", "Herbe médicinale"],
+		"rare": {"name": "Reine de la forêt", "info": "un cervidé blanc à corne dorée"}},
 	"plateau": {"name": "Plateau Sinmiel", "difficulty": "super facile", "days": [5, 6],
-		"materials": ["Pierre de taille", "Plume", "Lin"]},
+		"materials": ["Pierre de taille", "Plume", "Lin"],
+		"rare": {"name": "Aigle d'argent", "info": "un rapace aux plumes d'argent"}},
 }
+
+## Monstres rares (cahier : la Reine de la forêt, les jours de forêt) : chaque donjon a le sien
+## (« rare » ci-dessus ; celui de la mine et du plateau sont inventés, le cahier ne les donne pas).
+## Chance qu'il apparaisse pendant une expédition, et pierres d'attribut (de qualité inférieure,
+## grade F) qu'il laisse : elles servent à la promotion. Chiffres provisoires.
+const RARE_MONSTER_CHANCE := 0.1
+const RARE_MONSTER_STONES := 2
+## Mode dev : le monstre rare apparaît à chaque expédition. Pas enregistré.
+var dev_force_rare := false
 ## Le dimanche (0 pour Time), tous les donjons sont ouverts.
 const SUNDAY := 0
 const WEEKDAY_NAMES := ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
@@ -257,11 +269,28 @@ func start_expedition(team_index: int, dungeon_id: String) -> bool:
 		while t < EXPEDITION_SECONDS:
 			pickups.append(_roll_pickup(hero, t, dungeon_id))
 			t += PICKUP_SECONDS * randf_range(0.7, 1.3)
+	var rare := _roll_rare_monster(dungeon_id, team)
+	if not rare.is_empty():
+		pickups.append(rare)
 	pickups.sort_custom(func(a, b): return a["t"] < b["t"])
 	expeditions.append({"team": team.map(func(hero): return hero["id"]), "team_index": team_index,
 		"dungeon": dungeon_id, "start": now, "end": now + EXPEDITION_SECONDS, "log": pickups})
 	gear_up(team)  # les héros prennent leurs armes dans l'arsenal (et la partie est sauvegardée)
 	return true
+
+
+## Le monstre rare du donjon apparaît-il pendant cette expédition (RARE_MONSTER_CHANCE) ? Si oui,
+## renvoie le moment de la chasse, avec les pierres d'attribut qu'il laisse ; sinon {}.
+func _roll_rare_monster(dungeon_id: String, team: Array) -> Dictionary:
+	if randf() >= RARE_MONSTER_CHANCE and not dev_force_rare:
+		return {}
+	var monster: Dictionary = DAILY_DUNGEONS[dungeon_id]["rare"]
+	var hunter: Dictionary = team.pick_random()
+	return {"t": randf_range(60.0, EXPEDITION_SECONDS - 60.0), "kind": "material", "rare": true,
+		"monster": monster["name"], "name": PROMOTION_STONE, "grade": "F", "count": RARE_MONSTER_STONES,
+		"text": "Monstre rare : %s, %s ! Chasse réussie pour le groupe de %s (%s) : +%d %s." % [monster["name"],
+			monster["info"], hunter["name"], "★".repeat(hunter["rarity"]), RARE_MONSTER_STONES,
+			PROMOTION_STONE.to_lower().replace("pierre", "pierres")]}
 
 
 ## Un ramassage : un matériau gradé du donjon, un déchet, ou (rarement) un plan de forge.
@@ -326,18 +355,24 @@ func update_expedition() -> void:
 ## Le retour d'un groupe : ce qu'il a rapporté va dans l'entrepôt. Renvoie le rapport à annoncer.
 func _finish_expedition(expedition: Dictionary) -> Dictionary:
 	var totals := {}
+	var rare_monsters := []
 	for entry in expedition["log"]:
 		match entry["kind"]:
 			"material":
-				add_material(entry["name"], entry["grade"], 1)
+				var count: int = entry.get("count", 1)  # un monstre rare laisse plusieurs pierres d'un coup
+				add_material(entry["name"], entry["grade"], count)
 				var key := "%s (%s)" % [entry["name"], entry["grade"]]
-				totals[key] = totals.get(key, 0) + 1
+				totals[key] = totals.get(key, 0) + count
+				if entry.get("rare", false):
+					rare_monsters.append(entry["monster"])
 			"plan":
 				if not entry["name"] in plans:
 					plans.append(entry["name"])
 				totals["Plan : %s" % entry["name"]] = 1
 	var lines := ["L'équipe %d est revenue du donjon journalier (%s)." % [expedition["team_index"] + 1,
 		expedition_dungeon(expedition)["name"]]]
+	for monster in rare_monsters:
+		lines.append("Monstre rare chassé : %s !" % monster)
 	if totals.is_empty():
 		lines.append("Elle n'a rien rapporté d'utile.")
 	var keys := totals.keys()
