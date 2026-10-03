@@ -132,6 +132,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		windows.append(make_system_window("Félicitations !", report["notices"]))
 	if not report["skills"].is_empty():
 		windows.append(make_system_window("Progrès des compétences !", report["skills"]))
+	if not report.get("mental", []).is_empty():
+		windows.append(make_system_window("Santé mentale", report["mental"]))
 
 	var lines := []
 	if report["victory"]:
@@ -218,6 +220,42 @@ static func make_card(hero: Dictionary, width := 120.0) -> Button:
 	if Settings.new_visuals:
 		return FramedHeroCard.new(hero, width)
 	return make_hero_card(hero)
+
+
+## Couleur de la santé mentale : verte, puis orange (sous le seuil du malus en combat), puis rouge.
+static func mental_color(value: float) -> Color:
+	if value >= GameData.MENTAL_MALUS_START:
+		return Color("4caf6a")
+	if value >= 30.0:
+		return Color("e0a052")
+	return Color("e05252")
+
+
+## Une barre de santé mentale (0 à 100) : la part restante, dans sa couleur.
+static func make_mental_bar(hero: Dictionary, height := 12.0) -> ProgressBar:
+	var value := GameData.mental(hero)
+	var bar := ProgressBar.new()
+	bar.max_value = GameData.MENTAL_MAX
+	bar.value = value
+	bar.show_percentage = false
+	bar.custom_minimum_size.y = height
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("background", make_panel_style(Color(0, 0, 0, 0.6)))
+	bar.add_theme_stylebox_override("fill", make_panel_style(mental_color(value)))
+	return bar
+
+
+## Cartes d'équipe : une fine barre de santé mentale posée en bas de la carte d'un héros vivant.
+static func add_mental_bar(card: Control, hero: Dictionary) -> void:
+	if not hero["alive"]:
+		return
+	var bar := make_mental_bar(hero, 8.0)
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_left = 8
+	bar.offset_right = -8
+	bar.offset_top = -14
+	bar.offset_bottom = -6
+	card.add_child(bar)
 
 
 ## Marque une carte comme choisie (dans une équipe, pour un sacrifice...), avec la couleur voulue.

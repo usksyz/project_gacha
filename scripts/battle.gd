@@ -314,6 +314,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	var max_hp := roundi(stats["hp"] * (1.0 + GameData.skill_level(skills, "Volonté de fer") * GameData.IRON_WILL_HP_PER_LEVEL))
 	var crit_bonus := GameData.skill_level(skills, "Coup précis") * GameData.PRECISE_STRIKE_CRIT_PER_LEVEL \
 		+ GameData.skill_level(skills, "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL
+	# Santé mentale basse : le héros se bat moins bien (attaque et défense, voir GameData.mental_combat_factor).
+	var mental_factor := GameData.mental_combat_factor(source) if is_hero else 1.0
 	var reach := RANGED_RANGE if fighter_class in ["Archer", "Mage", "Soigneur"] else MELEE_RANGE
 	if not gear.is_empty():
 		reach = gear["reach"]
@@ -334,8 +336,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"skills": source.get("skills", []).duplicate(true),
 		"hp": max_hp,
 		"max_hp": max_hp,
-		"atk": stats["atk"] + gear.get("atk", 0),
-		"def": stats["def"] + gear.get("def", 0),
+		"atk": roundi((stats["atk"] + gear.get("atk", 0)) * mental_factor),
+		"def": roundi((stats["def"] + gear.get("def", 0)) * mental_factor),
 		"spd": stats["spd"],
 		"crit": stats["crit"] + gear.get("crit", 0.0) + crit_bonus,
 		"second_wind_used": false,  # Second souffle : une seule fois par combat

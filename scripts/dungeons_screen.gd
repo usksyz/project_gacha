@@ -701,6 +701,7 @@ func _fill_hero_grid(grid: GridContainer, heroes: Array[Dictionary], chosen_ids:
 		child.queue_free()
 	for hero in heroes:
 		var card := UI.make_card(hero)
+		UI.add_mental_bar(card, hero)
 		if hero["id"] in chosen_ids:
 			UI.mark_card_chosen(card, hero)
 		card.pressed.connect(func():

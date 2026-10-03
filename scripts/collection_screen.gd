@@ -228,6 +228,10 @@ func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
 		["+5 stats", func(): GameData.dev_add_stats(hero, 5)],
 		["-5 stats", func(): GameData.dev_add_stats(hero, -5)],
 	])
+	_add_dev_row(content, [
+		["-20 santé mentale", func(): GameData.dev_change_mental(hero, -20)],
+		["Santé mentale 100", func(): GameData.dev_change_mental(hero, GameData.MENTAL_MAX)],
+	])
 	var star_row: Array = []
 	if hero["rarity"] < GameData.MAX_PROMOTION_RARITY:
 		star_row.append(["+1 étoile (gratuit)", func(): _dev_notice = GameData.dev_promote(hero)])
@@ -368,6 +372,19 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 		stat_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats.add_child(stat_name)
 		stats.add_child(UI.make_label(str(hero["stats"][stat]), 26))
+
+	# Santé mentale (voir GameData, personality.gd) : la valeur, l'état d'esprit, et la barre.
+	if hero["alive"]:
+		var mental := GameData.mental(hero)
+		var mental_label := UI.make_label("Santé mentale : %d / %d (%s)" % [roundi(mental), GameData.MENTAL_MAX,
+			GameData.mental_text(hero)], 22)
+		mental_label.add_theme_color_override("font_color", UI.mental_color(mental))
+		content.add_child(mental_label)
+		content.add_child(UI.make_mental_bar(hero))
+		if GameData.mental_combat_factor(hero) < 1.0:
+			var malus := UI.make_label("En combat : attaque et défense -%d %%" % roundi((1.0 - GameData.mental_combat_factor(hero)) * 100), 18)
+			malus.modulate = Color(1, 1, 1, 0.7)
+			content.add_child(malus)
 
 	# Mana (mages et soigneurs) : la réserve, et ce qu'elle regagne chaque seconde en combat.
 	var mana: int = GameData.combat_stats(hero)["mana"]

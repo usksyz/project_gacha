@@ -223,5 +223,6 @@ func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
 	if randf() < COLD_ANALYSIS_CHANCE and can_learn_skill(target, target["skills"], "Analyse froide"):
 		target["skills"].append(new_skill("Analyse froide"))
 		lines.append("Compétence rare : Analyse froide !")
+	lines.append(mental_after_synthesis(sacrifices.size()))
 	tidy_arsenal()  # les armes des sacrifiés sont perdues (et la partie est sauvegardée)
 	return lines

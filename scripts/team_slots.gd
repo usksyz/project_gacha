@@ -43,6 +43,7 @@ func _rebuild() -> void:
 			var hero := GameData.hero_by_id(hero_ids[index])
 			var card := UI.make_card(hero, slot_width)
 			card.custom_minimum_size = slot_size
+			UI.add_mental_bar(card, hero)
 			make_draggable(card, hero, "slot", index)
 			card.pressed.connect(func():
 				if not card.get_meta("dragged", false):

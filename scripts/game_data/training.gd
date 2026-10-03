@@ -1,5 +1,5 @@
 class_name GameTraining
-extends GameHeroes
+extends GamePersonality
 ## Le terrain d'entraînement : il s'ouvre après assez d'armes tirées, et les héros inscrits y
 ## apprennent des compétences au fil du temps réel, même jeu fermé.
 ## Fait partie de la pile de GameData (voir game_data.gd).

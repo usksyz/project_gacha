@@ -88,6 +88,10 @@ var expeditions: Array = []
 ## Retours d'expédition pas encore montrés au joueur : [{"lines": [...]}, ...].
 var expedition_reports: Array = []
 
+## Moment (temps réel) où la santé mentale des héros à la cité a été mise à jour pour la dernière fois
+## (voir update_mental, personality.gd). 0 = pas encore.
+var mental_updated_at := 0.0
+
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace
 ## celle-ci : elle est déclarée ici pour que tous les fichiers puissent demander une sauvegarde.

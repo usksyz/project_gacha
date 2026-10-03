@@ -12,6 +12,7 @@ extends GameSave
 ## seule exception, save_game(), déclarée dans game_state.gd et remplacée par la vraie dans save.gd.
 ##   game_state.gd : état de la partie (variables enregistrées), monnaies, signaux
 ##   heroes.gd : fiche d'un héros, compétences, expérience, équipes, favoris, où est un héros
+##   personality.gd : personnalité (santé mentale, traits de caractère)
 ##   training.gd : terrain d'entraînement
 ##   items.gd : armes (tirage, arsenal, équipement) et matériaux de l'entrepôt
 ##   summon.gd : invocation des héros et codes secrets
@@ -41,7 +42,8 @@ func _ready() -> void:
 	timer.wait_time = 5.0
 	timer.timeout.connect(func():
 		update_expedition()
-		update_training())
+		update_training()
+		update_mental())
 	add_child(timer)
 	timer.start()
 
@@ -162,6 +164,12 @@ func dev_finish_expedition() -> void:
 		expedition["start"] -= shift
 		expedition["end"] -= shift
 	update_expedition()
+
+
+## Change la santé mentale d'un héros (sans Calme ni traits).
+func dev_change_mental(hero: Dictionary, amount: float) -> void:
+	change_mental(hero, amount)
+	save_game()
 
 
 ## Construit tous les bâtiments, gratuitement et sans conditions.

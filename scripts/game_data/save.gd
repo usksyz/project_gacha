@@ -23,6 +23,7 @@ const SAVE_VERSION := 1
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
 func save_game() -> void:
 	check_auto_buildings()  # un changement peut remplir la condition d'un bâtiment (nouveau mage...)
+	update_mental()  # la santé mentale regagnée au lobby depuis la dernière fois
 	var file := ConfigFile.new()
 	file.set_value("partie", "version", SAVE_VERSION)
 	file.set_value("partie", "gemmes", real_gems)
@@ -43,6 +44,7 @@ func save_game() -> void:
 	file.set_value("partie", "plans", plans)
 	file.set_value("partie", "expeditions", expeditions)
 	file.set_value("partie", "retours_expeditions", expedition_reports)
+	file.set_value("partie", "sante_mentale_maj", mental_updated_at)
 	file.save(SAVE_PATH)
 
 
@@ -72,6 +74,7 @@ func load_game() -> bool:
 	plans = file.get_value("partie", "plans", [])
 	expeditions = file.get_value("partie", "expeditions", [])
 	expedition_reports = file.get_value("partie", "retours_expeditions", [])
+	mental_updated_at = file.get_value("partie", "sante_mentale_maj", 0.0)
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
@@ -119,4 +122,5 @@ func _new_game() -> void:
 	plans = []
 	expeditions = []
 	expedition_reports = []
+	mental_updated_at = 0.0
 	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.

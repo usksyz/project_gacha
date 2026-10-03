@@ -302,6 +302,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"notices": [],    # annonces spéciales (déblocages...)
 		"items": [],      # objets gagnés, rangés dans l'entrepôt : [{"name", "grade", "count"}]
 		"lost_weapons": [],  # armes perdues avec les héros morts (textes)
+		"mental": [],     # santé mentale des survivants : « Han : santé mentale 100 → 84 » (textes)
 		"mvp": battle.mvp(),
 		"floor": floor_number,
 		"replay": replay,  # étage déjà conquis, rejoué pour s'entraîner
@@ -357,6 +358,11 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
+			# Santé mentale : ce que le combat lui a coûté (voir personality.gd).
+			var mental_line := mental_after_battle(hero, fighter, battle.quest, is_boss_floor(floor_number),
+				report["dead"].size(), battle.victory)
+			if mental_line != "":
+				report["mental"].append(mental_line)
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 
