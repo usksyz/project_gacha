@@ -384,6 +384,10 @@ func _level_up(hero: Dictionary) -> void:
 # - Premier changement : un Novice au niveau FIRST_CLASS_CHANGE_LEVEL devient apprenti (guerrier ou
 #   voleur) s'il a au moins une compétence d'arme de cette voie (CLASS_PATHS). S'il a les deux, le
 #   Maître choisit ; s'il n'en a aucune, il reste Novice.
+# - Deuxième changement : un apprenti au niveau SECOND_CLASS_CHANGE_LEVEL, avec une compétence d'arme de
+#   sa voie au niveau SECOND_CLASS_CHANGE_SKILL_LEVEL, prend une des deux classes de sa voie (CLASS_FINALS),
+#   au choix du Maître. Ses compétences de débutant évoluent (rang EVOLVED_SKILL_RANK, mêmes effets)
+#   ou disparaissent (CLASS_LOST_SKILLS), comme Han qui perd Mouvement secret en devenant Guerrier.
 # Les statistiques ne changent pas : la nouvelle classe change ce qui monte à chaque niveau
 # (CLASS_MAIN_STAT) et les armes que le héros prend dans l'arsenal (CLASS_WEAPONS). Chiffres provisoires.
 
@@ -397,6 +401,23 @@ const CLASS_PATHS := {
 	"Apprenti guerrier": ["Maîtrise de l'épée", "Utilisation du bouclier"],
 	"Apprenti voleur": ["Maîtrise de la dague", "Maîtrise de l'arc"],
 }
+
+## Deuxième changement : niveau, et niveau à atteindre dans une compétence d'arme de sa voie.
+const SECOND_CLASS_CHANGE_LEVEL := 20
+const SECOND_CLASS_CHANGE_SKILL_LEVEL := 5
+## Les classes proposées à chaque apprenti au deuxième changement.
+const CLASS_FINALS := {
+	"Apprenti guerrier": ["Guerrier", "Chevalier"],
+	"Apprenti voleur": ["Archer", "Assassin"],
+}
+## Compétences de débutant qui disparaissent en prenant cette classe (provisoire : le Mouvement souple
+## d'un voleur ne va pas à un guerrier, comme le Mouvement secret de Han dans l'œuvre).
+const CLASS_LOST_SKILLS := {
+	"Guerrier": ["Mouvement souple"],
+	"Chevalier": ["Mouvement souple"],
+}
+## Les autres compétences de débutant évoluent : elles passent à ce rang (leurs effets ne changent pas).
+const EVOLVED_SKILL_RANK := "Intermédiaire"
 
 
 ## Les compétences d'arme d'une voie que le héros possède au moins au niveau « min_level ».
@@ -413,6 +434,9 @@ func class_change_options(hero: Dictionary) -> Array[String]:
 		for path in CLASS_PATHS:
 			if not _path_skills(hero, path, 1).is_empty():
 				options.append(path)
+	elif hero["class"] in CLASS_FINALS and hero["level"] >= SECOND_CLASS_CHANGE_LEVEL:
+		if not _path_skills(hero, hero["class"], SECOND_CLASS_CHANGE_SKILL_LEVEL).is_empty():
+			options.assign(CLASS_FINALS[hero["class"]])
 	return options
 
 
@@ -426,6 +450,14 @@ func class_change_problem(hero: Dictionary) -> String:
 			return ("Niveau %d atteint, mais aucune compétence d'arme : reste Novice. Épée ou bouclier " \
 				+ "(terrain d'entraînement) pour devenir Apprenti guerrier ; dague ou arc " \
 				+ "(tirer à l'arc en combat) pour devenir Apprenti voleur.") % FIRST_CLASS_CHANGE_LEVEL
+	if hero["class"] in CLASS_FINALS and hero["level"] >= SECOND_CLASS_CHANGE_LEVEL:
+		if class_change_options(hero).is_empty():
+			var levels := []
+			for skill_name in CLASS_PATHS[hero["class"]]:
+				levels.append("%s niv. %d" % [skill_name, skill_level(hero["skills"], skill_name)])
+			return "Niveau %d atteint : pour devenir %s, il faut une de ces compétences au niveau %d (%s)." \
+				% [SECOND_CLASS_CHANGE_LEVEL, " ou ".join(CLASS_FINALS[hero["class"]]),
+				SECOND_CLASS_CHANGE_SKILL_LEVEL, ", ".join(levels)]
 	if not class_change_options(hero).is_empty() and is_away(hero):
 		return "Changement de classe possible au retour (%s)." % ("Tour" if in_tower(hero) else "donjon journalier")
 	return ""
@@ -439,8 +471,29 @@ func change_class(hero: Dictionary, new_class: String) -> Array[String]:
 		return lines
 	var old_class: String = hero["class"]
 	hero["class"] = new_class
-	lines.append("Changement de classe : %s passe de %s à %s !" % [hero["name"], old_class, new_class])
+	lines.append("%s change de classe : %s → %s !" % [hero["name"], old_class, new_class])
+	if old_class in CLASS_FINALS:
+		lines.append_array(_class_change_skills(hero, new_class))
 	save_game()
+	return lines
+
+
+## Deuxième changement : les compétences de débutant évoluent ou disparaissent. Renvoie les annonces.
+func _class_change_skills(hero: Dictionary, new_class: String) -> Array[String]:
+	var lines: Array[String] = []
+	var skills: Array = hero["skills"]
+	for i in range(skills.size() - 1, -1, -1):
+		var skill: Dictionary = skills[i]
+		if skill["rank"] != "Débutant":
+			continue
+		if skill["name"] in CLASS_LOST_SKILLS.get(new_class, []):
+			skills.remove_at(i)
+			hero.get("skill_progress", {}).erase(skill["name"])
+			lines.append("%s disparaît : elle ne convient pas à un %s." % [skill["name"], new_class])
+		else:
+			skill["rank"] = EVOLVED_SKILL_RANK
+			lines.append("%s évolue : rang %s." % [skill["name"], EVOLVED_SKILL_RANK])
+	lines.reverse()  # (la liste a été parcourue à l'envers) dans l'ordre de la fiche
 	return lines
 
 
