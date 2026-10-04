@@ -120,7 +120,11 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   incompatibles), « ? » tant qu'ils sont cachés ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
   (5) combats (`hero["fights"]`). Effets branchés : Courageux (moitié) / Lâche (double) face aux boss,
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
-  part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture (plus bas).
+  part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture,
+  Querelleur, Mauvais et Protecteur en combat (plus bas) : les huit traits ont leurs effets.
+  Protecteur en combat (`Battle._ward_of`, `_guardian_for`, `_cover`) : un allié à moins de `PROTECT_RANGE`
+  (5) cases sous `PROTECT_HP` (30 %) de vie → il va à son côté ; à moins de `PROTECT_GUARD_RANGE` (1,6), il
+  encaisse `PROTECT_SHARE` (30 %) de ses coups, quitte à tomber (« tombé en protégeant X »).
   Désobéissance : sous `DISOBEY_START` (60), un ordre du Maître en combat peut être refusé (jusqu'à
   `DISOBEY_MAX` 50 % à 0, `disobey_chance`, bulle « Non ! »), puis le héros boude `DISOBEY_SULK` (3 s) ; Loyal
   divise le risque par deux et se révèle quand il fait obéir (`Battle._obeys`).
@@ -147,11 +151,26 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   annoncés par une fenêtre « Groupe lié » sur l'écran d'invocation (`last_linked_group`). Fiche : groupe et
   liste des liens ; cartes du groupe (`TeamSlots`) : anneaux entrelacés (`UI.add_bond_badge`) quand un ami
   (vert) ou un frère d'armes (doré) est dans le même groupe.
+  Hostilités (onglet principal du cahier, « Relations entre héros, groupes et duels ») : palier
+  `BOND_HOSTILE` (-1, points négatifs, `bond_name`), sous « inconnus ». Chaque heure réelle à la cité, un
+  Querelleur présent a `QUARREL_CHANCE_PER_HOUR` (10 %) de se brouiller avec un autre héros présent
+  (`update_quarrels`, toutes les 5 s, `quarrels_checked_at` sauvegardé, 24 h au plus d'un coup) ; annonces
+  dans `relation_news` (sauvegardé), fenêtre « Hostilité » de `main.gd` (signal `relations_changed`).
+  Hostiles : plus de points de lien, aucun bonus, -`MENTAL_LOSS_HOSTILE` (5) chacun au début d'un combat
+  ensemble (avertissement dans « Formation de groupe »). Pas de bagarre à la cité : duel depuis la fiche
+  (« Organiser un duel », `duel_problem`, `duel_quest`, `finish_duel`), joué dans un `BattleView` par-dessus
+  la collection (`play(..., on_finish)`) : quête « duel » de battle.gd (adversaire héros dans le camp
+  ennemi, pas d'ordres, ni éveil, ni stress), arrêt à `DUEL_STOP_HP` (10 %) de vie, jamais de mort ; gagnant
+  +`DUEL_WIN_MENTAL`, perdant -`DUEL_LOSE_MENTAL`, lien remis à « connaissance ». Pas encore : les paris.
+  Mauvais : chaque Mauvais présent à la cité retire `MAUVAIS_EFFICIENCY_LOSS` (5 %) à `lobby_efficiency()`
+  (points d'entraînement, chance de la forge, progrès des artisans ; `MAUVAIS_EFFICIENCY_MIN` 50 %) ; ceux
+  qui travaillent au même endroit (même poste, ou terrain) regagnent `MAUVAIS_COWORKER_LOSS_PER_HOUR` de
+  moins par heure ; trait révélé quand l'effet est remarqué (`notice_bad_heroes`).
   Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
-  -20 santé mentale, santé mentale 100, mettre en rupture, « Lien +1 cran » avec un héros cherché par son nom
-  (`dev_raise_bond`). Reste : hostilités et duels (Querelleur), autres effets des traits (Mauvais...), liens
-  hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon journalier, héros en
-  rupture au donjon journalier.
+  -20 santé mentale, santé mentale 100, mettre en rupture, « Lien +1 cran » et « Rendre hostile » avec un
+  héros cherché par son nom (`dev_raise_bond`, `dev_make_hostile`). Reste : paris des duels, hostilité entre
+  groupes, liens hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon
+  journalier, héros en rupture au donjon journalier.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
