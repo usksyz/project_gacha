@@ -487,9 +487,10 @@ const MALUS_NAMES := {"infra": "Infrastructures insuffisantes (30 s en moins)",
 ## Chance de succès (0 à 1) : « difficulty » = une difficulté du puzzle, ou "auto".
 func forge_chance(weapon_type: String, difficulty: String) -> float:
 	var malus_count := forge_maluses(weapon_type).size()
+	# Des héros Mauvais à la cité : tout marche un peu moins bien (lobby_efficiency, personality.gd).
 	if difficulty == "auto":
-		return clampf(FORGE_AUTO_CHANCE - malus_count * FORGE_MALUS_CHANCE, 0.05, 1.0)
-	return clampf(FORGE_DIFFICULTIES[difficulty]["chance"] - malus_count * 0.1, 0.02, 1.0)
+		return clampf((FORGE_AUTO_CHANCE - malus_count * FORGE_MALUS_CHANCE) * lobby_efficiency(), 0.05, 1.0)
+	return clampf((FORGE_DIFFICULTIES[difficulty]["chance"] - malus_count * 0.1) * lobby_efficiency(), 0.02, 1.0)
 
 
 ## La chance en mots, comme dans le cahier : Certaine, Élevée, Moyenne, Faible, Infime.
@@ -587,6 +588,10 @@ func _add_forged(weapon_type: String, grade: String) -> Dictionary:
 ## Chaque fabrication fait progresser les assistants présents vers la compétence « Forge ».
 func _forge_work_done() -> Array[String]:
 	var news: Array[String] = []
+	var efficiency := lobby_efficiency()  # moins de progrès avec des héros Mauvais à la cité
 	for hero in forge_assistants():
-		news.append_array(add_skill_progress(hero, "Forge", ARTISAN_POINTS_PER_WORK, TRAINING_POINTS_PER_LEVEL))
+		news.append_array(add_skill_progress(hero, "Forge", roundi(ARTISAN_POINTS_PER_WORK * efficiency),
+			TRAINING_POINTS_PER_LEVEL))
+	if efficiency < 1.0:
+		news.append_array(notice_bad_heroes())
 	return news

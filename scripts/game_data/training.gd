@@ -79,9 +79,13 @@ func update_training() -> void:
 		if sessions <= 0:
 			continue
 		hero["training_since"] = since + sessions * TRAINING_SESSION_SECONDS
-		var points: int = sessions * (TRAINING_POINTS_BASE + hero["growth"])
+		# Des héros Mauvais à la cité baissent l'efficacité (voir personality.gd) : on le remarque ici.
+		var efficiency := lobby_efficiency()
+		var points: int = maxi(1, roundi(sessions * (TRAINING_POINTS_BASE + hero["growth"]) * efficiency))
 		training_news.append_array(add_skill_progress(hero, hero["training"], points,
 			skill_progress_needed(hero["training"])))
+		if efficiency < 1.0:
+			training_news.append_array(notice_bad_heroes())
 		changed = true
 	if changed:
 		save_game()

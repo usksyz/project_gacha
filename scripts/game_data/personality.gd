@@ -56,10 +56,10 @@ const TRAITS := {
 	"Lâche": "Stresse deux fois plus face aux boss. En rupture, s'enfuit plus souvent (80 % au lieu de 50 %).",
 	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse (moitié moins de refus).",
 	"Paresseux": "Refuse parfois l'entraînement ou une affectation (1 fois sur 5).",
-	"Querelleur": "(Plus tard : crée des hostilités au lobby.)",
+	"Querelleur": "Se brouille parfois avec un autre héros à la cité : ils deviennent hostiles (à régler par un duel).",
 	"Protecteur": "Stresse deux fois plus quand un allié meurt. (Plus tard : couvre ses alliés.)",
 	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un héros plus faible part dans la Tour à sa place.",
-	"Mauvais": "(Plus tard : baisse l'efficacité du lobby.)",
+	"Mauvais": "Baisse l'efficacité du lobby (-5 % par héros mauvais) et use ceux qui travaillent avec lui.",
 }
 ## Chance d'avoir un deuxième trait (sinon un seul).
 const TRAIT_TWO_CHANCE := 0.4
@@ -400,6 +400,58 @@ func update_quarrels() -> void:
 	save_game()
 
 
+# --- Mauvais ---
+# Cahier : « certains héros invoqués sont mauvais. Ils perturbent l'ordre de la salle d'attente et
+# réduisent son efficacité. » Chaque héros Mauvais présent à la cité retire MAUVAIS_EFFICIENCY_LOSS à
+# l'efficacité du lobby (points d'entraînement, chance de la forge, progrès des artisans), sans
+# descendre sous MAUVAIS_EFFICIENCY_MIN. Il use aussi ceux qui travaillent au même endroit que lui
+# (même poste d'assistant, ou terrain d'entraînement) : MAUVAIS_COWORKER_LOSS_PER_HOUR chacun.
+# Son trait se révèle quand l'effet est remarqué (une séance d'entraînement ou un travail de forge).
+const MAUVAIS_EFFICIENCY_LOSS := 0.05
+const MAUVAIS_EFFICIENCY_MIN := 0.5
+const MAUVAIS_COWORKER_LOSS_PER_HOUR := 2.0
+
+
+## Les héros Mauvais présents à la cité (vivants, pas partis en mission).
+func bad_heroes_at_city() -> Array:
+	return alive_heroes().filter(func(h): return has_trait(h, "Mauvais") and not is_away(h))
+
+
+## Efficacité du lobby : 1.0 normalement, moins MAUVAIS_EFFICIENCY_LOSS par héros Mauvais à la cité.
+func lobby_efficiency() -> float:
+	return maxf(MAUVAIS_EFFICIENCY_MIN, 1.0 - MAUVAIS_EFFICIENCY_LOSS * bad_heroes_at_city().size())
+
+
+## L'effet des Mauvais vient d'être remarqué (travail fait avec une efficacité réduite) : leurs traits
+## cachés se révèlent. Renvoie les annonces (vide si personne n'a été démasqué). Ne sauvegarde pas.
+func notice_bad_heroes() -> Array[String]:
+	var news: Array[String] = []
+	for hero in bad_heroes_at_city():
+		var line := reveal_trait(hero, "Mauvais")
+		if line != "":
+			news.append(line)
+	if not news.is_empty():
+		news.append("Le travail à la cité est moins efficace (-%d %%) : des héros mauvais y sèment le désordre." \
+			% roundi((1.0 - lobby_efficiency()) * 100))
+	return news
+
+
+## Lieu de travail d'un héros à la cité : son poste d'assistant, « training » au terrain, "" s'il ne
+## travaille pas.
+func _workplace(hero: Dictionary) -> String:
+	if hero.get("post", "") != "":
+		return hero["post"]
+	return "training" if hero.get("training", "") != "" else ""
+
+
+## Combien de héros Mauvais travaillent au même endroit que ce héros (lui non compris).
+func bad_coworkers(hero: Dictionary) -> int:
+	var place := _workplace(hero)
+	if place == "":
+		return 0
+	return bad_heroes_at_city().filter(func(h): return h["id"] != hero["id"] and _workplace(h) == place).size()
+
+
 # --- Duels ---
 # Le moyen officiel de régler un conflit (cahier) : depuis la fiche, le Maître organise un duel entre deux
 # hostiles. Un contre un avec le moteur de combat (battle.gd, quête « duel ») ; on s'arrête à DUEL_STOP_HP de
@@ -592,4 +644,6 @@ func update_mental() -> void:
 		if is_away(hero):
 			continue
 		var working: bool = hero.get("post", "") != "" or hero.get("training", "") != ""
-		change_mental(hero, hours * (MENTAL_WORK_PER_HOUR if working else MENTAL_REST_PER_HOUR))
+		var rate := MENTAL_WORK_PER_HOUR if working else MENTAL_REST_PER_HOUR
+		rate -= bad_coworkers(hero) * MAUVAIS_COWORKER_LOSS_PER_HOUR  # un Mauvais au même travail use les autres
+		change_mental(hero, hours * rate)
