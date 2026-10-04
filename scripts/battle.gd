@@ -275,7 +275,7 @@ func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 ## Loyal réduit le risque ; quand c'est sa loyauté qui le fait obéir, le trait se révèle.
 func _obeys(hero: Dictionary) -> bool:
 	if time < hero["sulk_until"]:
-		_effect("refuse", hero, hero, "refuse !", false)
+		_effect("refuse", hero, hero, "Non !", false)
 		return false
 	var chance := GameData.disobey_chance(hero["mental"])
 	if chance <= 0.0:
@@ -284,7 +284,7 @@ func _obeys(hero: Dictionary) -> bool:
 	var roll := randf()
 	if roll < chance * (GameData.LOYAL_DISOBEY_FACTOR if loyal else 1.0):
 		hero["sulk_until"] = time + GameData.DISOBEY_SULK
-		_effect("refuse", hero, hero, "refuse !", false)
+		_effect("refuse", hero, hero, "Non !", false)
 		_log("%s, à bout de nerfs, ignore ton ordre." % hero["name"], "disobey")
 		return false
 	if loyal and roll < chance:

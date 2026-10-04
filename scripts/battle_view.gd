@@ -37,6 +37,8 @@ const STYLE_COLORS := {
 ## Durée d'affichage des coups (traits) et des chiffres qui s'envolent, en secondes de combat.
 const STRIKE_TIME := 0.25
 const FLOAT_TIME := 0.9
+## Durée d'affichage de la bulle « Non ! » d'un héros qui refuse un ordre.
+const BUBBLE_TIME := 1.5
 
 ## Distance (en cases) à laquelle un toucher « attrape » un pion.
 const TAP_RADIUS := 0.8
@@ -471,7 +473,7 @@ func _draw_names(positions: Dictionary, cell: float) -> void:
 func _draw_effects(positions: Dictionary, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var now := battle.time
-	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < now - FLOAT_TIME:
+	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < now - BUBBLE_TIME:
 		first_effect += 1
 	for i in range(first_effect, battle.effects.size()):
 		var effect: Dictionary = battle.effects[i]
@@ -496,6 +498,13 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 				"bolt":  # petit trait de magie, quand le mage n'a plus de mana
 					arena.draw_line(from, to, Color(0.55, 0.75, 1, fade), 1.5)
 
+		# Ordre refusé : une petite bulle « Non ! » au-dessus du héros, qui reste puis s'efface.
+		if effect["kind"] == "refuse":
+			_draw_bubble(font, to + Vector2(0, -cell * 0.4), effect["text"], clampf(2.0 * (1.0 - age / BUBBLE_TIME), 0.0, 1.0))
+			continue
+		if age > FLOAT_TIME:
+			continue
+
 		# Le chiffre monte et s'efface.
 		var color := Color.WHITE
 		var size := 16
@@ -506,13 +515,23 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 			color = Color("6fe08a")
 		elif effect["kind"] == "bleed":
 			color = Color("ff5050")
-		elif effect["kind"] == "refuse":
-			color = Color("b0b0c8")
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
 		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
 		var rise := Vector2(-40, -cell * 0.4 - age * cell * 0.8)
 		arena.draw_string(font, to + rise, effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 80, size, color)
+
+
+## Bulle de parole (fond blanc, petite pointe vers le bas) centrée au-dessus du point « tip ».
+func _draw_bubble(font: Font, tip: Vector2, text: String, alpha: float) -> void:
+	var size := 18
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 16
+	var box := Rect2(tip + Vector2(-width / 2.0, -34), Vector2(width, 26))
+	var fill := Color(1, 1, 1, 0.92 * alpha)
+	arena.draw_rect(box, fill)
+	arena.draw_colored_polygon(PackedVector2Array([tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), fill)
+	arena.draw_string(font, box.position + Vector2(0, 19), text, HORIZONTAL_ALIGNMENT_CENTER, width, size,
+		Color(0.75, 0.1, 0.1, alpha))
 
 
 # ---------------------------------------------------------------------------
