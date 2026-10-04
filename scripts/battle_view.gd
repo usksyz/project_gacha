@@ -282,10 +282,14 @@ func _draw_portraits() -> void:
 			_draw_bar(mana_bar, hero["mana"] / hero["max_mana"], MANA_COLOR)
 			portraits.draw_string(font, mana_bar.position + Vector2(0, 10), "%d / %d" % [int(hero["mana"]), hero["max_mana"]],
 				HORIZONTAL_ALIGNMENT_CENTER, mana_bar.size.x, 11, Color.WHITE)
-		# Santé mentale du moment : une fine barre tout en bas (« PANIQUE » pendant un effondrement).
+		# Santé mentale du moment : une fine barre tout en bas (« PEUR » quand il a peur, voir Battle._scare,
+		# qu'il fuie ou non ; « PANIQUE » pendant un effondrement).
 		var mind_bar := Rect2(box.position + Vector2(6, box.size.y - 9), Vector2(box.size.x - 12, 5))
 		_draw_bar(mind_bar, hero["mental"] / GameData.MENTAL_MAX, UI.mental_color(hero["mental"]))
-		if battle.panicking(hero):
+		if hero["hp"] > 0 and battle.afraid(hero):
+			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "PEUR", HORIZONTAL_ALIGNMENT_CENTER,
+				mind_bar.size.x, 13, Color("ffb060"))
+		elif battle.panicking(hero):
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "PANIQUE", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, Color("e0e0ff"))
 

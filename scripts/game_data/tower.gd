@@ -42,14 +42,12 @@ const DEFENSE_WALLS := 75
 ## Les ennemis de l'étage de boss et de tous les étages suivants gagnent ce nombre de niveaux en plus.
 const TIER_BONUS_LEVELS := 2
 
-## Premiers étages plus durs, dès l'étage 1 (demande du porteur du projet : « les forts survivent, les
-## faibles meurent », pour montrer tout de suite la tension du jeu) : au moins ce nombre de monstres et de
-## sortes de monstres (gobelins et loups noirs), jusqu'à l'étage EARLY_FLOORS. Avant : 2 gobelins à
-## l'étage 1. À partir de l'étage 4, rien ne change. Chiffres réglés par simulation (équipe du tutoriel,
-## sans ordres) : étage 1 gagné 99 fois sur 100, environ un mort par combat, presque toujours un 1 étoile.
-const EARLY_FLOORS := 3
-const FLOOR_MIN_MONSTERS := 5
-const FLOOR_MIN_ENEMY_TYPES := 2
+## Premiers étages plus durs (demandes du porteur du projet : l'étage 1 écrème, « les forts survivent, les
+## faibles meurent » ; on doit sentir la tension à chaque étage, et la préparation doit être nécessaire) :
+## {étage: [monstres au moins, sortes de monstres au moins]}. Étage 1 : gobelins et loups noirs ; dès
+## l'étage 2, les archers squelettes. Avant : 2 gobelins à l'étage 1. À partir de l'étage 5, la formule
+## normale (déjà assez dure). Chiffres réglés par simulation (voir CLAUDE.md, « Tour »).
+const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [6, 3], 3: [6, 3], 4: [6, 3]}
 
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
@@ -182,9 +180,8 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 	var quest := floor_quest(floor_number)
 	var level := floor_enemy_level(floor_number)
 	var enemies: Array[Dictionary] = []
-	var monster_count := mini(2 + floor_number / 2, 6)
-	if floor_number <= EARLY_FLOORS:
-		monster_count = maxi(monster_count, FLOOR_MIN_MONSTERS)
+	var early: Array = EARLY_FLOOR_ENEMIES.get(floor_number, [0, 0])
+	var monster_count := mini(maxi(2 + floor_number / 2, early[0]), 6)
 	if is_boss_floor(floor_number):
 		var boss_index := mini(floor_number / BOSS_EVERY - 1, BOSS_TYPES.size() - 1)
 		enemies.append(_create_enemy(BOSS_TYPES[boss_index], level + 2))
@@ -197,7 +194,7 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 			monster_count += 4 + floor_number / 2
 		"defense":
 			monster_count += 4 + floor_number / 2
-	var known_types := ENEMY_TYPES.slice(0, clampi(1 + floor_number / 2, FLOOR_MIN_ENEMY_TYPES, ENEMY_TYPES.size()))
+	var known_types := ENEMY_TYPES.slice(0, mini(maxi(1 + floor_number / 2, early[1]), ENEMY_TYPES.size()))
 	for i in monster_count:
 		enemies.append(_create_enemy(known_types.pick_random(), level))
 	_number_duplicates(enemies)

@@ -461,6 +461,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# Peur (voir GameData.can_be_scared) : un héros d'une étoile novice du combat peut prendre peur et fuir.
 		"fearful": is_hero and not quest.get("duel", false) and GameData.can_be_scared(source),
 		"scared": false,           # a déjà pris peur dans ce combat (une seule fois)
+		"fear_until": 0.0,         # a peur jusqu'à ce moment (qu'il fuie ou qu'il se batte contre sa peur)
 		"was_hit": false,          # a déjà été blessé dans ce combat (la première blessure fait peur)
 		"mind_news": [],           # traits révélés, ruptures : pour la fenêtre « Personnalité » de fin
 		"bonds": {},               # liens avec les autres héros de l'équipe : {numéro du pion: palier}
@@ -673,7 +674,8 @@ func _think(unit: Dictionary) -> void:
 			_panic_think(unit, foes)
 			return
 		unit["panic"] = ""
-		_log("%s reprend ses esprits." % _name_with_stars(unit), "disobey")
+		if not afraid(unit) and unit["ruptured"]:  # (la fin d'une fuite de peur n'est pas annoncée)
+			_log("%s reprend ses esprits." % _name_with_stars(unit), "disobey")
 
 	# Un ordre du joueur passe avant tout.
 	if unit["is_hero"] and _follow_order(unit, foes):
@@ -1236,8 +1238,14 @@ func _bond(unit: Dictionary) -> float:
 # ---------------------------------------------------------------------------
 
 ## Efficacité selon la santé mentale du moment (1.0 pour les ennemis ; voir GameData.mental_factor).
+## Un héros qui se bat contre sa peur (voir _scare) frappe et se défend moins bien.
 func _mind(unit: Dictionary) -> float:
-	return GameData.mental_factor(unit["mental"]) if unit["is_hero"] else 1.0
+	if not unit["is_hero"]:
+		return 1.0
+	var factor := GameData.mental_factor(unit["mental"])
+	if afraid(unit) and not _fleeing(unit):
+		factor *= GameData.FEAR_FIGHT_FACTOR
+	return factor
 
 
 ## Un héros perd de la santé mentale (moins avec Calme). À 0, c'est la rupture (une fois par combat).
@@ -1336,9 +1344,16 @@ func _fleeing(unit: Dictionary) -> bool:
 	return unit["panic"] == "flee" and panicking(unit)
 
 
+## A peur en ce moment (voir _scare) : « PEUR » sur son portrait.
+func afraid(unit: Dictionary) -> bool:
+	return time < unit["fear_until"]
+
+
 ## Peur (voir GameData.can_be_scared) : un héros d'une étoile, qui ne savait rien de ce qui l'attendait,
-## peut prendre peur devant « what » (sa première blessure, la mort d'un allié, un boss) : il s'enfuit
-## vers le bas de la carte pendant FEAR_SECONDS, sourd aux ordres. Une seule fois par combat.
+## peut prendre peur devant « what » (sa première blessure, la mort d'un allié, un boss). Soit il s'enfuit
+## vers le bas de la carte (FEAR_SECONDS, sourd aux ordres), soit il se bat contre sa peur (FEAR_FIGHT_SECONDS,
+## moins efficace, voir _mind). Rien n'annonce la fuite : le joueur la voit. Le journal dit seulement
+## qu'il a peur. Une seule fois par combat.
 func _scare(fighter: Dictionary, base_chance: float, what: String) -> void:
 	if not fighter["fearful"] or fighter["scared"] or fighter["hp"] <= 0 or panicking(fighter):
 		return
@@ -1346,23 +1361,22 @@ func _scare(fighter: Dictionary, base_chance: float, what: String) -> void:
 	if randf() >= GameData.fear_chance(source, base_chance):
 		return
 	fighter["scared"] = true
-	if GameData.has_trait(source, "Lâche"):
-		_reveal(fighter, "Lâche")
-	fighter["panic"] = "flee"
-	fighter["panic_until"] = time + GameData.FEAR_SECONDS
-	fighter["order"] = {}
-	fighter["path"] = PackedVector2Array()
-	fighter["flee_to"] = _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
-	_effect("refuse", fighter, fighter, "Au secours !", false)
-	_log("%s prend peur devant %s et s'enfuit !" % [_name_with_stars(fighter), what], "bleed")
-	fighter["mind_news"].append("%s a pris peur au combat (%s)." % [fighter["name"], what])
-	# La première peur du combat est annoncée par le Système : le joueur voit la fragilité des faibles.
-	if not heroes.any(func(h): return h["scared"] and h["id"] != fighter["id"]):
-		_alert("Peur", [
-			"%s n'est qu'une personne ordinaire : personne ne l'avait prévenu de ce qui l'attendait." % fighter["name"],
-			"Il prend peur et s'enfuit. Dos tourné, il est une proie facile.",
-		], true)
+	_log("%s a peur." % _name_with_stars(fighter), "disobey")
+	fighter["mind_news"].append("%s a eu peur au combat (%s)." % [fighter["name"], what])
 	_stress(fighter, GameData.FEAR_MENTAL_LOSS)
+	if fighter["hp"] <= 0 or panicking(fighter):
+		return  # (le stress a pu provoquer une rupture)
+	if randf() < GameData.fear_flee_chance(source):
+		if GameData.has_trait(source, "Lâche"):
+			_reveal(fighter, "Lâche")
+		fighter["fear_until"] = time + GameData.FEAR_SECONDS
+		fighter["panic"] = "flee"
+		fighter["panic_until"] = fighter["fear_until"]
+		fighter["order"] = {}
+		fighter["path"] = PackedVector2Array()
+		fighter["flee_to"] = _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
+	else:
+		fighter["fear_until"] = time + GameData.FEAR_FIGHT_SECONDS
 
 
 ## Ce que fait un héros en panique : il fuit, ou il frappe n'importe qui à sa portée (même un allié).
