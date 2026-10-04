@@ -102,6 +102,8 @@ var bonds := {}
 var quarrels_checked_at := 0.0
 ## Annonces de relations en attente d'être montrées au joueur (« X fait preuve d'hostilité envers Y ! »).
 var relation_news: Array = []
+## Défis lancés par les héros, en attente de la réponse du Maître : [{"challenger": numéro, "rival": numéro}].
+var pending_challenges: Array = []
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace

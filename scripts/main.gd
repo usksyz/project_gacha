@@ -85,14 +85,17 @@ func _ready() -> void:
 		_show_absence_report()
 	GameData.facility_completed.connect(_show_facility_completed)
 	GameData.relations_changed.connect(_show_relation_news)
-	if not GameData.relation_news.is_empty():
-		_show_relation_news()
+	_show_relation_news()
 
 
-## Des héros se sont brouillés à la cité (Querelleur) : une fenêtre système l'annonce.
+## Des héros se sont brouillés à la cité (Querelleur) : une fenêtre système l'annonce. Ensuite, les défis
+## lancés par les héros, un par un (voir _show_next_challenge).
 func _show_relation_news() -> void:
-	if GameData.relation_news.is_empty() or has_node("RelationNews"):
-		return  # rien à dire, ou la fenêtre est déjà ouverte (elle montrera tout à sa fermeture)
+	if has_node("RelationNews") or has_node("Challenge"):
+		return  # une fenêtre est déjà ouverte : elle montrera la suite à sa fermeture
+	if GameData.relation_news.is_empty():
+		_show_next_challenge()
+		return
 	Settings.vibrate(150)
 	var overlay := ColorRect.new()
 	overlay.name = "RelationNews"
@@ -118,6 +121,19 @@ func _show_relation_news() -> void:
 		_show_relation_news(), 24)
 	ok.custom_minimum_size.y = 80
 	box.add_child(ok)
+
+
+## Un héros a défié son rival (voir GameData, personality.gd) : « Autoriser le duel » ou « Refuser ».
+func _show_next_challenge() -> void:
+	var next := GameData.next_challenge()
+	if next.is_empty() or GameData.duel_problem(next["challenger"], next["rival"]) != "":
+		return  # aucun défi, ou l'un des deux est parti en mission : le défi attendra son retour
+	Settings.vibrate(150)
+	var panel := DuelPanel.open(self, next["challenger"], next["rival"], true)
+	panel.name = "Challenge"
+	panel.finished.connect(func():
+		panel.name = "ChallengeDone"  # (libéré juste après) : le défi suivant peut s'ouvrir
+		_show_relation_news.call_deferred())
 
 
 ## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle

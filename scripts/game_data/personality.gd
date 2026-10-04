@@ -401,10 +401,73 @@ func update_quarrels() -> void:
 			var revealed := reveal_trait(hero, "Querelleur")
 			if revealed != "":
 				news.append(revealed)
-	if not news.is_empty():
+		var challenged := _roll_challenges(present)
+		news.append_array(challenged)
+	if not news.is_empty() or not pending_challenges.is_empty():
 		relation_news.append_array(news)
 		relations_changed.emit()
 	save_game()
+
+
+# --- Défis lancés par les héros ---
+# Un héros hostile qui est Querelleur ou Ambitieux défie parfois lui-même son rival (CHALLENGE_CHANCE_PER_HOUR
+# par heure réelle à la cité, s'ils y sont tous les deux). Le Maître autorise le duel ou le refuse ; un refus
+# vexe celui qui a lancé le défi (CHALLENGE_REFUSED_MENTAL), et l'hostilité reste.
+const CHALLENGE_CHANCE_PER_HOUR := 0.05
+const CHALLENGE_REFUSED_MENTAL := 5.0
+
+
+## Une heure à la cité : chaque héros hostile Querelleur ou Ambitieux peut défier un de ses rivaux présents.
+## Le défi va dans pending_challenges (un seul par paire). Renvoie les traits révélés.
+func _roll_challenges(present: Array) -> Array:
+	var news := []
+	for hero in present:
+		var drive := "Querelleur" if has_trait(hero, "Querelleur") else ("Ambitieux" if has_trait(hero, "Ambitieux") else "")
+		if drive == "" or randf() >= CHALLENGE_CHANCE_PER_HOUR:
+			continue
+		var rivals := present.filter(func(h): return bond_level(hero, h) == BOND_HOSTILE and not _challenge_pending(hero, h))
+		if rivals.is_empty():
+			continue
+		pending_challenges.append({"challenger": hero["id"], "rival": rivals.pick_random()["id"]})
+		var revealed := reveal_trait(hero, drive)
+		if revealed != "":
+			news.append(revealed)
+	return news
+
+
+func _challenge_pending(a: Dictionary, b: Dictionary) -> bool:
+	return pending_challenges.any(func(c): return (c["challenger"] == a["id"] and c["rival"] == b["id"]) \
+		or (c["challenger"] == b["id"] and c["rival"] == a["id"]))
+
+
+## Le prochain défi en attente encore valable : {"challenger": héros, "rival": héros}, ou {}.
+## Les défis devenus impossibles (un mort, plus hostiles...) sont oubliés. Ne retire pas le défi rendu.
+func next_challenge() -> Dictionary:
+	while not pending_challenges.is_empty():
+		var entry: Dictionary = pending_challenges[0]
+		var challenger := hero_by_id(entry["challenger"])
+		var rival := hero_by_id(entry["rival"])
+		if not challenger.is_empty() and not rival.is_empty() and challenger["alive"] and rival["alive"] \
+				and bond_level(challenger, rival) == BOND_HOSTILE:
+			return {"challenger": challenger, "rival": rival}
+		pending_challenges.pop_front()
+	return {}
+
+
+## Le Maître a répondu au défi (autorisé ou refusé) : il quitte la liste. Ne sauvegarde pas.
+func drop_challenge(challenger: Dictionary, rival: Dictionary) -> void:
+	pending_challenges = pending_challenges.filter(func(c): return not (c["challenger"] == challenger["id"] \
+		and c["rival"] == rival["id"]))
+
+
+## Le Maître refuse le défi : celui qui l'a lancé est vexé, l'hostilité reste. Sauvegarde. Renvoie l'annonce.
+func refuse_challenge(challenger: Dictionary, rival: Dictionary) -> String:
+	drop_challenge(challenger, rival)
+	var before := mental(challenger)
+	mental_loss(challenger, CHALLENGE_REFUSED_MENTAL)
+	save_game()
+	return "Le Maître refuse le duel. %s est vexé : santé mentale %d → %d. %s et %s restent hostiles." \
+		% [challenger["name"], roundi(before), roundi(mental(challenger)), challenger["name"], rival["name"]]
 
 
 # --- Mauvais ---
