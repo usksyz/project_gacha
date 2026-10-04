@@ -254,6 +254,8 @@ func _finish() -> void:
 
 ## Envoie un héros à un endroit (en cases) : il y va sans s'arrêter, puis en fait son nouveau poste.
 func order_move(hero: Dictionary, pos: Vector2) -> void:
+	if not _obeys(hero):
+		return
 	if _is_blocked(pos):
 		pos = _free_cell_near(_cell_of(pos))
 	hero["order"] = {"kind": "move", "pos": pos}
@@ -262,8 +264,36 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 
 ## Demande à un héros d'attaquer un ennemi précis, jusqu'à ce qu'il tombe.
 func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
+	if not _obeys(hero):
+		return
 	hero["order"] = {"kind": "attack", "target": enemy["id"]}
 	hero["path"] = PackedVector2Array()
+
+
+## Le héros obéit-il à l'ordre ? Avec une santé mentale basse, il peut l'ignorer
+## (GameData.disobey_chance), puis il boude : il ignore tous les ordres pendant DISOBEY_SULK secondes.
+## Loyal réduit le risque ; quand c'est sa loyauté qui le fait obéir, le trait se révèle.
+func _obeys(hero: Dictionary) -> bool:
+	if time < hero["sulk_until"]:
+		_effect("refuse", hero, hero, "refuse !", false)
+		return false
+	var chance := GameData.disobey_chance(hero["mental"])
+	if chance <= 0.0:
+		return true
+	var loyal := GameData.has_trait(hero["source"], "Loyal")
+	var roll := randf()
+	if roll < chance * (GameData.LOYAL_DISOBEY_FACTOR if loyal else 1.0):
+		hero["sulk_until"] = time + GameData.DISOBEY_SULK
+		_effect("refuse", hero, hero, "refuse !", false)
+		_log("%s, à bout de nerfs, ignore ton ordre." % hero["name"], "disobey")
+		return false
+	if loyal and roll < chance:
+		# Sans sa loyauté, il aurait refusé.
+		var line := GameData.reveal_trait(hero["source"], "Loyal")
+		if line != "":
+			hero["trait_news"].append(line)
+			_log("%s obéit malgré la peur : il est loyal." % hero["name"], "disobey")
+	return true
 
 
 ## Suit l'ordre du joueur, s'il y en a un. Renvoie faux quand il n'y a (plus) d'ordre à suivre.
@@ -374,6 +404,9 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"element": source.get("element", "Feu" if fighter_class == "Mage" else ""),
 		"kills": [],               # ennemis achevés : [{"name", "boss"}] (pour Tueur de gobelins)
 		"took_fire": false,        # a subi des dégâts de feu (pour Résistance aux flammes)
+		"mental": GameData.mental(source) if is_hero else GameData.MENTAL_MAX,  # santé mentale au début du combat
+		"sulk_until": 0.0,         # a refusé un ordre : ignore les ordres jusqu'à ce moment
+		"trait_news": [],          # traits révélés pendant le combat (Loyal), pour l'écran de fin
 	}
 
 

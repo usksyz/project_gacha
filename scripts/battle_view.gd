@@ -31,6 +31,7 @@ const STYLE_COLORS := {
 	"awaken": Color("c9a2ff"),     # éveil des compétences
 	"berserk": Color("ff4040"),    # mode Berserk
 	"reinforce": Color("f5b82e"),  # renforts ennemis
+	"disobey": Color("b0b0c8"),    # ordre refusé (santé mentale basse), Loyal
 }
 
 ## Durée d'affichage des coups (traits) et des chiffres qui s'envolent, en secondes de combat.
@@ -505,6 +506,8 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 			color = Color("6fe08a")
 		elif effect["kind"] == "bleed":
 			color = Color("ff5050")
+		elif effect["kind"] == "refuse":
+			color = Color("b0b0c8")
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
 		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)

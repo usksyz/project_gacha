@@ -3,7 +3,8 @@ extends GameHeroes
 ## La personnalité des héros (cahier, onglet « Personnalité ») : santé mentale et traits de caractère.
 ## Les héros sont des personnes, pas des stats : les combats durs, les boss, les blessures, la mort
 ## d'un allié, les synthèses et les défaites les usent ; le repos et le travail au lobby, et la victoire,
-## les réparent. Pas encore fait : la rupture à 0, les liens entre héros, la désobéissance.
+## les réparent. Sous 60, un héros peut refuser les ordres en combat (désobéissance).
+## Pas encore fait : la rupture à 0, les liens entre héros.
 ## Fait partie de la pile de GameData (voir game_data.gd).
 
 
@@ -44,14 +45,14 @@ const MENTAL_MALUS_MAX := 0.3
 # ---------------------------------------------------------------------------
 # Chaque héros a 1 ou 2 traits fixes (hero["traits"] : [{"name", "known"}]), tirés à l'invocation et
 # cachés au début (« ? »). Un trait se révèle la première fois qu'il agit, ou après quelques combats.
-# Pour l'instant, seuls les effets sur le stress sont branchés (Courageux, Lâche, Protecteur, Ambitieux) ;
-# les autres viendront avec la désobéissance et la vie au lobby.
+# Pour l'instant, sont branchés : les effets sur le stress (Courageux, Lâche, Protecteur, Ambitieux) et
+# Loyal (désobéissance) ; les autres viendront avec la vie au lobby.
 
 ## Les traits et ce qu'ils font (affiché sur la fiche une fois révélés).
 const TRAITS := {
 	"Courageux": "Stresse moitié moins face aux boss. (Plus tard : résiste à la panique.)",
 	"Lâche": "Stresse deux fois plus face aux boss. (Plus tard : peut fuir.)",
-	"Loyal": "(Plus tard : obéit même avec une santé mentale basse.)",
+	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse (moitié moins de refus).",
 	"Paresseux": "(Plus tard : refuse parfois l'entraînement ou une affectation.)",
 	"Querelleur": "(Plus tard : crée des hostilités au lobby.)",
 	"Protecteur": "Stresse deux fois plus quand un allié meurt. (Plus tard : couvre ses alliés.)",
@@ -169,6 +170,22 @@ func mental_combat_factor(hero: Dictionary) -> float:
 	return 1.0 - MENTAL_MALUS_MAX * (1.0 - value / MENTAL_MALUS_START)
 
 
+## Désobéissance en combat : sous DISOBEY_START de santé mentale, un héros peut ignorer un ordre du
+## Maître (au toucher), jusqu'à DISOBEY_MAX de risque à 0. Loyal : risque multiplié par LOYAL_DISOBEY_FACTOR.
+const DISOBEY_START := 60.0
+const DISOBEY_MAX := 0.5
+const LOYAL_DISOBEY_FACTOR := 0.5
+## Après un refus, le héros boude : il ignore tous les ordres pendant ce temps (secondes de combat).
+const DISOBEY_SULK := 3.0
+
+
+## Risque d'ignorer un ordre, selon la santé mentale (sans compter Loyal). Utilisé par battle.gd.
+func disobey_chance(mental_value: float) -> float:
+	if mental_value >= DISOBEY_START:
+		return 0.0
+	return DISOBEY_MAX * (1.0 - mental_value / DISOBEY_START)
+
+
 ## Texte court de l'état d'esprit (fiche du héros).
 func mental_text(hero: Dictionary) -> String:
 	var value := mental(hero)
@@ -188,6 +205,7 @@ func mental_text(hero: Dictionary) -> String:
 ## Renvoie le texte « Han : santé mentale 100 → 84 » (ou "" si rien n'a changé).
 func mental_after_battle(hero: Dictionary, fighter: Dictionary, quest: Dictionary, boss: bool,
 		dead_allies: int, victory: bool, news: Array) -> String:
+	news.append_array(fighter.get("trait_news", []))  # traits révélés pendant le combat (Loyal...)
 	var before := mental(hero)
 	var loss := MENTAL_LOSS_WOUNDS * (1.0 - clampf(float(fighter["hp"]) / fighter["max_hp"], 0.0, 1.0))
 	if fighter["has_bled"]:

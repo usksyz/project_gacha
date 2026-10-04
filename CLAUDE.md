@@ -117,10 +117,14 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais ; Courageux et Lâche
   incompatibles), « ? » tant qu'ils sont cachés ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
   (5) combats (`hero["fights"]`). Effets branchés : Courageux (moitié) / Lâche (double) face aux boss,
-  Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un combat de la Tour se fait sans lui.
+  Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
+  part dans la Tour à sa place (jamais sous 40).
+  Désobéissance : sous `DISOBEY_START` (60), un ordre du Maître en combat peut être refusé (jusqu'à
+  `DISOBEY_MAX` 50 % à 0, `disobey_chance`), puis le héros boude `DISOBEY_SULK` (3 s) ; Loyal divise le
+  risque par deux et se révèle quand il fait obéir (`Battle._obeys`, `fighter["trait_news"]`).
   Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
   -20 santé mentale, santé mentale 100. Reste : rupture à 0 (effondrement, éveil, mort par stress), liens
-  entre héros, désobéissance et autres effets des traits, repas de la cafétéria, perte au donjon journalier.
+  entre héros, autres effets des traits, repas de la cafétéria, perte au donjon journalier.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
