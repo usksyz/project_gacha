@@ -103,7 +103,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   possible, pas pour un héros parti), fenêtre de choix, puis fenêtre système qui annonce la nouvelle classe.
   Rien de neuf dans la sauvegarde (la classe était déjà enregistrée). Reste : classes supérieures (Grand
   chevalier...), Maîtrise de la dague (pas encore apprenable : la voie du voleur passe par l'arc).
-- Personnalité (cahier, onglet « Personnalité », sections 1 à 3 ; `personality.gd`, chiffres provisoires).
+- Personnalité (cahier, onglet « Personnalité », sections 1 à 4 ; `personality.gd`, chiffres provisoires).
   Santé mentale `hero["mental"]` (0 à `MENTAL_MAX` 100, départ 100, nombre à virgule). En combat de la Tour,
   battle.gd la suit en direct (`fighter["mental"]`, `Battle._stress`) : blessures (`MENTAL_LOSS_WOUNDS` pour
   une vie entière perdue, à chaque coup), premier saignement, arrivée d'un boss, quête à avertissements (au
@@ -134,9 +134,24 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   refuse l'entraînement et les affectations (`accepts_work`, raison dans `last_refusal` ; Paresseux refuse
   `LAZY_REFUSAL_CHANCE` 20 % même sans rupture) ; fenêtre d'avertissement avant la Tour ; s'il retombe à 0 en
   combat, mort de stress `STRESS_DEATH_CHANCE` (30 %, pas les immortels).
+  Liens (section 4 du cahier ; `personality.gd`, section « Liens ») : points par paire de héros dans
+  `GameData.bonds` (sauvegardé, clé « 3-7 », plus petit numéro d'abord ; absent = inconnus), paliers
+  `BOND_LEVELS` (inconnus, connaissance, ami, frère d'armes) à `BOND_THRESHOLDS` (0, 5, 25, 60). Fin d'un combat
+  de la Tour (`bonds_after_battle`, appelée par `finish_tower_battle`) : chaque paire de survivants gagne
+  `BOND_POINTS_FIGHT` + `BOND_POINTS_VICTORY` si victoire, x`HARD_VICTORY_FACTOR` si difficile (étage de boss,
+  allié tombé ou survivants sous `HARD_VICTORY_HP` de leur vie) ; fenêtre « Liens » de fin (`report["bonds"]`).
+  En combat (`fighter["bonds"]`, `Battle._bond`) : +5 % / +10 % attaque et défense (`BOND_FIGHT_BONUS`) à moins
+  de `BOND_RANGE` cases d'un ami / frère d'armes ; à sa mort, perte de santé mentale x2 / x3 (`BOND_DEATH_FACTOR`).
+  Groupes liés : une invocation de plusieurs héros a `LINKED_GROUP_CHANCE` (20 %) de donner 2 ou 3 héros qui
+  se connaissent (`roll_linked_group`, noms inventés `LINKED_GROUP_NAMES`, `hero["group"]`), amis d'emblée,
+  annoncés par une fenêtre « Groupe lié » sur l'écran d'invocation (`last_linked_group`). Fiche : groupe et
+  liste des liens ; cartes du groupe (`TeamSlots`) : anneaux entrelacés (`UI.add_bond_badge`) quand un ami
+  (vert) ou un frère d'armes (doré) est dans le même groupe.
   Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
-  -20 santé mentale, santé mentale 100, mettre en rupture. Reste : liens entre héros, autres effets des traits
-  (Querelleur, Mauvais...), repas de la cafétéria, perte au donjon journalier, héros en rupture au donjon journalier.
+  -20 santé mentale, santé mentale 100, mettre en rupture, « Lien +1 cran » avec un héros cherché par son nom
+  (`dev_raise_bond`). Reste : hostilités et duels (Querelleur), autres effets des traits (Mauvais...), liens
+  hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon journalier, héros en
+  rupture au donjon journalier.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
