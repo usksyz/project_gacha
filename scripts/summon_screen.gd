@@ -56,6 +56,8 @@ func _on_summon(summon_type: String, count: int) -> void:
 		return
 	_show_results(heroes)
 	_refresh_labels()
+	# Première invocation : un conseil du Système, une fois les cartes retournées.
+	reveal_tween.finished.connect(func(): GameData.show_tip("invocation"))
 
 
 ## Affiche les cartes des héros obtenus, l'une après l'autre.

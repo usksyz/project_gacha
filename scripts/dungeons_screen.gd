@@ -59,7 +59,11 @@ func _ready() -> void:
 	announce_page = _build_announce_page()
 	team_page = _build_team_page()
 	battle_view = BattleView.new()
-	battle_view.closed.connect(func(): _show_page(list_page))
+	battle_view.closed.connect(func():
+		_show_page(list_page)
+		# Conseils de fin de combat (premier blessé, première mort), une fois les fenêtres de fin lues.
+		for tip_id in battle_view.last_report.get("tips", []):
+			GameData.show_tip(tip_id))
 	for page in _pages():
 		page.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(page)
@@ -367,6 +371,7 @@ func _open_teams() -> void:
 	edited_team = 0
 	_refresh_teams_page()
 	_show_page(teams_page)
+	GameData.show_tip("equipe")  # première équipe à composer
 
 
 func _refresh_teams_page() -> void:
@@ -436,7 +441,9 @@ func _build_announce_page() -> Control:
 	var back := UI.make_button("Retour", func(): _show_page(list_page))
 	back.custom_minimum_size = Vector2(200, 90)
 	buttons.add_child(back)
-	announce_button = UI.make_button("Former l'équipe", func(): _show_page(team_page))
+	announce_button = UI.make_button("Former l'équipe", func():
+		_show_page(team_page)
+		GameData.show_tip("equipe"))  # première équipe à composer (si on n'est pas passé par « Composer »)
 	announce_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(announce_button)
 	return margin
@@ -623,6 +630,7 @@ func _open_tower(floor_number: int) -> void:
 	_refresh_team()
 	_show_page(announce_page)
 	_play_announce(floor_number)
+	GameData.show_tip("etage")  # premier étage : comment se joue le combat
 
 
 ## Liste des ennemis regroupés par type : « Gobelin niv. 3 (Assassin) x4 ».

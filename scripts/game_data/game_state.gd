@@ -16,6 +16,8 @@ signal facility_completed(title: String, lines: Array)
 ## De nouvelles annonces de relations attendent dans relation_news (hostilité née à la cité) :
 ## main.gd les montre dans une fenêtre système.
 signal relations_changed
+## Un conseil du Système est demandé (voir show_tip) : main.gd l'affiche dans une fenêtre « Conseil ».
+signal tip_requested(tip_id: String)
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +106,8 @@ var quarrels_checked_at := 0.0
 var relation_news: Array = []
 ## Défis lancés par les héros, en attente de la réponse du Maître : [{"challenger": numéro, "rival": numéro}].
 var pending_challenges: Array = []
+## Conseils du Système déjà montrés (identifiants de TIP_IDS) : chacun ne s'affiche qu'une fois.
+var seen_tips: Array = []
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace
@@ -125,4 +129,36 @@ func add_gems(amount: int) -> void:
 func add_gold(amount: int) -> void:
 	gold += amount
 	gold_changed.emit(gold)
+	save_game()
+
+
+# ---------------------------------------------------------------------------
+# Conseils du Système (accueil d'un nouveau joueur)
+# ---------------------------------------------------------------------------
+# Comme dans l'œuvre, le Système glisse un conseil au Maître la première fois qu'il fait quelque chose
+# (première invocation, premier étage...). Les textes sont dans SystemTips (scripts/system_tips.gd),
+# l'affichage dans main.gd. Un conseil vu est noté dans la sauvegarde (seen_tips) ; le réglage
+# Settings.tips les coupe tous, et Paramètres > « Réafficher les conseils » vide seen_tips.
+
+## Tous les conseils, dans l'ordre où un joueur les rencontre d'habitude.
+const TIP_IDS := ["bienvenue", "invocation", "equipe", "etage", "blessure", "mort", "batiment"]
+
+
+## Demande d'afficher un conseil, s'il n'a pas déjà été vu et si les conseils sont activés.
+## On peut l'appeler à chaque fois que l'événement arrive : seule la première fois compte.
+func show_tip(tip_id: String) -> void:
+	if Settings.tips and not tip_id in seen_tips:
+		tip_requested.emit(tip_id)
+
+
+## Le joueur a fermé la fenêtre du conseil : il ne la reverra plus.
+func mark_tip_seen(tip_id: String) -> void:
+	if not tip_id in seen_tips:
+		seen_tips.append(tip_id)
+		save_game()
+
+
+## « Réafficher les conseils » (Paramètres) : chaque conseil reviendra à la prochaine occasion.
+func reset_tips() -> void:
+	seen_tips = []
 	save_game()

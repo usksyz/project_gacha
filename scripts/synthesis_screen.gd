@@ -235,7 +235,8 @@ func _do_synthesis() -> void:
 	var ok := UI.make_button("Compris", func():
 		overlay.visible = false
 		sacrifices = []
-		_refresh(), 26)
+		_refresh()
+		GameData.show_tip("mort"), 26)  # première mort (un sacrifice en est une)
 	ok.custom_minimum_size.y = 90
 	box.add_child(ok)
 

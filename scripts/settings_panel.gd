@@ -8,6 +8,8 @@ const DANGER_COLOR := Color("e05252")
 
 var code_pad: CodePad
 var reset_button: Button
+## « Réafficher les conseils » : son texte change une fois appuyé.
+var reset_tips_button: Button
 ## Mode dev : son bouton (visible seulement en mode dev) et sa fenêtre d'outils.
 var dev_button: Button
 var dev_panel: DevPanel
@@ -63,6 +65,15 @@ func _ready() -> void:
 	_add_toggle_row(content, "Plein écran", "fullscreen")
 	# Pour comparer les images de la piste graphique avec les anciens visuels.
 	_add_toggle_row(content, "Nouveaux visuels", "new_visuals")
+	# Conseils du Système (voir GameData.show_tip) : les couper, ou les revoir tous depuis le début.
+	_add_toggle_row(content, "Conseils du Système", "tips")
+	var tips_button := UI.make_button("Réafficher les conseils", func(): pass, 24)
+	tips_button.custom_minimum_size.y = 70
+	tips_button.pressed.connect(func():
+		GameData.reset_tips()
+		tips_button.text = "Les conseils reviendront à la prochaine occasion")
+	content.add_child(tips_button)
+	reset_tips_button = tips_button
 	var language := UI.make_label("Français", 24)
 	language.modulate = Color(1, 1, 1, 0.7)
 	_add_row(content, "Langue", language)
@@ -102,6 +113,7 @@ func _ready() -> void:
 func open() -> void:
 	reset_armed = false
 	reset_button.text = "Recommencer la partie"
+	reset_tips_button.text = "Réafficher les conseils"
 	code_pad.visible = false
 	dev_panel.visible = false
 	dev_button.visible = Settings.dev_mode

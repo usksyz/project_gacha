@@ -112,6 +112,7 @@ func check_auto_buildings() -> bool:
 			if has_magic_hall():
 				lines.append("Les trois bâtiments fusionnent : le %s est né !" % MAGIC_HALL_NAME)
 			facility_completed.emit.call_deferred("Construction terminée", lines)
+			show_tip("batiment")  # premier bâtiment : conseil du Système, après la fenêtre
 	return done
 
 
@@ -150,6 +151,7 @@ func build(building_id: String) -> Array[String]:
 	if building_id in MAGIC_BUILDINGS and has_magic_hall():
 		messages.append("Les trois bâtiments fusionnent : le %s est né !" % MAGIC_HALL_NAME)
 	save_game()
+	show_tip("batiment")  # premier bâtiment : conseil du Système
 	return messages
 
 

@@ -12,6 +12,8 @@ var vibrations := true
 var fullscreen := false
 ## Nouveaux visuels (images de la « Piste graphique » du cahier des charges) ou anciens, pour comparer.
 var new_visuals := true
+## Conseils du Système (fenêtres « Conseil » la première fois qu'on fait quelque chose, voir GameData.show_tip).
+var tips := true
 
 ## Émis quand on change de visuels : les écrans concernés se redessinent.
 signal visuals_changed
@@ -91,6 +93,7 @@ func save_settings() -> void:
 	file.set_value("jeu", "plein_ecran", fullscreen)
 	file.set_value("affichage", "nouveaux_visuels", new_visuals)
 	file.set_value("jeu", "mode_dev", dev_mode)
+	file.set_value("jeu", "conseils", tips)
 	file.save(FILE_PATH)
 
 
@@ -104,3 +107,4 @@ func load_settings() -> void:
 	fullscreen = file.get_value("jeu", "plein_ecran", fullscreen)
 	new_visuals = file.get_value("affichage", "nouveaux_visuels", new_visuals)
 	dev_mode = file.get_value("jeu", "mode_dev", dev_mode)
+	tips = file.get_value("jeu", "conseils", tips)

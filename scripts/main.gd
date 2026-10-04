@@ -28,6 +28,11 @@ var title_label: Label
 ## Or et gemmes, en haut à droite (les gemmes avec leur cristal, avec les nouveaux visuels).
 var money_box: HBoxContainer
 var settings_panel: SettingsPanel
+## Conseils du Système en attente (voir GameData.show_tip) : montrés un par un, quand aucune autre
+## fenêtre de main.gd n'est ouverte.
+var tip_queue: Array[String] = []
+## Noms des fenêtres de main.gd : un conseil attend qu'elles soient fermées.
+const WINDOW_NAMES := ["Tip", "RelationNews", "Challenge", "Facility", "Absence"]
 
 
 func _ready() -> void:
@@ -86,6 +91,66 @@ func _ready() -> void:
 	GameData.facility_completed.connect(_show_facility_completed)
 	GameData.relations_changed.connect(_show_relation_news)
 	_show_relation_news()
+	GameData.tip_requested.connect(_queue_tip)
+	GameData.show_tip("bienvenue")  # partie neuve : le Système accueille le Maître (une seule fois)
+
+
+## Un conseil du Système est demandé : il attend son tour (un seul à la fois, et pas deux fois le même).
+func _queue_tip(tip_id: String) -> void:
+	if not tip_id in tip_queue:
+		tip_queue.append(tip_id)
+	_show_next_tip.call_deferred()
+
+
+## Ferme une fenêtre de main.gd : elle change de nom tout de suite (elle ne compte plus comme ouverte,
+## voir _window_open), et elle est libérée juste après (pas pendant l'appui sur son bouton).
+func _close_window(overlay: Control) -> void:
+	overlay.name = "Closed"
+	overlay.queue_free()
+
+
+## Vrai si une fenêtre de main.gd est ouverte (un conseil attend alors qu'elle se ferme).
+func _window_open() -> bool:
+	for window_name in WINDOW_NAMES:
+		if has_node(window_name):
+			return true
+	return false
+
+
+## Affiche le prochain conseil en attente : fenêtre système « Conseil », bouton « Compris ».
+## Il n'est noté comme vu (dans la sauvegarde) qu'une fois la fenêtre fermée.
+func _show_next_tip() -> void:
+	if tip_queue.is_empty() or _window_open():
+		return
+	var tip_id: String = tip_queue.pop_front()
+	if tip_id in GameData.seen_tips or not Settings.tips:
+		_show_next_tip()
+		return
+	HubCity3D.paused = true
+	var overlay := ColorRect.new()
+	overlay.name = "Tip"
+	overlay.color = Color(0, 0, 0, 0.75)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	box.add_child(UI.make_system_window(SystemTips.title(tip_id), SystemTips.lines(tip_id)))
+	var hint := UI.make_label("Paramètres : « Conseils du Système » pour les couper.", 18)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.modulate = Color(1, 1, 1, 0.5)
+	box.add_child(hint)
+	var ok := UI.make_button("Compris", func():
+		_close_window(overlay)
+		HubCity3D.paused = has_node("Facility")
+		GameData.mark_tip_seen(tip_id)
+		_show_next_tip(), 24)
+	ok.custom_minimum_size.y = 80
+	box.add_child(ok)
 
 
 ## Des héros se sont brouillés à la cité (Querelleur) : une fenêtre système l'annonce. Ensuite, les défis
@@ -118,7 +183,8 @@ func _show_relation_news() -> void:
 		# Les annonces arrivées pendant que la fenêtre était ouverte restent, et s'affichent ensuite.
 		GameData.relation_news = GameData.relation_news.slice(shown)
 		GameData.save_game()
-		_show_relation_news(), 24)
+		_show_relation_news()
+		_show_next_tip(), 24)
 	ok.custom_minimum_size.y = 80
 	box.add_child(ok)
 
@@ -133,7 +199,8 @@ func _show_next_challenge() -> void:
 	panel.name = "Challenge"
 	panel.finished.connect(func():
 		panel.name = "ChallengeDone"  # (libéré juste après) : le défi suivant peut s'ouvrir
-		_show_relation_news.call_deferred())
+		_show_relation_news.call_deferred()
+		_show_next_tip.call_deferred())
 
 
 ## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle
@@ -142,6 +209,7 @@ func _show_facility_completed(title: String, lines: Array) -> void:
 	Settings.vibrate(150)
 	HubCity3D.paused = true
 	var overlay := ColorRect.new()
+	overlay.name = "Facility"
 	overlay.color = Color(0, 0, 0, 0.75)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(overlay)
@@ -154,10 +222,11 @@ func _show_facility_completed(title: String, lines: Array) -> void:
 	center.add_child(box)
 	box.add_child(UI.make_system_window(title, lines))
 	var close := func(go_to_hub: bool):
-		overlay.queue_free()
-		HubCity3D.paused = false
+		_close_window(overlay)
+		HubCity3D.paused = has_node("Facility") or has_node("Tip")
 		if go_to_hub:
 			show_screen("hub")
+		_show_next_tip()  # un conseil attendait peut-être la fermeture (premier bâtiment)
 	var see := UI.make_button("Voir dans la cité", func(): close.call(true), 24)
 	see.custom_minimum_size.y = 80
 	box.add_child(see)
@@ -169,6 +238,7 @@ func _show_facility_completed(title: String, lines: Array) -> void:
 ## Le jeu a été fermé en plein combat : on annonce comment les héros s'en sont sortis seuls.
 func _show_absence_report() -> void:
 	var overlay := ColorRect.new()
+	overlay.name = "Absence"
 	overlay.color = Color(0, 0, 0, 0.92)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(overlay)
@@ -193,8 +263,12 @@ func _show_absence_report() -> void:
 	for window in UI.make_battle_report_windows(report):
 		box.add_child(window)
 	var ok := UI.make_button("Compris", func():
-		overlay.queue_free()
-		GameData.absence_report = {})
+		_close_window(overlay)
+		GameData.absence_report = {}
+		# Conseils de fin de combat (premier blessé, première mort), une fois le rapport lu.
+		for tip_id in report.get("tips", []):
+			GameData.show_tip(tip_id)
+		_show_next_tip())
 	ok.custom_minimum_size.y = 90
 	box.add_child(ok)
 

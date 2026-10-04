@@ -306,6 +306,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"mvp": battle.mvp(),
 		"floor": floor_number,
 		"replay": replay,  # étage déjà conquis, rejoué pour s'entraîner
+		"tips": [],       # conseils du Système à montrer après les fenêtres de fin (voir show_tip)
 	}
 	if battle.victory and not replay and floor_number == DAILY_UNLOCK_FLOOR:
 		report["notices"].append("Félicitations, Maître ! Vous avez franchi le %de étage. Le donjon journalier est débloqué." % DAILY_UNLOCK_FLOOR)
@@ -321,6 +322,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			for weapon in arsenal:
 				if weapon["owner"] == fighter["source"]["id"]:
 					report["lost_weapons"].append("%s : %s" % [fighter["source"]["name"], weapon_name(weapon)])
+	if not report["dead"].is_empty():
+		report["tips"].append("mort")  # conseil du Système à la première mort
 
 	var rewards := tower_rewards(floor_number)
 	if replay:
@@ -358,6 +361,10 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
+			# Conseil du Système la première fois qu'un héros revient blessé ou ébranlé.
+			if fighter["hp"] < fighter["max_hp"] or fighter["mental"] < mental(hero):
+				if not "blessure" in report["tips"]:
+					report["tips"].append("blessure")
 			# Santé mentale : ce que le combat lui a coûté (voir personality.gd).
 			var mental_line := mental_after_battle(hero, fighter, battle.victory, report["mental"])
 			if mental_line != "":

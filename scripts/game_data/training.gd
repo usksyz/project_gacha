@@ -23,6 +23,7 @@ func _announce_training_ground() -> void:
 		"Le terrain d'entraînement a été construit avec succès !",
 		"Tes héros peuvent y apprendre des compétences, même quand le jeu est fermé.",
 	])
+	show_tip("batiment")  # premier bâtiment : conseil du Système, après la fenêtre
 
 
 ## Vrai quand le terrain d'entraînement est ouvert (assez d'armes tirées).

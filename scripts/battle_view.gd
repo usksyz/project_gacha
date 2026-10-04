@@ -63,6 +63,9 @@ var pause_button: Button
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
 var finish_callback := Callable()
+## Rapport du dernier combat de la Tour terminé (GameData.finish_tower_battle), vide sinon :
+## l'écran Donjons y lit les conseils du Système à montrer après « Continuer ».
+var last_report: Dictionary = {}
 ## Temps accumulé depuis le dernier pas du combat (secondes).
 var accumulator := 0.0
 ## Héros choisi pour recevoir un ordre (son numéro), ou -1.
@@ -105,6 +108,7 @@ func _ready() -> void:
 func play(new_battle: Battle, title: String, on_finish := Callable()) -> void:
 	battle = new_battle
 	finish_callback = on_finish
+	last_report = {}
 	accumulator = 0.0
 	next_event = 0
 	first_effect = 0
@@ -616,6 +620,7 @@ func _draw_bubble(font: Font, tip: Vector2, text: String, alpha: float) -> void:
 ## Remplace la carte et la pause par les fenêtres de fin de combat :
 ## une fenêtre rouge par héros mort, puis le résultat (récompenses, niveaux, MVP).
 func _show_result(report: Dictionary) -> void:
+	last_report = report
 	_show_windows(UI.make_battle_report_windows(report))
 
 

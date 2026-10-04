@@ -49,6 +49,7 @@ func save_game() -> void:
 	file.set_value("partie", "querelles_maj", quarrels_checked_at)
 	file.set_value("partie", "nouvelles_relations", relation_news)
 	file.set_value("partie", "defis", pending_challenges)
+	file.set_value("partie", "conseils_vus", seen_tips)
 	file.save(SAVE_PATH)
 
 
@@ -83,6 +84,9 @@ func load_game() -> bool:
 	quarrels_checked_at = file.get_value("partie", "querelles_maj", 0.0)
 	relation_news = file.get_value("partie", "nouvelles_relations", [])
 	pending_challenges = file.get_value("partie", "defis", [])
+	# Conseils du Système : une partie d'avant les conseils n'est pas celle d'un nouveau joueur, on les
+	# compte comme vus (Paramètres > « Réafficher les conseils » pour les revoir).
+	seen_tips = file.get_value("partie", "conseils_vus", TIP_IDS.duplicate())
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
@@ -141,4 +145,5 @@ func _new_game() -> void:
 	quarrels_checked_at = 0.0
 	relation_news = []
 	pending_challenges = []
+	seen_tips = []  # partie neuve : le Système accueille le Maître (voir show_tip)
 	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.
