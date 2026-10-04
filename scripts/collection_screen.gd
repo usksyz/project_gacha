@@ -127,6 +127,7 @@ func _add_promotion(content: VBoxContainer, hero: Dictionary) -> void:
 		_refresh()
 		_show_detail.call_deferred(hero, lines), 22)
 	button.custom_minimum_size.y = 90
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var problem := GameData.promotion_problem(hero)
 	button.disabled = problem != ""
 	content.add_child(button)

@@ -501,6 +501,7 @@ func _build_team_page() -> Control:
 
 	team_title = UI.make_label("", 40)
 	team_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	team_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(team_title)
 
 	var enemies_panel := PanelContainer.new()
@@ -515,6 +516,7 @@ func _build_team_page() -> Control:
 	layout.add_child(warning)
 
 	pick_label = UI.make_label("", 24)
+	pick_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # sinon il élargit toute la page (téléphone)
 	layout.add_child(pick_label)
 
 	# Un bouton par équipe composée à l'avance : elle est choisie d'un seul toucher.

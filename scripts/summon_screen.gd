@@ -146,6 +146,7 @@ func _build_ui() -> void:
 	layout.add_child(title)
 	pity_label = UI.make_label("", 22)
 	pity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pity_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(pity_label)
 
 	var results_area := CenterContainer.new()

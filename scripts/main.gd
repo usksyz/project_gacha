@@ -3,6 +3,8 @@ extends Control
 ## barre de menus en bas pour passer d'un écran à l'autre.
 
 const BACKGROUND_COLOR := Color("1b1d2a")
+## Police de secours pour les symboles (voir _add_symbol_font).
+const SYMBOL_FONT := preload("res://assets/fonts/DejaVuSans.ttf")
 const BAR_COLOR := Color("12131c")
 const ACCENT_COLOR := Color("f5b82e")
 
@@ -40,6 +42,7 @@ var tutorial_label: Label
 
 
 func _ready() -> void:
+	_add_symbol_font()
 	var background := ColorRect.new()
 	background.color = BACKGROUND_COLOR
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -126,6 +129,18 @@ func _refresh_tutorial() -> void:
 		nav_buttons[screen_name].disabled = step != "" and TUTORIAL_SCREENS.get(step, "") != screen_name
 
 
+## Symboles du jeu (★ ← → ♥ ♡ ◆ ▶ ∞ ✓) : la police de Godot ne les a pas. Sur PC, une police de l'ordinateur
+## prend le relais ; sur le web (téléphone), il n'y en a pas et ils s'affichent en carrés vides. DejaVu Sans
+## (licence libre, assets/fonts) est ajoutée en secours de la police par défaut, pour tous les textes.
+func _add_symbol_font() -> void:
+	var default_font := ThemeDB.fallback_font
+	if default_font == null or SYMBOL_FONT in default_font.fallbacks:
+		return
+	var fallbacks := default_font.fallbacks.duplicate()
+	fallbacks.append(SYMBOL_FONT)
+	default_font.fallbacks = fallbacks
+
+
 ## Un conseil du Système est demandé : il attend son tour (un seul à la fois, et pas deux fois le même).
 func _queue_tip(tip_id: String) -> void:
 	if not tip_id in tip_queue:
@@ -174,6 +189,7 @@ func _show_next_tip() -> void:
 	if not GameData.is_tutorial_tip(tip_id):
 		var hint := UI.make_label("Paramètres : « Conseils du Système » pour les couper.", 18)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.modulate = Color(1, 1, 1, 0.5)
 		box.add_child(hint)
 	var ok := UI.make_button("Compris", func():

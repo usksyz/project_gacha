@@ -14,6 +14,9 @@ signal built(messages: Array)
 const MODELS := {"synthese": "synthese", "forge": "forge", "atelier_magie": "atelier_magie",
 	"laboratoire": "lab", "bibliotheque": "bibliotheque"}
 
+## Bâtiments dont la fonction est déjà dans le jeu (les autres : « fonction à venir »).
+const READY_BUILDINGS := ["forge", "synthese"]
+
 var list: VBoxContainer
 var result: Label
 
@@ -91,8 +94,10 @@ func _refresh() -> void:
 			row.add_child(box)
 		else:
 			panel.add_child(box)
-		box.add_child(UI.make_label(info["name"], 24))
-		var role := UI.make_label(info["info"] + ("" if building_id == "forge" else " (fonction à venir)"), 18)
+		var name_label := UI.make_label(info["name"], 24)
+		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(name_label)
+		var role := UI.make_label(info["info"] + ("" if building_id in READY_BUILDINGS else " (fonction à venir)"), 18)
 		role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		role.modulate = Color(1, 1, 1, 0.7)
 		box.add_child(role)
@@ -104,6 +109,7 @@ func _refresh() -> void:
 			text = problem
 		var button := UI.make_button(text, func(): _build(building_id), 22)
 		button.custom_minimum_size.y = 64
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # raisons longues : sur deux lignes, sans élargir la fenêtre
 		button.disabled = problem != ""
 		if problem == "" and Settings.new_visuals:
 			# Nouveaux visuels : « Construire : 500 » suivi du cristal des gemmes, posé sur le bouton.
