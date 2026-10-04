@@ -213,6 +213,11 @@ const BOND_THRESHOLDS := [0.0, 5.0, 25.0, 60.0]
 const BOND_ACQUAINTANCE := 1
 const BOND_FRIEND := 2
 const BOND_BROTHERS := 3
+## Hostiles : un palier sous « inconnus » (points de lien négatifs), né d'une querelle à la cité
+## (Querelleur, voir update_quarrels). Pas de bonus de lien, de la santé mentale perdue à chaque combat
+## dans la même équipe, et plus aucun point gagné ensemble : seul un duel règle le conflit.
+const BOND_HOSTILE := -1
+const HOSTILE_POINTS := -1.0
 ## Points gagnés par chaque paire de survivants d'un combat de la Tour : toujours BOND_POINTS_FIGHT,
 ## plus BOND_POINTS_VICTORY en cas de victoire ; le tout multiplié par HARD_VICTORY_FACTOR si la victoire
 ## a été difficile (étage de boss, allié tombé, ou survivants à moins de HARD_VICTORY_HP de leur vie).
@@ -242,6 +247,8 @@ func bond_level(a: Dictionary, b: Dictionary) -> int:
 	if a["id"] == b["id"]:
 		return 0
 	var points := bond_points(a, b)
+	if points < 0.0:
+		return BOND_HOSTILE
 	var level := 0
 	for i in BOND_THRESHOLDS.size():
 		if points >= BOND_THRESHOLDS[i]:
@@ -252,8 +259,8 @@ func bond_level(a: Dictionary, b: Dictionary) -> int:
 ## Ajoute des points de lien (au plus ce qu'il faut pour frères d'armes). Renvoie l'annonce du nouveau
 ## palier (« X et Y sont devenus amis. »), ou "" s'il n'a pas changé. Ne sauvegarde pas.
 func add_bond_points(a: Dictionary, b: Dictionary, points: float) -> String:
-	if a["id"] == b["id"]:
-		return ""
+	if a["id"] == b["id"] or bond_level(a, b) == BOND_HOSTILE:
+		return ""  # des hostiles ne se rapprochent pas : il faut un duel
 	var before := bond_level(a, b)
 	bonds[_bond_key(a, b)] = minf(bond_points(a, b) + points, BOND_THRESHOLDS[-1])
 	var after := bond_level(a, b)
@@ -270,6 +277,8 @@ func add_bond_points(a: Dictionary, b: Dictionary, points: float) -> String:
 
 ## Monte un lien jusqu'au palier « level » (s'il est plus bas). Renvoie l'annonce, ou "".
 func set_bond_level(a: Dictionary, b: Dictionary, level: int) -> String:
+	if bond_level(a, b) == BOND_HOSTILE:
+		bonds[_bond_key(a, b)] = 0.0  # l'hostilité est oubliée
 	var missing: float = BOND_THRESHOLDS[level] - bond_points(a, b)
 	return add_bond_points(a, b, missing) if missing > 0.0 else ""
 
@@ -321,13 +330,83 @@ func roll_linked_group(summoned: Array) -> void:
 	last_linked_group = {"name": group_name, "heroes": members}
 
 
-## Les liens d'un héros (à partir de connaissance), du plus fort au plus faible :
+## Le nom d'un palier : « hostiles », « inconnus », « connaissance », « ami », « frère d'armes ».
+func bond_name(level: int) -> String:
+	return "hostiles" if level == BOND_HOSTILE else BOND_LEVELS[level]
+
+
+# --- Querelleur et hostilités ---
+# Cahier (onglet principal, « Relations entre héros, groupes et duels ») : le système signale quand un
+# héros devient hostile envers un autre ; les héros n'ont pas le droit de se battre à la cité, le
+# conflit se règle par un duel.
+
+## Chaque heure de temps réel passée à la cité, un Querelleur a cette chance de se brouiller avec un
+## autre héros présent. Au plus QUARREL_MAX_HOURS heures comptées d'un coup (jeu longtemps fermé).
+const QUARREL_CHANCE_PER_HOUR := 0.1
+const QUARREL_MAX_HOURS := 24
+## Deux hostiles dans la même équipe de combat : chacun perd ceci au début du combat.
+const MENTAL_LOSS_HOSTILE := 5.0
+
+
+## « Han (★) » : le nom suivi des étoiles, comme dans les fenêtres système.
+func hero_label(hero: Dictionary) -> String:
+	return "%s (%s)" % [hero["name"], "★".repeat(hero["rarity"])]
+
+
+## Brouille deux héros : leur lien devient « hostiles ». Renvoie l'annonce. Ne sauvegarde pas.
+func make_hostile(hero: Dictionary, other: Dictionary) -> String:
+	bonds[_bond_key(hero, other)] = HOSTILE_POINTS
+	return "%s fait preuve d'hostilité envers %s !" % [hero_label(hero), hero_label(other)]
+
+
+## Les paires d'hostiles parmi « heroes » : [[a, b], ...].
+func hostile_pairs(heroes: Array) -> Array:
+	var pairs := []
+	for i in heroes.size():
+		for j in range(i + 1, heroes.size()):
+			if bond_level(heroes[i], heroes[j]) == BOND_HOSTILE:
+				pairs.append([heroes[i], heroes[j]])
+	return pairs
+
+
+## Querelles à la cité : pour chaque heure réelle écoulée, chaque Querelleur présent à la cité peut se
+## brouiller avec un autre héros présent (QUARREL_CHANCE_PER_HOUR) ; son trait se révèle. Les annonces
+## vont dans relation_news, puis le signal relations_changed prévient main.gd. Appelée toutes les 5 s.
+func update_quarrels() -> void:
+	var now := Time.get_unix_time_from_system()
+	if quarrels_checked_at <= 0.0 or quarrels_checked_at > now:
+		quarrels_checked_at = now  # première fois, ou l'horloge de l'appareil a reculé
+		return
+	var hours := int((now - quarrels_checked_at) / 3600.0)
+	if hours < 1:
+		return
+	quarrels_checked_at += hours * 3600.0
+	var news := []
+	for hour in mini(hours, QUARREL_MAX_HOURS):
+		var present := alive_heroes().filter(func(h): return not is_away(h))
+		for hero in present:
+			if not has_trait(hero, "Querelleur") or randf() >= QUARREL_CHANCE_PER_HOUR:
+				continue
+			var targets := present.filter(func(h): return h["id"] != hero["id"] and bond_level(hero, h) != BOND_HOSTILE)
+			if targets.is_empty():
+				continue
+			news.append(make_hostile(hero, targets.pick_random()))
+			var revealed := reveal_trait(hero, "Querelleur")
+			if revealed != "":
+				news.append(revealed)
+	if not news.is_empty():
+		relation_news.append_array(news)
+		relations_changed.emit()
+	save_game()
+
+
+## Les liens d'un héros (hostiles compris, pas les inconnus), du plus fort au plus faible :
 ## [{"hero": autre héros, "level": palier}]. Les morts y restent.
 func hero_bonds(hero: Dictionary) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for other in roster:
 		var level := bond_level(hero, other)
-		if level > 0:
+		if level != 0:
 			result.append({"hero": other, "level": level})
 	result.sort_custom(func(x, y): return x["level"] > y["level"])
 	return result

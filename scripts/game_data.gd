@@ -40,10 +40,12 @@ func _ready() -> void:
 	tidy_arsenal()  # (anciennes sauvegardes) les héros à la cité reposent leurs armes ; voir aussi check_auto_buildings
 	var timer := Timer.new()
 	timer.wait_time = 5.0
+	update_quarrels()
 	timer.timeout.connect(func():
 		update_expedition()
 		update_training()
-		update_mental())
+		update_mental()
+		update_quarrels())
 	add_child(timer)
 	timer.start()
 
@@ -175,17 +177,41 @@ func dev_change_mental(hero: Dictionary, amount: float) -> void:
 ## Monte d'un cran le lien entre un héros et un autre héros vivant, trouvé par son nom (sans tenir compte
 ## des majuscules). Renvoie le texte à afficher.
 func dev_raise_bond(hero: Dictionary, partner_name: String) -> String:
+	var other := _dev_find_partner(hero, partner_name)
+	if other.is_empty():
+		return _dev_partner_missing(partner_name)
+	var level := bond_level(hero, other)
+	if level >= BOND_BROTHERS:
+		return "%s et %s sont déjà frères d'armes." % [hero["name"], other["name"]]
+	var line := set_bond_level(hero, other, level + 1)
+	save_game()
+	if level == BOND_HOSTILE:
+		return "%s et %s ne sont plus hostiles." % [hero["name"], other["name"]]
+	return line
+
+
+## Rend un héros hostile envers un autre héros vivant, trouvé par son nom. Renvoie le texte à afficher.
+func dev_make_hostile(hero: Dictionary, partner_name: String) -> String:
+	var other := _dev_find_partner(hero, partner_name)
+	if other.is_empty():
+		return _dev_partner_missing(partner_name)
+	var line := make_hostile(hero, other)
+	save_game()
+	return line
+
+
+## Un autre héros vivant nommé « partner_name » (sans tenir compte des majuscules), ou {}.
+func _dev_find_partner(hero: Dictionary, partner_name: String) -> Dictionary:
 	var wanted := partner_name.strip_edges().to_lower()
-	if wanted == "":
-		return "Écris d'abord le nom d'un autre héros."
 	for other in alive_heroes():
-		if other["id"] != hero["id"] and other["name"].to_lower() == wanted:
-			var level := bond_level(hero, other)
-			if level >= BOND_BROTHERS:
-				return "%s et %s sont déjà frères d'armes." % [hero["name"], other["name"]]
-			var line := set_bond_level(hero, other, level + 1)
-			save_game()
-			return line
+		if wanted != "" and other["id"] != hero["id"] and other["name"].to_lower() == wanted:
+			return other
+	return {}
+
+
+func _dev_partner_missing(partner_name: String) -> String:
+	if partner_name.strip_edges() == "":
+		return "Écris d'abord le nom d'un autre héros."
 	return "Aucun autre héros vivant ne s'appelle « %s »." % partner_name.strip_edges()
 
 

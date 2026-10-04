@@ -271,6 +271,9 @@ func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
 	bond_row.add_child(_make_dev_button("Lien +1 cran", func():
 		_dev_notice_title = "Liens"
 		_dev_notice = [GameData.dev_raise_bond(hero, partner.text)]))
+	bond_row.add_child(_make_dev_button("Rendre hostile", func():
+		_dev_notice_title = "Hostilité"
+		_dev_notice = [GameData.dev_make_hostile(hero, partner.text)]))
 
 	# Les compétences du héros : changer leur niveau, ou les retirer.
 	for skill in hero["skills"]:
@@ -431,11 +434,13 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 		content.add_child(UI.make_label("Liens :", 22))
 		for link in links:
 			var other: Dictionary = link["hero"]
-			var text := "%s (%s) — %s" % [other["name"], "★".repeat(other["rarity"]), GameData.BOND_LEVELS[link["level"]]]
+			var text := "%s (%s) — %s" % [other["name"], "★".repeat(other["rarity"]), GameData.bond_name(link["level"])]
 			if not other["alive"]:
 				text += " (tombé)"
 			var line := UI.make_label(text, 18)
-			if link["level"] >= GameData.BOND_FRIEND:
+			if link["level"] == GameData.BOND_HOSTILE:
+				line.add_theme_color_override("font_color", Color("e05252"))
+			elif link["level"] >= GameData.BOND_FRIEND:
 				line.add_theme_color_override("font_color",
 					Color("f5c542") if link["level"] >= GameData.BOND_BROTHERS else Color("6fe08a"))
 			if not other["alive"]:

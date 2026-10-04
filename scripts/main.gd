@@ -84,6 +84,40 @@ func _ready() -> void:
 	if not GameData.absence_report.is_empty():
 		_show_absence_report()
 	GameData.facility_completed.connect(_show_facility_completed)
+	GameData.relations_changed.connect(_show_relation_news)
+	if not GameData.relation_news.is_empty():
+		_show_relation_news()
+
+
+## Des héros se sont brouillés à la cité (Querelleur) : une fenêtre système l'annonce.
+func _show_relation_news() -> void:
+	if GameData.relation_news.is_empty() or has_node("RelationNews"):
+		return  # rien à dire, ou la fenêtre est déjà ouverte (elle montrera tout à sa fermeture)
+	Settings.vibrate(150)
+	var overlay := ColorRect.new()
+	overlay.name = "RelationNews"
+	overlay.color = Color(0, 0, 0, 0.75)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	var lines := GameData.relation_news.duplicate()
+	var shown := lines.size()
+	lines.append("Rappel : les héros n'ont pas le droit de se battre à la cité. Le conflit se règle par un duel.")
+	box.add_child(UI.make_system_window("Hostilité", lines, true))
+	var ok := UI.make_button("Compris", func():
+		overlay.free()
+		# Les annonces arrivées pendant que la fenêtre était ouverte restent, et s'affichent ensuite.
+		GameData.relation_news = GameData.relation_news.slice(shown)
+		GameData.save_game()
+		_show_relation_news(), 24)
+	ok.custom_minimum_size.y = 80
+	box.add_child(ok)
 
 
 ## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle

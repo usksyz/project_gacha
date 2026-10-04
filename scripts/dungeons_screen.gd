@@ -758,6 +758,13 @@ func _confirm_group() -> void:
 			"Si sa santé mentale retombe à 0 pendant ce combat, il risque de mourir de stress (%d %%). C'est définitif." \
 				% roundi(GameData.STRESS_DEATH_CHANCE * 100),
 		], true))
+	# Hostiles dans le même groupe : ils stresseront (voir GameData.MENTAL_LOSS_HOSTILE).
+	var group_heroes := selected_ids.map(func(hero_id): return GameData.hero_by_id(hero_id))
+	for pair in GameData.hostile_pairs(group_heroes):
+		box.add_child(UI.make_system_window("Avertissement", [
+			"%s et %s sont hostiles : l'ambiance sera tendue, ils perdront de la santé mentale et n'auront aucun bonus de lien." \
+				% [pair[0]["name"], pair[1]["name"]],
+		], true))
 	box.add_child(UI.make_system_window("Formation de groupe", [
 		"Le groupe est formé : %s." % group,
 		"Étage %d — %s. Partir au combat ?" % [chosen_floor, floor_quest["name"]],

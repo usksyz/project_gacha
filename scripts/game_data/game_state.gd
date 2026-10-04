@@ -13,6 +13,9 @@ signal lobby_updated
 ## Un bâtiment s'est construit tout seul, sa condition remplie (terrain d'entraînement...) :
 ## main.gd l'annonce dans une fenêtre, et le hub 3D joue l'animation de construction.
 signal facility_completed(title: String, lines: Array)
+## De nouvelles annonces de relations attendent dans relation_news (hostilité née à la cité) :
+## main.gd les montre dans une fenêtre système.
+signal relations_changed
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +97,11 @@ var mental_updated_at := 0.0
 ## Liens entre héros (voir personality.gd, section « Liens ») : points de lien de chaque paire,
 ## { "3-7": 12.0 } (les deux numéros de héros, le plus petit d'abord). Une paire absente = inconnus.
 var bonds := {}
+## Moment (temps réel) de la dernière heure comptée pour les querelles à la cité (voir update_quarrels,
+## personality.gd). 0 = pas encore.
+var quarrels_checked_at := 0.0
+## Annonces de relations en attente d'être montrées au joueur (« X fait preuve d'hostilité envers Y ! »).
+var relation_news: Array = []
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace

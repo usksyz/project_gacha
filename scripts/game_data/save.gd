@@ -46,6 +46,8 @@ func save_game() -> void:
 	file.set_value("partie", "retours_expeditions", expedition_reports)
 	file.set_value("partie", "sante_mentale_maj", mental_updated_at)
 	file.set_value("partie", "liens", bonds)
+	file.set_value("partie", "querelles_maj", quarrels_checked_at)
+	file.set_value("partie", "nouvelles_relations", relation_news)
 	file.save(SAVE_PATH)
 
 
@@ -77,6 +79,8 @@ func load_game() -> bool:
 	expedition_reports = file.get_value("partie", "retours_expeditions", [])
 	mental_updated_at = file.get_value("partie", "sante_mentale_maj", 0.0)
 	bonds = file.get_value("partie", "liens", {})  # absent des anciennes sauvegardes : personne ne se connaît
+	quarrels_checked_at = file.get_value("partie", "querelles_maj", 0.0)
+	relation_news = file.get_value("partie", "nouvelles_relations", [])
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
@@ -132,4 +136,6 @@ func _new_game() -> void:
 	expedition_reports = []
 	mental_updated_at = 0.0
 	bonds = {}
+	quarrels_checked_at = 0.0
+	relation_news = []
 	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.

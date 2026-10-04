@@ -215,6 +215,13 @@ func start() -> void:
 	if quest.get("warnings", 0) > 0:
 		for hero in heroes:
 			_stress(hero, GameData.MENTAL_LOSS_WARNINGS)
+	# Deux hostiles dans la même équipe : l'ambiance est tendue, chacun en perd de la santé mentale.
+	for i in heroes.size():
+		for j in range(i + 1, heroes.size()):
+			if GameData.bond_level(heroes[i]["source"], heroes[j]["source"]) == GameData.BOND_HOSTILE:
+				_log("%s et %s se regardent de travers : l'ambiance est tendue." % [heroes[i]["name"], heroes[j]["name"]], "disobey")
+				_stress(heroes[i], GameData.MENTAL_LOSS_HOSTILE)
+				_stress(heroes[j], GameData.MENTAL_LOSS_HOSTILE)
 
 
 ## Fait avancer le combat d'un pas (TICK secondes).
