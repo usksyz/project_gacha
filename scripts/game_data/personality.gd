@@ -551,9 +551,32 @@ func duel_problem(challenger: Dictionary, rival: Dictionary) -> String:
 	return ""
 
 
+## Paris (cahier : « avec l'accord des deux parties, les héros peuvent même parier sur l'issue ») : avant
+## le duel, le Maître peut miser de l'or (BET_STAKES) sur l'un des deux héros, si les deux sont d'accord
+## (santé mentale au-dessus de BET_MIN_MENTAL). La mise est payée tout de suite ; si son héros gagne,
+## elle rapporte BET_PAYOUT fois la mise (le double), sinon rien.
+const BET_MIN_MENTAL := 40.0
+const BET_STAKES := [100, 500, 1000]
+const BET_PAYOUT := 2
+
+
+## Les héros du duel qui refusent de parier (santé mentale trop basse) : vide si les deux sont d'accord.
+func bet_refusals(challenger: Dictionary, rival: Dictionary) -> Array:
+	return [challenger, rival].filter(func(hero): return mental(hero) <= BET_MIN_MENTAL)
+
+
+## Paie la mise d'un pari. Renvoie faux s'il n'y a pas assez d'or (rien n'est payé). Sauvegarde.
+func place_bet(stake: int) -> bool:
+	if gold < stake:
+		return false
+	add_gold(-stake)
+	return true
+
+
 ## Fin d'un duel : le gagnant gagne DUEL_WIN_MENTAL, le perdant perd DUEL_LOSE_MENTAL (moins avec Calme),
-## et leur hostilité retombe à « connaissance ». Sauvegarde. Renvoie les lignes de la fenêtre de fin.
-func finish_duel(challenger: Dictionary, rival: Dictionary, challenger_won: bool) -> Array[String]:
+## et leur hostilité retombe à « connaissance ». « bet » : le pari du Maître ({"stake": or, "on": numéro du
+## héros}, ou {} : pas de pari), payé s'il a misé sur le gagnant. Sauvegarde. Renvoie les lignes de la fenêtre.
+func finish_duel(challenger: Dictionary, rival: Dictionary, challenger_won: bool, bet := {}) -> Array[String]:
 	var winner := challenger if challenger_won else rival
 	var loser := rival if challenger_won else challenger
 	var winner_before := mental(winner)
@@ -561,13 +584,21 @@ func finish_duel(challenger: Dictionary, rival: Dictionary, challenger_won: bool
 	change_mental(winner, DUEL_WIN_MENTAL)
 	mental_loss(loser, DUEL_LOSE_MENTAL)
 	set_bond_level(challenger, rival, BOND_ACQUAINTANCE)
-	save_game()
-	return [
+	var lines: Array[String] = [
 		"%s remporte le duel contre %s." % [hero_label(winner), hero_label(loser)],
 		"%s : santé mentale %d → %d" % [winner["name"], roundi(winner_before), roundi(mental(winner))],
 		"%s : santé mentale %d → %d" % [loser["name"], roundi(loser_before), roundi(mental(loser))],
 		"Le conflit est réglé : %s et %s ne sont plus hostiles (connaissance)." % [challenger["name"], rival["name"]],
 	]
+	if not bet.is_empty():
+		if bet["on"] == winner["id"]:
+			add_gold(bet["stake"] * BET_PAYOUT)
+			lines.append("Pari gagné : tu avais misé %d or sur %s, il t'en rapporte %d." \
+				% [bet["stake"], winner["name"], bet["stake"] * BET_PAYOUT])
+		else:
+			lines.append("Pari perdu : tu avais misé %d or sur %s." % [bet["stake"], loser["name"]])
+	save_game()
+	return lines
 
 
 ## Les liens d'un héros (hostiles compris, pas les inconnus), du plus fort au plus faible :
