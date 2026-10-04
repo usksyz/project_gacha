@@ -51,10 +51,10 @@ const MENTAL_MALUS_MAX := 0.3
 
 ## Les traits et ce qu'ils font (affiché sur la fiche une fois révélés).
 const TRAITS := {
-	"Courageux": "Stresse moitié moins face aux boss. (Plus tard : résiste à la panique.)",
-	"Lâche": "Stresse deux fois plus face aux boss. (Plus tard : peut fuir.)",
+	"Courageux": "Stresse moitié moins face aux boss. En rupture, s'éveille plus souvent (25 % au lieu de 15 %).",
+	"Lâche": "Stresse deux fois plus face aux boss. En rupture, s'enfuit plus souvent (80 % au lieu de 50 %).",
 	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse (moitié moins de refus).",
-	"Paresseux": "(Plus tard : refuse parfois l'entraînement ou une affectation.)",
+	"Paresseux": "Refuse parfois l'entraînement ou une affectation (1 fois sur 5).",
 	"Querelleur": "(Plus tard : crée des hostilités au lobby.)",
 	"Protecteur": "Stresse deux fois plus quand un allié meurt. (Plus tard : couvre ses alliés.)",
 	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un héros plus faible part dans la Tour à sa place.",
