@@ -381,6 +381,12 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 		mental_label.add_theme_color_override("font_color", UI.mental_color(mental))
 		content.add_child(mental_label)
 		content.add_child(UI.make_mental_bar(hero))
+		if GameData.is_broken(hero):
+			var broken := UI.make_label("EN RUPTURE : il refuse l'entraînement et les affectations jusqu'à %d de santé mentale (repos). S'il retombe à 0 dans la Tour, il peut mourir de stress." \
+				% GameData.BROKEN_RECOVERY, 18)
+			broken.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			broken.add_theme_color_override("font_color", Color("e05252"))
+			content.add_child(broken)
 		if GameData.mental_combat_factor(hero) < 1.0:
 			var malus := UI.make_label("En combat : attaque et défense -%d %%" % roundi((1.0 - GameData.mental_combat_factor(hero)) * 100), 18)
 			malus.modulate = Color(1, 1, 1, 0.7)

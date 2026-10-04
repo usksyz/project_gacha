@@ -132,7 +132,10 @@ func _open_picker(building_id: String) -> void:
 			hero["class"], hero["level"], GameData.activity_text(hero)]
 		var button := UI.make_button(text, func():
 			if not GameData.set_post(hero, building_id):
-				info.text = "Impossible : les postes de ce bâtiment sont pris."
+				if GameData.last_refusal != "":
+					info.text = GameData.last_refusal  # le héros refuse (rupture, Paresseux)
+				else:
+					info.text = "Impossible : les postes de ce bâtiment sont pris."
 			picker.visible = false
 			_refresh.call_deferred(), 20)
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

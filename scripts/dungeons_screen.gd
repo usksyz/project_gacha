@@ -746,6 +746,18 @@ func _confirm_group() -> void:
 	box.custom_minimum_size.x = 600
 	box.add_theme_constant_override("separation", 14)
 	center.add_child(box)
+	# Héros en rupture dans le groupe : avertissement (ils peuvent mourir de stress, voir personality.gd).
+	var broken: Array[String] = []
+	for hero_id in selected_ids:
+		var hero := GameData.hero_by_id(hero_id)
+		if GameData.is_broken(hero):
+			broken.append(hero["name"])
+	if not broken.is_empty():
+		box.add_child(UI.make_system_window("Avertissement", [
+			"%s %s en rupture." % [", ".join(broken), "est" if broken.size() == 1 else "sont"],
+			"Si sa santé mentale retombe à 0 pendant ce combat, il risque de mourir de stress (%d %%). C'est définitif." \
+				% roundi(GameData.STRESS_DEATH_CHANCE * 100),
+		], true))
 	box.add_child(UI.make_system_window("Formation de groupe", [
 		"Le groupe est formé : %s." % group,
 		"Étage %d — %s. Partir au combat ?" % [chosen_floor, floor_quest["name"]],

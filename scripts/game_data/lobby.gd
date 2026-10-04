@@ -56,12 +56,16 @@ func posted_heroes(building_id: String) -> Array[Dictionary]:
 
 ## Affecte un héros à un bâtiment construit (« » = le retirer de son poste).
 ## Il quitte alors le terrain d'entraînement : un héros ne travaille qu'à un endroit à la fois.
-## Renvoie faux si le bâtiment n'est pas construit ou si ses postes sont pris.
+## Renvoie faux si le bâtiment n'est pas construit, si ses postes sont pris, ou si le héros refuse
+## (rupture, Paresseux : la raison est alors dans last_refusal, voir personality.gd).
 func set_post(hero: Dictionary, building_id: String) -> bool:
+	last_refusal = ""
 	if building_id != "":
 		if not building_id in buildings or hero.get("post", "") == building_id:
 			return false
 		if posted_heroes(building_id).size() >= POSTS_PER_BUILDING:
+			return false
+		if not accepts_work(hero):
 			return false
 		if hero.get("training", "") != "":
 			update_training()
@@ -81,6 +85,8 @@ func activity_text(hero: Dictionary) -> String:
 		return "Assistant : %s" % BUILDINGS[hero["post"]]["name"]
 	if hero.get("training", "") != "":
 		return "Terrain d'entraînement"
+	if is_broken(hero):
+		return "En rupture (repos forcé)"
 	return "Au repos"
 
 

@@ -424,6 +424,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"mental": GameData.mental(source) if is_hero else GameData.MENTAL_MAX,
 		"sulk_until": 0.0,         # a refusé un ordre : ignore les ordres jusqu'à ce moment
 		"ruptured": false,         # rupture déjà arrivée dans ce combat (une seule fois)
+		"was_broken": is_hero and GameData.is_broken(source),  # parti « En rupture » : risque la mort de stress
 		"panic": "",               # effondrement en cours : "flee" (fuit) ou "frenzy" (frappe au hasard)
 		"panic_until": 0.0,        # fin de la panique
 		"panic_target": -1,        # frénésie : la cible du moment (n'importe qui)
@@ -1194,6 +1195,17 @@ func _rupture(fighter: Dictionary) -> void:
 	fighter["ruptured"] = true
 	var who := _name_with_stars(fighter)
 	var source: Dictionary = fighter["source"]
+	# Déjà en rupture avant le combat : son esprit peut ne pas tenir une deuxième fois (mort de stress).
+	if fighter["was_broken"] and not fighter["immortal"] and randf() < GameData.STRESS_DEATH_CHANCE:
+		fighter["hp"] = 0
+		fighter["bleed"]["ticks"] = 0
+		_effect("refuse", fighter, fighter, "...", false)
+		_announce_fall(fighter, "mort de stress, l'esprit brisé")
+		_alert("Rupture : mort de stress", [
+			"%s était déjà en rupture. Sa santé mentale est retombée à 0." % who,
+			"Son esprit n'a pas tenu : il meurt de stress.",
+		], true)
+		return
 	if randf() < GameData.rupture_awaken_chance(source):
 		# Éveil : le « craquage positif ». L'esprit se brise... et se reforge.
 		if GameData.has_trait(source, "Courageux"):

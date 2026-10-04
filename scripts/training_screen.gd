@@ -284,7 +284,9 @@ func _choose(hero: Dictionary, skill_name: String) -> void:
 	var accepted: bool = hero.get("training", "") == skill_name or GameData.set_training(hero, skill_name)
 	# On redessine même en cas de refus : le bouton touché ne doit pas rester enfoncé.
 	_refresh()
-	if not accepted:
+	if not accepted and GameData.last_refusal != "":
+		slots_label.text = GameData.last_refusal  # le héros refuse (rupture, Paresseux)
+	elif not accepted:
 		slots_label.text = "Le terrain est plein (%d places) : renvoie d'abord un héros au repos." % GameData.TRAINING_SLOTS
 
 

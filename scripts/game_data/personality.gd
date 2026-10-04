@@ -3,8 +3,8 @@ extends GameHeroes
 ## La personnalité des héros (cahier, onglet « Personnalité ») : santé mentale et traits de caractère.
 ## Les héros sont des personnes, pas des stats : les combats durs, les boss, les blessures, la mort
 ## d'un allié, les synthèses et les défaites les usent ; le repos et le travail au lobby, et la victoire,
-## les réparent. Sous 60, un héros peut refuser les ordres en combat (désobéissance).
-## Pas encore fait : la rupture à 0, les liens entre héros.
+## les réparent. Sous 60, un héros peut refuser les ordres en combat (désobéissance) ; à 0, c'est la
+## rupture (effondrement ou éveil), puis l'état « En rupture » hors combat. Pas encore fait : les liens.
 ## Fait partie de la pile de GameData (voir game_data.gd).
 
 
@@ -149,9 +149,12 @@ func mental(hero: Dictionary) -> float:
 	return hero.get("mental", MENTAL_MAX)
 
 
-## Change la santé mentale (entre 0 et MENTAL_MAX). Ne sauvegarde pas.
+## Change la santé mentale (entre 0 et MENTAL_MAX). Un héros en rupture remonté à BROKEN_RECOVERY
+## (en pratique, par le repos) est remis d'aplomb. Ne sauvegarde pas.
 func change_mental(hero: Dictionary, amount: float) -> void:
 	hero["mental"] = clampf(mental(hero) + amount, 0.0, MENTAL_MAX)
+	if is_broken(hero) and mental(hero) >= BROKEN_RECOVERY:
+		hero["broken"] = false
 
 
 ## Fait perdre « amount » de santé mentale, moins ce que Calme protège. Renvoie la perte réelle.
@@ -209,6 +212,51 @@ const PANIC_RADIUS := 3.0              # en cases : les alliés aussi proches so
 const PANIC_SPREAD_LOSS := 8.0         # ... de tant de santé mentale
 
 
+## État « En rupture » (hero["broken"]) : un héros qui finit un combat à 0 de santé mentale le reste
+## jusqu'à remonter à BROKEN_RECOVERY grâce au repos. Il refuse alors l'entraînement et les affectations
+## (et quitte ceux qu'il avait). Envoyé quand même dans la Tour, s'il retombe à 0 pendant le combat, il
+## peut mourir de stress (STRESS_DEATH_CHANCE), comme dans l'œuvre : mort définitive, armes perdues.
+## Paresseux : refuse parfois un travail même sans rupture (LAZY_REFUSAL_CHANCE).
+const BROKEN_RECOVERY := 50.0
+const STRESS_DEATH_CHANCE := 0.3
+const LAZY_REFUSAL_CHANCE := 0.2
+
+## Pourquoi le dernier travail proposé a été refusé (texte à afficher), voir accepts_work.
+var last_refusal := ""
+
+
+func is_broken(hero: Dictionary) -> bool:
+	return hero.get("broken", false)
+
+
+## Met un héros en rupture : il quitte son poste et le terrain d'entraînement. Renvoie l'annonce.
+## Ne sauvegarde pas.
+func break_hero(hero: Dictionary) -> String:
+	hero["broken"] = true
+	hero["post"] = ""
+	hero["training"] = ""
+	return "%s est en rupture : il refuse de travailler et de s'entraîner jusqu'à retrouver %d de santé mentale (repos)." \
+		% [hero["name"], BROKEN_RECOVERY]
+
+
+## Le héros accepte-t-il un travail (entraînement, poste d'assistant) ? Sinon, la raison est dans
+## last_refusal. En rupture : toujours non ; Paresseux : parfois non (et son trait se révèle).
+func accepts_work(hero: Dictionary) -> bool:
+	last_refusal = ""
+	if is_broken(hero):
+		last_refusal = "%s est en rupture : il refuse de travailler tant que sa santé mentale n'est pas remontée à %d." \
+			% [hero["name"], BROKEN_RECOVERY]
+		return false
+	if has_trait(hero, "Paresseux") and randf() < LAZY_REFUSAL_CHANCE:
+		var revealed := reveal_trait(hero, "Paresseux") != ""
+		last_refusal = "%s traîne des pieds et refuse : il est paresseux. Réessaie plus tard." % hero["name"]
+		if revealed:
+			last_refusal += " (Trait révélé : Paresseux)"
+			save_game()
+		return false
+	return true
+
+
 ## Chance qu'une rupture soit un éveil (sinon un effondrement).
 func rupture_awaken_chance(hero: Dictionary) -> float:
 	return BRAVE_AWAKEN_CHANCE if has_trait(hero, "Courageux") else RUPTURE_AWAKEN_CHANCE
@@ -221,6 +269,8 @@ func panic_flee_chance(hero: Dictionary) -> float:
 
 ## Texte court de l'état d'esprit (fiche du héros).
 func mental_text(hero: Dictionary) -> String:
+	if is_broken(hero):
+		return "en rupture"
 	var value := mental(hero)
 	if value >= 80.0:
 		return "serein"
@@ -242,6 +292,9 @@ func mental_after_battle(hero: Dictionary, fighter: Dictionary, victory: bool, n
 	hero["mental"] = clampf(fighter["mental"], 0.0, MENTAL_MAX)
 	if not victory:
 		mental_loss(hero, MENTAL_LOSS_DEFEAT)
+	# Fini à 0 : il reste en rupture (avant le gain de la victoire, qui ne suffit pas à le remettre d'aplomb).
+	if mental(hero) <= 0.0 and not is_broken(hero):
+		news.append(break_hero(hero))
 	if victory:
 		change_mental(hero, MENTAL_GAIN_VICTORY)
 	# Avec le temps, on apprend à connaître un héros : un trait caché se révèle tous les quelques combats.

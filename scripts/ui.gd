@@ -256,6 +256,18 @@ static func add_mental_bar(card: Control, hero: Dictionary) -> void:
 	bar.offset_top = -14
 	bar.offset_bottom = -6
 	card.add_child(bar)
+	# En rupture (voir GameData.is_broken) : le mot, en rouge, juste au-dessus de la barre.
+	if GameData.is_broken(hero):
+		var broken := make_label("RUPTURE", 14)
+		broken.add_theme_color_override("font_color", Color("ff6060"))
+		broken.add_theme_color_override("font_outline_color", Color.BLACK)
+		broken.add_theme_constant_override("outline_size", 4)
+		broken.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		broken.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		broken.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		broken.offset_top = -34
+		broken.offset_bottom = -14
+		card.add_child(broken)
 
 
 ## Marque une carte comme choisie (dans une équipe, pour un sacrifice...), avec la couleur voulue.

@@ -40,10 +40,14 @@ func trainees() -> Array[Dictionary]:
 
 
 ## Affecte un héros à un programme d'entraînement (« » = le renvoyer au repos).
-## Renvoie faux si toutes les places du terrain sont prises.
+## Renvoie faux si toutes les places du terrain sont prises, ou si le héros refuse (rupture, Paresseux :
+## la raison est alors dans last_refusal, voir personality.gd).
 func set_training(hero: Dictionary, skill_name: String) -> bool:
+	last_refusal = ""
 	var already: bool = hero.get("training", "") != ""
 	if skill_name != "" and not already and trainees().size() >= TRAINING_SLOTS:
+		return false
+	if skill_name != "" and not already and not accepts_work(hero):
 		return false
 	update_training()  # les séances déjà faites dans l'ancien programme sont comptées
 	hero["training"] = skill_name
