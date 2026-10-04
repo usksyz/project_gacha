@@ -91,6 +91,9 @@ var expedition_reports: Array = []
 ## Moment (temps réel) où la santé mentale des héros à la cité a été mise à jour pour la dernière fois
 ## (voir update_mental, personality.gd). 0 = pas encore.
 var mental_updated_at := 0.0
+## Liens entre héros (voir personality.gd, section « Liens ») : points de lien de chaque paire,
+## { "3-7": 12.0 } (les deux numéros de héros, le plus petit d'abord). Une paire absente = inconnus.
+var bonds := {}
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace

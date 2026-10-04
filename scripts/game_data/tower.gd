@@ -364,6 +364,16 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 				report["mental"].append(mental_line)
 	# Les ambitieux laissés à la cité stressent (voir personality.gd).
 	mental_left_out(battle.heroes.map(func(fighter): return fighter["source"]), report["mental"])
+	# Liens : les survivants se rapprochent, plus vite après une victoire difficile (voir personality.gd).
+	var survivors := battle.heroes.filter(func(fighter): return fighter["source"]["alive"])
+	var hp := 0
+	var max_hp := 0
+	for fighter in survivors:
+		hp += maxi(0, fighter["hp"])
+		max_hp += fighter["max_hp"]
+	var hard: bool = is_boss_floor(floor_number) or not report["dead"].is_empty() \
+		or (max_hp > 0 and hp < max_hp * HARD_VICTORY_HP)
+	report["bonds"] = bonds_after_battle(survivors.map(func(fighter): return fighter["source"]), battle.victory, hard)
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 

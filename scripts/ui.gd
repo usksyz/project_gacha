@@ -134,6 +134,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		windows.append(make_system_window("Progrès des compétences !", report["skills"]))
 	if not report.get("mental", []).is_empty():
 		windows.append(make_system_window("Personnalité", report["mental"]))
+	if not report.get("bonds", []).is_empty():
+		windows.append(make_system_window("Liens", report["bonds"]))
 
 	var lines := []
 	if report["victory"]:

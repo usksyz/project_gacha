@@ -4,7 +4,8 @@ extends GameHeroes
 ## Les héros sont des personnes, pas des stats : les combats durs, les boss, les blessures, la mort
 ## d'un allié, les synthèses et les défaites les usent ; le repos et le travail au lobby, et la victoire,
 ## les réparent. Sous 60, un héros peut refuser les ordres en combat (désobéissance) ; à 0, c'est la
-## rupture (effondrement ou éveil), puis l'état « En rupture » hors combat. Pas encore fait : les liens.
+## rupture (effondrement ou éveil), puis l'état « En rupture » hors combat. Les héros qui combattent
+## ensemble se lient (connaissance, ami, frère d'armes).
 ## Fait partie de la pile de GameData (voir game_data.gd).
 
 
@@ -196,6 +197,102 @@ func disobey_chance(mental_value: float) -> float:
 	if mental_value >= DISOBEY_START:
 		return 0.0
 	return DISOBEY_MAX * (1.0 - mental_value / DISOBEY_START)
+
+
+# ---------------------------------------------------------------------------
+# Liens entre héros
+# ---------------------------------------------------------------------------
+# Cahier, onglet « Personnalité », section 4. Chaque paire de héros a des points de lien (bonds, dans
+# game_state.gd), qui donnent un palier : inconnus, connaissance, ami, frère d'armes. Ils montent quand
+# les deux finissent un combat de la Tour dans la même équipe, plus vite après une victoire difficile.
+# Tous les chiffres sont provisoires.
+
+## Les paliers, du plus bas au plus haut, et les points qu'il faut pour chacun.
+const BOND_LEVELS := ["inconnus", "connaissance", "ami", "frère d'armes"]
+const BOND_THRESHOLDS := [0.0, 5.0, 25.0, 60.0]
+const BOND_ACQUAINTANCE := 1
+const BOND_FRIEND := 2
+const BOND_BROTHERS := 3
+## Points gagnés par chaque paire de survivants d'un combat de la Tour : toujours BOND_POINTS_FIGHT,
+## plus BOND_POINTS_VICTORY en cas de victoire ; le tout multiplié par HARD_VICTORY_FACTOR si la victoire
+## a été difficile (étage de boss, allié tombé, ou survivants à moins de HARD_VICTORY_HP de leur vie).
+const BOND_POINTS_FIGHT := 3.0
+const BOND_POINTS_VICTORY := 2.0
+const HARD_VICTORY_FACTOR := 2.0
+const HARD_VICTORY_HP := 0.5
+
+
+## La clé d'une paire dans bonds : « 3-7 » (le plus petit numéro d'abord).
+func _bond_key(a: Dictionary, b: Dictionary) -> String:
+	return "%d-%d" % [mini(a["id"], b["id"]), maxi(a["id"], b["id"])]
+
+
+func bond_points(a: Dictionary, b: Dictionary) -> float:
+	return bonds.get(_bond_key(a, b), 0.0)
+
+
+## Le palier du lien entre deux héros (0 = inconnus ... BOND_BROTHERS = frères d'armes).
+func bond_level(a: Dictionary, b: Dictionary) -> int:
+	if a["id"] == b["id"]:
+		return 0
+	var points := bond_points(a, b)
+	var level := 0
+	for i in BOND_THRESHOLDS.size():
+		if points >= BOND_THRESHOLDS[i]:
+			level = i
+	return level
+
+
+## Ajoute des points de lien (au plus ce qu'il faut pour frères d'armes). Renvoie l'annonce du nouveau
+## palier (« X et Y sont devenus amis. »), ou "" s'il n'a pas changé. Ne sauvegarde pas.
+func add_bond_points(a: Dictionary, b: Dictionary, points: float) -> String:
+	if a["id"] == b["id"]:
+		return ""
+	var before := bond_level(a, b)
+	bonds[_bond_key(a, b)] = minf(bond_points(a, b) + points, BOND_THRESHOLDS[-1])
+	var after := bond_level(a, b)
+	if after == before:
+		return ""
+	match after:
+		BOND_ACQUAINTANCE:
+			return "%s et %s se connaissent maintenant." % [a["name"], b["name"]]
+		BOND_FRIEND:
+			return "%s et %s sont devenus amis." % [a["name"], b["name"]]
+		_:
+			return "%s et %s sont devenus frères d'armes." % [a["name"], b["name"]]
+
+
+## Monte un lien jusqu'au palier « level » (s'il est plus bas). Renvoie l'annonce, ou "".
+func set_bond_level(a: Dictionary, b: Dictionary, level: int) -> String:
+	var missing: float = BOND_THRESHOLDS[level] - bond_points(a, b)
+	return add_bond_points(a, b, missing) if missing > 0.0 else ""
+
+
+## Fin d'un combat de la Tour : chaque paire de survivants (« survivors » : les héros encore en vie)
+## se rapproche. « hard » : victoire difficile. Renvoie les annonces des nouveaux paliers.
+func bonds_after_battle(survivors: Array, victory: bool, hard: bool) -> Array[String]:
+	var points := BOND_POINTS_FIGHT + (BOND_POINTS_VICTORY if victory else 0.0)
+	if victory and hard:
+		points *= HARD_VICTORY_FACTOR
+	var news: Array[String] = []
+	for i in survivors.size():
+		for j in range(i + 1, survivors.size()):
+			var line := add_bond_points(survivors[i], survivors[j], points)
+			if line != "":
+				news.append(line)
+	return news
+
+
+## Les liens d'un héros (à partir de connaissance), du plus fort au plus faible :
+## [{"hero": autre héros, "level": palier}]. Les morts y restent.
+func hero_bonds(hero: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for other in roster:
+		var level := bond_level(hero, other)
+		if level > 0:
+			result.append({"hero": other, "level": level})
+	result.sort_custom(func(x, y): return x["level"] > y["level"])
+	return result
 
 
 ## Rupture (cahier, onglet « Personnalité », section 2) : quand la santé mentale d'un héros tombe à 0
