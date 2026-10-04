@@ -55,6 +55,24 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
   secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : saisie des codes secrets (aussi sur la
   Place publique du hub).
+- Conseils du Système (accueil d'un nouveau joueur, demande du porteur du projet ; aucune nouvelle mécanique) :
+  fenêtre « Conseil » la première fois que le Maître fait quelque chose. Ids dans `GameData.TIP_IDS`
+  (`game_state.gd`) : bienvenue (partie neuve, appelée par `main.gd` au lancement), invocation (`summon_screen.gd`,
+  cartes retournées), equipe (« Composer les équipes » ou « Former l'équipe »), etage (annonce de l'étage),
+  blessure et mort (`report["tips"]` de `finish_tower_battle`, montrés après « Continuer » ou le rapport
+  d'absence ; mort aussi après une synthèse), batiment (`build`, `check_auto_buildings`, terrain d'entraînement).
+  `GameData.show_tip(id)` émet `tip_requested` si le conseil n'est pas vu et `Settings.tips` actif ; `main.gd`
+  les met en file et en montre un à la fois, après ses autres fenêtres (`WINDOW_NAMES`) ; vu = noté à la
+  fermeture (`seen_tips`, sauvegardé « conseils_vus » ; une ancienne sauvegarde les compte tous comme vus).
+  Textes dans `scripts/system_tips.gd` (`SystemTips`). Paramètres : « Conseils du Système » (activé / désactivé,
+  `parametres.cfg`) et « Réafficher les conseils » (`reset_tips`). Nouveau conseil : un id dans `TIP_IDS`, son
+  texte dans `SystemTips`, un `show_tip` là où ça arrive.
+- Poids de la mort : `UI.make_death_window(hero, memorial)` (portrait `FramedHeroCard.HeroPortrait`, nom,
+  étoiles, classe et niveau, cause, traits révélés, liens, puis « Y a perdu un ami / un frère d'armes » pour
+  chaque ami ou frère d'armes vivant) remplace l'ancienne fenêtre « Un héros est tombé » des rapports de combat,
+  et s'affiche pour chaque sacrifié de la synthèse. Collection > Tombés : fiche figée (`_show_memorial` de
+  `collection_screen.gd` : « En mémoire », combats dans la Tour `hero["fights"]`, qui compte aussi le combat
+  fatal, stats et compétences ; « Ressusciter » en mode dev).
 - Mode dev (pour tester), demandé par le porteur du projet à la place des anciens boutons « (test) » :
   le code secret `Settings.DEV_CODE` (« MODEDEV ») l'active, `Settings.dev_mode` est enregistré sur
   l'appareil (il survit à « Recommencer la partie »). Or et gemmes infinis : `GameData.gold` / `gems` sont
