@@ -682,6 +682,39 @@ func panic_flee_chance(hero: Dictionary) -> float:
 	return COWARD_FLEE_CHANCE if has_trait(hero, "Lâche") else PANIC_FLEE_CHANCE
 
 
+## Peur (demande du porteur du projet) : un héros d'une étoile est une personne ordinaire, que personne
+## n'a prévenue de rien. Dans ses FEAR_FIGHTS premiers combats, il peut prendre peur et s'enfuir pendant
+## FEAR_SECONDS secondes (sans écouter les ordres) : à sa première blessure, en voyant tomber un allié
+## proche, à l'arrivée d'un boss. Dos tourné, il encaisse plus (FLEEING_DAMAGE_TAKEN) et les ennemis le
+## prennent pour cible (voir battle.gd, Battle._scare) : les forts survivent, les faibles peuvent mourir.
+## Une seule fois par combat. Lâche : deux fois plus de chances ; Courageux : deux fois moins. Les héros
+## secrets (immortels) n'ont pas peur. Chiffres provisoires.
+const FEAR_FIGHTS := 3
+const FEAR_FIRST_WOUND_CHANCE := 0.3
+const FEAR_ALLY_DEATH_CHANCE := 0.5
+const FEAR_BOSS_CHANCE := 0.5
+## Distance (en cases) à laquelle la chute d'un allié fait peur.
+const FEAR_SIGHT := 6.0
+const FEAR_SECONDS := 5.0
+const FEAR_MENTAL_LOSS := 10.0
+const FLEEING_DAMAGE_TAKEN := 2.0
+
+
+## Ce héros peut-il encore prendre peur (une étoile, novice du combat, pas un héros secret) ?
+func can_be_scared(hero: Dictionary) -> bool:
+	return hero["rarity"] == 1 and not hero.get("secret", false) and not hero.get("immortal", false) \
+		and hero.get("fights", 0) < FEAR_FIGHTS
+
+
+## Chance de prendre peur, à partir de la chance de base de ce qui l'effraie (traits compris).
+func fear_chance(hero: Dictionary, base: float) -> float:
+	if has_trait(hero, "Lâche"):
+		base *= 2.0
+	if has_trait(hero, "Courageux"):
+		base *= 0.5
+	return minf(base, 0.95)
+
+
 ## Texte court de l'état d'esprit (fiche du héros).
 func mental_text(hero: Dictionary) -> String:
 	if is_broken(hero):

@@ -57,6 +57,7 @@ static func lines(tip_id: String) -> Array:
 			return [
 				"Votre équipe est prête. La Tour vous attend.",
 				"Touchez « Entrer dans la Tour », choisissez votre équipe et conquérez l'étage 1.",
+				"Attention : vos héros d'une étoile sont des gens ordinaires, que personne n'a prévenus. Ils peuvent prendre peur et s'enfuir ; dos tourné, ce sont des proies. Protégez-les, ou acceptez de les perdre.",
 				"En cas de défaite, les survivants rentrent à la cité : vous pourrez retenter l'étage.",
 			]
 		"tuto_synthese":
