@@ -44,6 +44,10 @@ func _rebuild() -> void:
 			var card := UI.make_card(hero, slot_width)
 			card.custom_minimum_size = slot_size
 			UI.add_mental_bar(card, hero)
+			# Un ami ou un frère d'armes dans le même groupe : le symbole de lien.
+			var bond := UI.best_team_bond(hero, hero_ids)
+			if bond > 0:
+				UI.add_bond_badge(card, bond)
 			make_draggable(card, hero, "slot", index)
 			card.pressed.connect(func():
 				if not card.get_meta("dragged", false):

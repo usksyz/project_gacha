@@ -172,6 +172,23 @@ func dev_change_mental(hero: Dictionary, amount: float) -> void:
 	save_game()
 
 
+## Monte d'un cran le lien entre un héros et un autre héros vivant, trouvé par son nom (sans tenir compte
+## des majuscules). Renvoie le texte à afficher.
+func dev_raise_bond(hero: Dictionary, partner_name: String) -> String:
+	var wanted := partner_name.strip_edges().to_lower()
+	if wanted == "":
+		return "Écris d'abord le nom d'un autre héros."
+	for other in alive_heroes():
+		if other["id"] != hero["id"] and other["name"].to_lower() == wanted:
+			var level := bond_level(hero, other)
+			if level >= BOND_BROTHERS:
+				return "%s et %s sont déjà frères d'armes." % [hero["name"], other["name"]]
+			var line := set_bond_level(hero, other, level + 1)
+			save_game()
+			return line
+	return "Aucun autre héros vivant ne s'appelle « %s »." % partner_name.strip_edges()
+
+
 ## Met un héros « En rupture », santé mentale à 0 (pour tester la rupture et la mort de stress).
 func dev_break(hero: Dictionary) -> void:
 	hero["mental"] = 0.0

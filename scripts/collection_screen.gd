@@ -17,6 +17,8 @@ var detail_hero: Dictionary = {}
 var detail_scroll: ScrollContainer
 ## Annonce à montrer en haut de la fiche après un outil du mode dev (+1 étoile).
 var _dev_notice: Array = []
+## Titre de la fenêtre de ce résultat (« Promotion ! », « Liens »...).
+var _dev_notice_title := "Promotion !"
 
 
 func _ready() -> void:
@@ -256,6 +258,20 @@ func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
 	give.add_child(_make_dev_button("Donner", func():
 		GameData.dev_give_skill(hero, menu.get_item_text(menu.selected))))
 
+	# Monter un lien d'un cran avec un autre héros, cherché par son nom (clavier de l'appareil).
+	var bond_row := HBoxContainer.new()
+	bond_row.add_theme_constant_override("separation", 8)
+	content.add_child(bond_row)
+	var partner := LineEdit.new()
+	partner.placeholder_text = "Nom d'un autre héros"
+	partner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	partner.custom_minimum_size.y = 60
+	partner.add_theme_font_size_override("font_size", 20)
+	bond_row.add_child(partner)
+	bond_row.add_child(_make_dev_button("Lien +1 cran", func():
+		_dev_notice_title = "Liens"
+		_dev_notice = [GameData.dev_raise_bond(hero, partner.text)]))
+
 	# Les compétences du héros : changer leur niveau, ou les retirer.
 	for skill in hero["skills"]:
 		var skill_name: String = skill["name"]
@@ -293,9 +309,11 @@ func _make_dev_button(text: String, action: Callable) -> Button:
 func _redraw_detail() -> void:
 	var scroll_position := detail_scroll.scroll_vertical
 	var notice := _dev_notice
+	var notice_title := _dev_notice_title
 	_dev_notice = []
+	_dev_notice_title = "Promotion !"
 	_refresh()
-	_show_detail(detail_hero, notice)
+	_show_detail(detail_hero, notice, notice_title)
 	if notice.is_empty():
 		await get_tree().process_frame
 		detail_scroll.scroll_vertical = scroll_position
@@ -400,6 +418,29 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 			trait_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			trait_info.modulate = Color(1, 1, 1, 0.6)
 			content.add_child(trait_info)
+	# Liens avec les autres héros (voir GameData, personality.gd) : groupe lié, puis chaque lien.
+	if hero.get("group", "") != "":
+		content.add_child(UI.make_label("Groupe lié : %s" % hero["group"], 22))
+	var links := GameData.hero_bonds(hero)
+	if links.is_empty():
+		var lonely := UI.make_label("Liens : aucun pour l'instant (ils se créent en combattant ensemble).", 18)
+		lonely.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lonely.modulate = Color(1, 1, 1, 0.6)
+		content.add_child(lonely)
+	else:
+		content.add_child(UI.make_label("Liens :", 22))
+		for link in links:
+			var other: Dictionary = link["hero"]
+			var text := "%s (%s) — %s" % [other["name"], "★".repeat(other["rarity"]), GameData.BOND_LEVELS[link["level"]]]
+			if not other["alive"]:
+				text += " (tombé)"
+			var line := UI.make_label(text, 18)
+			if link["level"] >= GameData.BOND_FRIEND:
+				line.add_theme_color_override("font_color",
+					Color("f5c542") if link["level"] >= GameData.BOND_BROTHERS else Color("6fe08a"))
+			if not other["alive"]:
+				line.modulate = Color(1, 1, 1, 0.5)
+			content.add_child(line)
 
 	# Mana (mages et soigneurs) : la réserve, et ce qu'elle regagne chaque seconde en combat.
 	var mana: int = GameData.combat_stats(hero)["mana"]

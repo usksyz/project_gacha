@@ -319,6 +319,30 @@ static func make_hero_card(hero: Dictionary) -> Button:
 	return card
 
 
+## Symbole de lien en haut à gauche d'une carte d'équipe : deux anneaux entrelacés, verts pour un ami
+## dans la même équipe, dorés pour un frère d'armes (« level » : palier, voir GameData.BOND_LEVELS).
+static func add_bond_badge(card: Control, level: int) -> void:
+	var color := Color("f5c542") if level >= GameData.BOND_BROTHERS else Color("6fe08a")
+	var badge := Control.new()
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.position = Vector2(8, 8)
+	badge.size = Vector2(32, 20)
+	badge.draw.connect(func():
+		badge.draw_circle(Vector2(16, 10), 13, Color(0, 0, 0, 0.6))
+		for center in [Vector2(11, 10), Vector2(21, 10)]:
+			badge.draw_arc(center, 6.5, 0, TAU, 20, color, 2.5, true))
+	card.add_child(badge)
+
+
+## Le meilleur lien (ami ou frère d'armes) d'un héros avec les autres héros de « ids », ou 0.
+static func best_team_bond(hero: Dictionary, ids: Array) -> int:
+	var best := 0
+	for other_id in ids:
+		if other_id != hero["id"]:
+			best = maxi(best, GameData.bond_level(hero, GameData.hero_by_id(other_id)))
+	return best if best >= GameData.BOND_FRIEND else 0
+
+
 ## Petit cœur rose en haut à droite d'une carte : le héros est un favori.
 static func add_favorite_mark(card: Control, font_size: int) -> void:
 	var heart := make_label("♥", font_size)
