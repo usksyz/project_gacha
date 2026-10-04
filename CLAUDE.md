@@ -157,19 +157,26 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (`update_quarrels`, toutes les 5 s, `quarrels_checked_at` sauvegardé, 24 h au plus d'un coup) ; annonces
   dans `relation_news` (sauvegardé), fenêtre « Hostilité » de `main.gd` (signal `relations_changed`).
   Hostiles : plus de points de lien, aucun bonus, -`MENTAL_LOSS_HOSTILE` (5) chacun au début d'un combat
-  ensemble (avertissement dans « Formation de groupe »). Pas de bagarre à la cité : duel depuis la fiche
-  (« Organiser un duel », `duel_problem`, `duel_quest`, `finish_duel`), joué dans un `BattleView` par-dessus
-  la collection (`play(..., on_finish)`) : quête « duel » de battle.gd (adversaire héros dans le camp
-  ennemi, pas d'ordres, ni éveil, ni stress), arrêt à `DUEL_STOP_HP` (10 %) de vie, jamais de mort ; gagnant
-  +`DUEL_WIN_MENTAL`, perdant -`DUEL_LOSE_MENTAL`, lien remis à « connaissance ». Pas encore : les paris.
+  ensemble (avertissement dans « Formation de groupe »). Pas de bagarre à la cité : duel, fenêtre
+  `DuelPanel` (`scripts/duel_panel.gd`, par-dessus l'écran qui l'ouvre) : défi, pari, duel en direct dans un
+  `BattleView` (`play(..., on_finish)`), fin. Quête « duel » de battle.gd (`duel_quest` : adversaire héros
+  dans le camp ennemi, pas d'ordres, ni éveil, ni stress), arrêt à `DUEL_STOP_HP` (10 %) de vie, jamais de
+  mort ; `finish_duel` : gagnant +`DUEL_WIN_MENTAL`, perdant -`DUEL_LOSE_MENTAL`, lien remis à « connaissance ».
+  Deux façons : le Maître l'organise depuis la fiche (« Organiser un duel », `duel_problem`) ; ou un héros
+  hostile Querelleur ou Ambitieux défie lui-même son rival (`CHALLENGE_CHANCE_PER_HOUR` 5 % par heure à la
+  cité, `_roll_challenges` dans `update_quarrels`, `pending_challenges` sauvegardé, un par paire) : `main.gd`
+  ouvre `DuelPanel` en mode défi (« Autoriser le duel » / « Refuser » ; refus : -`CHALLENGE_REFUSED_MENTAL`
+  pour celui qui a défié, `refuse_challenge`) ; un défi attend si l'un est en mission, disparaît si l'un
+  meurt. Paris (cahier : « avec l'accord des deux parties ») : si les deux ont plus de `BET_MIN_MENTAL` (40)
+  de santé mentale (`bet_refusals`), le Maître mise `BET_STAKES` (100, 500, 1000 or) sur l'un des deux
+  (`place_bet`, payé au départ) ; s'il gagne, `BET_PAYOUT` (x2), sinon rien.
   Mauvais : chaque Mauvais présent à la cité retire `MAUVAIS_EFFICIENCY_LOSS` (5 %) à `lobby_efficiency()`
   (points d'entraînement, chance de la forge, progrès des artisans ; `MAUVAIS_EFFICIENCY_MIN` 50 %) ; ceux
   qui travaillent au même endroit (même poste, ou terrain) regagnent `MAUVAIS_COWORKER_LOSS_PER_HOUR` de
   moins par heure ; trait révélé quand l'effet est remarqué (`notice_bad_heroes`).
   Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
   -20 santé mentale, santé mentale 100, mettre en rupture, « Lien +1 cran » et « Rendre hostile » avec un
-  héros cherché par son nom (`dev_raise_bond`, `dev_make_hostile`). Reste : paris des duels, hostilité entre
-  groupes, liens hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon
+  héros cherché par son nom (`dev_raise_bond`, `dev_make_hostile`). Reste : hostilité entre groupes, liens hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon
   journalier, héros en rupture au donjon journalier.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
