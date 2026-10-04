@@ -165,13 +165,17 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
   part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture,
   Querelleur, Mauvais et Protecteur en combat (plus bas) : les huit traits ont leurs effets.
-  Peur (demande du porteur du projet : « les forts survivent, les faibles meurent ») : un héros 1 étoile (pas
-  secret) dans ses `FEAR_FIGHTS` (3) premiers combats peut prendre peur (`can_be_scared`, `fear_chance`) à sa
-  première blessure (30 %), à la chute d'un allié à moins de `FEAR_SIGHT` cases (50 %), à l'arrivée d'un boss
-  (50 %) ; Lâche x2, Courageux /2 ; une fois par combat (`Battle._scare`). Il fuit `FEAR_SECONDS` (5 s) comme
-  un effondrement (sourd aux ordres), -`FEAR_MENTAL_LOSS` ; tout fuyard (peur ou effondrement) encaisse
-  x`FLEEING_DAMAGE_TAKEN` (2) et les monstres le préfèrent (`PREY_BONUS`). Fenêtre « Peur » (la première du
-  combat), bulle « Au secours ! », ligne dans « Personnalité » en fin de combat.
+  Peur (demandes du porteur du projet : « les forts survivent, les faibles meurent » ; pas de message pour la
+  fuite, le joueur observe ; pas tous les 1 étoile, certains se battent contre leur peur) : un héros 1 étoile
+  (pas secret) dans ses `FEAR_FIGHTS` (3) premiers combats peut avoir peur (`can_be_scared`, `fear_chance`) à
+  sa première blessure (30 %), à la chute d'un allié à moins de `FEAR_SIGHT` cases (50 %), à l'arrivée d'un
+  boss (50 %) ; Lâche x2, Courageux /2 ; une fois par combat (`Battle._scare`, -`FEAR_MENTAL_LOSS`). Alors il
+  fuit (`FEAR_FLEE_CHANCE` 45 %, `fear_flee_chance`) `FEAR_SECONDS` (5 s) comme un effondrement (sourd aux
+  ordres), ou il se bat contre sa peur `FEAR_FIGHT_SECONDS` (10 s) : il obéit, attaque et défense
+  x`FEAR_FIGHT_FACTOR` (0,8, dans `Battle._mind`). Tout fuyard (peur ou effondrement) encaisse
+  x`FLEEING_DAMAGE_TAKEN` (2) et les monstres le préfèrent (`PREY_BONUS`). Seuls signes : « PEUR » sous son
+  portrait tant qu'il a peur (`Battle.afraid`) et « X a peur. » dans le journal ; rien n'annonce la fuite ni
+  sa fin ; une ligne dans « Personnalité » en fin de combat.
   Protecteur en combat (`Battle._ward_of`, `_guardian_for`, `_cover`) : un allié à moins de `PROTECT_RANGE`
   (5) cases sous `PROTECT_HP` (30 %) de vie → il va à son côté ; à moins de `PROTECT_GUARD_RANGE` (1,6), il
   encaisse `PROTECT_SHARE` (30 %) de ses coups, quitte à tomber (« tombé en protégeant X »).
@@ -379,10 +383,15 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   coup échangé : `quest["wait_contact"]`, `Battle.clock_time()`), défense de la cité tous les 10 étages
   (remparts, triple avertissement), limite de tours, annonce du donjon journalier après l'étage 5 : fait.
   Au combat, 6 ennemis au plus à la fois, les autres arrivent en renfort.
-  Premiers étages plus durs (demande du porteur du projet) : jusqu'à l'étage `EARLY_FLOORS` (3), au moins
-  `FLOOR_MIN_MONSTERS` (5) monstres et `FLOOR_MIN_ENEMY_TYPES` (2) sortes (gobelins, loups noirs) ; avant :
-  2 gobelins à l'étage 1. Simulation (équipe du tutoriel, sans ordres) : étage 1 gagné 99 %, environ un mort
-  par combat (presque toujours un 1 étoile, une fois sur deux après une peur). Étages 4 et plus inchangés.
+  Tension à chaque étage, préparation nécessaire (demandes du porteur du projet ; l'étage 1 « écrème ») :
+  `EARLY_FLOOR_ENEMIES` donne pour les étages 1 à 4 un minimum de monstres et de sortes de monstres (étage 1 :
+  5, gobelins et loups noirs ; étages 2 à 4 : 6, archers squelettes compris) ; avant : 2 gobelins à l'étage 1.
+  Étages 5 et plus : formule inchangée. Simulation, sans ordres, équipe du tutoriel au niveau de l'étage
+  (« brute ») ou 2 niveaux de plus avec épée et bouclier, ou arc, de grade D (« préparée ») :
+  étage 1 brute 99 % de victoires, ~1 mort ; étages 2 à 4 brute 44-57 % (~3,5 morts), préparée 94-97 %
+  (~1 mort), 2 niveaux de plus sans armes 72-81 % ; étages 6 et 8 brute 34-40 %, préparée 90 % ; étage 5
+  (survie, boss) brute 5 %, préparée 47 % ; étage 10 (défense) brute 28 %, préparée 49 %. À refaire après
+  tout changement d'équilibre.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
