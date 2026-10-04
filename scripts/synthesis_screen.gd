@@ -231,12 +231,23 @@ func _do_synthesis() -> void:
 	var lines := GameData.synthesize(target, sacrifices)
 	Settings.vibrate(300)
 	var box := _overlay_box()
-	box.add_child(UI.make_system_window("Synthèse terminée", lines if not lines.is_empty() else ["La synthèse a échoué."]))
+	# Les fenêtres défilent : une par sacrifié (le poids de la mort, voir UI.make_death_window), puis le résultat.
+	var scroll := UI.make_scroll()
+	box.add_child(scroll)
+	var windows := VBoxContainer.new()
+	windows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	windows.add_theme_constant_override("separation", 16)
+	scroll.add_child(windows)
+	if not lines.is_empty():
+		for hero in sacrifices:
+			windows.add_child(UI.make_death_window(hero))
+	windows.add_child(UI.make_system_window("Synthèse terminée", lines if not lines.is_empty() else ["La synthèse a échoué."]))
 	var ok := UI.make_button("Compris", func():
 		overlay.visible = false
 		sacrifices = []
 		_refresh()
-		GameData.show_tip("mort"), 26)  # première mort (un sacrifice en est une)
+		if not lines.is_empty():
+			GameData.show_tip("mort"), 26)  # première mort (un sacrifice en est une)
 	ok.custom_minimum_size.y = 90
 	box.add_child(ok)
 

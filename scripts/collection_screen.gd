@@ -326,14 +326,12 @@ func _redraw_detail() -> void:
 		detail_scroll.scroll_vertical = scroll_position
 
 
-## Affiche la fiche détaillée d'un héros. « notice » : une fenêtre système à montrer en haut
-## (le résultat d'une promotion, par exemple), avec le titre « notice_title ».
-func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promotion !") -> void:
+## Ouvre le calque d'une fiche : fond sombre (le toucher ferme la fiche), panneau bordé de « border »,
+## zone qui défile. Renvoie la colonne où mettre le contenu ; la fiche finit par _close_sheet.
+func _open_sheet(hero: Dictionary, border: Color) -> VBoxContainer:
 	for child in detail_overlay.get_children():
 		detail_overlay.remove_child(child)
 		child.queue_free()
-
-	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
 
 	# Fond sombre : appuyer à côté de la fiche la ferme.
 	var dim := Button.new()
@@ -349,7 +347,7 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size.x = 560
-	var style := UI.make_panel_style(Color("262a3b"), color, 4)
+	var style := UI.make_panel_style(Color("262a3b"), border, 4)
 	style.set_content_margin_all(32)
 	panel.add_theme_stylebox_override("panel", style)
 	center.add_child(panel)
@@ -363,6 +361,58 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 	content.custom_minimum_size.x = 496
 	content.add_theme_constant_override("separation", 16)
 	scroll.add_child(content)
+	return content
+
+
+## Bouton « Fermer » en bas de la fiche, et hauteur de la zone qui défile (celle de la fiche, sans
+## dépasser l'écran) ; puis la fiche s'affiche.
+func _close_sheet(content: VBoxContainer) -> void:
+	var close := UI.make_button("Fermer", func(): detail_overlay.visible = false)
+	close.custom_minimum_size.y = 90
+	content.add_child(close)
+	var scroll := detail_scroll
+	scroll.custom_minimum_size = Vector2(496, minf(content.get_combined_minimum_size().y, 880))
+	detail_overlay.visible = true
+	# Les textes à plusieurs lignes ne connaissent leur vraie hauteur qu'une fois affichés : on ajuste.
+	await get_tree().process_frame
+	if is_instance_valid(scroll) and is_instance_valid(content):
+		scroll.custom_minimum_size.y = minf(content.get_combined_minimum_size().y, 880)
+
+
+## Fiche figée d'un héros tombé (liste des héros tombés) : la fenêtre « En mémoire » (portrait, étoiles,
+## classe, niveau, combats livrés, cause de la mort, traits révélés, liens), puis ses statistiques et
+## ses compétences au moment de sa mort. Rien ne s'y modifie (sauf « Ressusciter » en mode dev).
+func _show_memorial(hero: Dictionary) -> void:
+	var content := _open_sheet(hero, Color("e05252"))
+	content.add_child(UI.make_death_window(hero, true))
+	var stat_parts: Array[String] = []
+	for stat in GameData.STAT_NAMES:
+		stat_parts.append("%s %d" % [GameData.STAT_NAMES[stat], hero["stats"][stat]])
+	var stats := UI.make_label(" · ".join(stat_parts), 20)
+	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stats.modulate = Color(1, 1, 1, 0.7)
+	content.add_child(stats)
+	var skills: Array = hero["skills"].map(func(skill): return "%s (niv. %d)" % [skill["name"], skill["level"]])
+	var skills_label := UI.make_label("Compétences : %s" % (", ".join(skills) if not skills.is_empty() else "aucune"), 20)
+	skills_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	skills_label.modulate = Color(1, 1, 1, 0.7)
+	content.add_child(skills_label)
+	if Settings.dev_mode:
+		var revive := _make_dev_button("Ressusciter (mode dev)", func(): GameData.dev_revive(hero))
+		revive.custom_minimum_size.y = 70
+		content.add_child(revive)
+	_close_sheet(content)
+
+
+## Affiche la fiche détaillée d'un héros. « notice » : une fenêtre système à montrer en haut
+## (le résultat d'une promotion, par exemple), avec le titre « notice_title ».
+func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promotion !") -> void:
+	# Un héros tombé : sa fiche figée (voir _show_memorial).
+	if not hero["alive"]:
+		_show_memorial(hero)
+		return
+	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+	var content := _open_sheet(hero, color)
 
 	if not notice.is_empty():
 		content.add_child(UI.make_system_window(notice_title, notice))
@@ -541,11 +591,4 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 	_add_promotion(content, hero)
 	if Settings.dev_mode:
 		_add_dev_tools(content, hero)
-
-	var close := UI.make_button("Fermer", func(): detail_overlay.visible = false)
-	close.custom_minimum_size.y = 90
-	content.add_child(close)
-
-	# Hauteur de la zone qui défile : celle de la fiche, sans dépasser l'écran.
-	scroll.custom_minimum_size = Vector2(496, minf(content.get_combined_minimum_size().y, 880))
-	detail_overlay.visible = true
+	_close_sheet(content)

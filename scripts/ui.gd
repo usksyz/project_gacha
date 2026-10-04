@@ -84,6 +84,88 @@ static func make_system_window(title: String, lines: Array, danger := false) -> 
 	return panel
 
 
+## Fenêtre d'un héros tombé (le poids de la mort) : son portrait, son nom, ses étoiles, sa classe et son
+## niveau, la cause de sa mort, ses traits révélés et ses liens ; puis une ligne par ami ou frère d'armes
+## encore en vie (« Y a perdu un frère d'armes »). « memorial » : sa fiche figée, ouverte depuis la liste
+## des héros tombés (titre « En mémoire », avec le nombre de combats livrés).
+static func make_death_window(hero: Dictionary, memorial := false) -> PanelContainer:
+	var accent := Color("e05252")
+	var rarity_color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+	var panel := PanelContainer.new()
+	var style := make_panel_style(Color("15121f"), accent, 3)
+	style.set_content_margin_all(20)
+	panel.add_theme_stylebox_override("panel", style)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 10)
+	panel.add_child(content)
+
+	var title := make_label("EN MÉMOIRE" if memorial else "UN HÉROS EST TOMBÉ", 26)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", accent.lightened(0.3))
+	content.add_child(title)
+
+	# Le portrait (assombri) à gauche, son identité à droite.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	content.add_child(row)
+	var frame := PanelContainer.new()
+	var frame_style := make_panel_style(Color.BLACK, rarity_color.darkened(0.3), 3)
+	frame_style.set_content_margin_all(3)
+	frame.add_theme_stylebox_override("panel", frame_style)
+	frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_child(frame)
+	var portrait := FramedHeroCard.HeroPortrait.new()
+	portrait.hero = hero
+	portrait.custom_minimum_size = Vector2(130, 170)
+	portrait.modulate = Color(0.6, 0.6, 0.6)
+	frame.add_child(portrait)
+	var identity := VBoxContainer.new()
+	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	identity.add_theme_constant_override("separation", 4)
+	row.add_child(identity)
+	var name_label := make_label(hero["name"], 34)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	identity.add_child(name_label)
+	var stars := make_label("★".repeat(hero["rarity"]), 26)
+	stars.add_theme_color_override("font_color", rarity_color)
+	identity.add_child(stars)
+	identity.add_child(make_label("%s — niveau %d" % [hero["class"], hero["level"]], 22))
+	if memorial:
+		identity.add_child(make_label("Combats dans la Tour : %d" % hero.get("fights", 0), 20))
+	var cause: String = hero.get("death_cause", "")
+	var cause_label := make_label("Cause : %s." % cause if cause != "" else "Cause inconnue.", 20)
+	cause_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cause_label.add_theme_color_override("font_color", accent.lightened(0.4))
+	identity.add_child(cause_label)
+
+	# Ce qu'on savait de lui : ses traits révélés, puis ses liens.
+	var known: Array = hero.get("traits", []).filter(func(t): return t["known"]).map(func(t): return t["name"])
+	var traits_label := make_label("Caractère : %s" % (", ".join(known) if not known.is_empty() else "jamais révélé"), 20)
+	traits_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(traits_label)
+	var links := GameData.hero_bonds(hero)
+	var parts: Array[String] = []
+	for link in links:
+		parts.append("%s (%s)" % [link["hero"]["name"], GameData.bond_name(link["level"])])
+	var bonds_label := make_label("Liens : %s" % (", ".join(parts) if not parts.is_empty() else "aucun"), 20)
+	bonds_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bonds_label.modulate = Color(1, 1, 1, 0.8)
+	content.add_child(bonds_label)
+
+	# Ceux qui restent : une ligne par ami ou frère d'armes encore en vie.
+	for link in links:
+		var other: Dictionary = link["hero"]
+		if link["level"] < GameData.BOND_FRIEND or not other["alive"]:
+			continue
+		var brothers: bool = link["level"] >= GameData.BOND_BROTHERS
+		var loss := make_label("%s a perdu %s." % [other["name"], "un frère d'armes" if brothers else "un ami"], 22)
+		loss.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		loss.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		loss.add_theme_color_override("font_color", Color("f5c542") if brothers else Color("6fe08a"))
+		content.add_child(loss)
+	return panel
+
+
 ## Un montant de gemmes : le texte (« 1 000 », « +5 »...) suivi du cristal qui lévite
 ## (nouveaux visuels), ou du mot « gemmes » (anciens visuels).
 static func make_gem_amount(text: String, font_size: int, color := Color.WHITE) -> HBoxContainer:
@@ -121,11 +203,7 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 	if not report["dead"].is_empty():
 		Settings.vibrate(400)
 	for death in report["dead"]:
-		var hero: Dictionary = death["hero"]
-		windows.append(make_system_window("Un héros est tombé", [
-			"%s (%s) a quitté ce monde pour toujours." % [hero["name"], rarity_text(hero["rarity"])],
-			"Cause : %s." % death["cause"],
-		], true))
+		windows.append(make_death_window(death["hero"]))
 	if not report.get("lost_weapons", []).is_empty():
 		windows.append(make_system_window("Armes perdues", report["lost_weapons"], true))
 	if not report["notices"].is_empty():

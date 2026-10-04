@@ -317,6 +317,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			_remove_from_teams(fighter["source"]["id"])
 			# La cause est gardée sur la fiche du héros (et donc dans la sauvegarde).
 			fighter["source"]["death_cause"] = fighter["killer"]
+			# Son dernier combat compte (fiche figée des héros tombés ; les survivants : mental_after_battle).
+			fighter["source"]["fights"] = fighter["source"].get("fights", 0) + 1
 			report["dead"].append({"hero": fighter["source"], "cause": fighter["killer"]})
 			# Ses armes sont perdues avec lui (tidy_arsenal les retire plus bas).
 			for weapon in arsenal:
