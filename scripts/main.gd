@@ -36,7 +36,8 @@ var tip_queue: Array[String] = []
 ## Noms des fenêtres de main.gd : un conseil attend qu'elles soient fermées.
 const WINDOW_NAMES := ["Tip", "RelationNews", "Challenge", "Facility", "Absence"]
 ## Tutoriel (voir GameData, game_state.gd) : l'écran de chaque étape. Son onglet est le seul permis.
-const TUTORIAL_SCREENS := {"invocation": "summon", "equipe": "dungeons", "etage": "dungeons", "synthese": "synthesis"}
+## Synthèse : le hub, où la chambre se construit sous les yeux du Maître, qui la touche pour y entrer.
+const TUTORIAL_SCREENS := {"invocation": "summon", "equipe": "dungeons", "etage": "dungeons", "synthese": "hub"}
 var tutorial_banner: PanelContainer
 var tutorial_label: Label
 
@@ -79,7 +80,9 @@ func _ready() -> void:
 	screens["hub"] = hub
 	screens["summon"] = SummonScreen.new()
 	screens["collection"] = CollectionScreen.new()
-	screens["dungeons"] = DungeonsScreen.new()
+	var dungeons := DungeonsScreen.new()
+	dungeons.navigate.connect(show_screen)
+	screens["dungeons"] = dungeons
 	var training := TrainingScreen.new()
 	training.navigate.connect(show_screen)
 	screens["training"] = training
@@ -196,10 +199,8 @@ func _show_next_tip() -> void:
 		_close_window(overlay)
 		HubCity3D.paused = has_node("Facility")
 		GameData.mark_tip_seen(tip_id)
-		# Tutoriel : la synthèse se fait dans sa chambre ; une fois fini, on découvre la cité.
-		if tip_id == "tuto_synthese" and GameData.tutorial_step == "synthese":
-			show_screen("synthesis")
-		elif tip_id == "tuto_fin":
+		# Tutoriel fini : on découvre la cité.
+		if tip_id == "tuto_fin":
 			show_screen("hub")
 		_show_next_tip(), 24)
 	ok.custom_minimum_size.y = 80
@@ -290,6 +291,7 @@ func _show_facility_completed(title: String, lines: Array) -> void:
 
 ## Le jeu a été fermé en plein combat : on annonce comment les héros s'en sont sortis seuls.
 func _show_absence_report() -> void:
+	HubCity3D.paused = true  # (tutoriel) l'animation de la chambre de synthèse attend la fin de la lecture
 	var overlay := ColorRect.new()
 	overlay.name = "Absence"
 	overlay.color = Color(0, 0, 0, 0.92)
@@ -317,6 +319,7 @@ func _show_absence_report() -> void:
 		box.add_child(window)
 	var ok := UI.make_button("Compris", func():
 		_close_window(overlay)
+		HubCity3D.paused = has_node("Facility")
 		GameData.absence_report = {}
 		# Conseils de fin de combat (premier blessé, première mort), une fois le rapport lu.
 		for tip_id in report.get("tips", []):

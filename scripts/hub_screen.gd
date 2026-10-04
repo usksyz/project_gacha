@@ -26,6 +26,8 @@ var code_pad: CodePad
 var construction_panel: ConstructionPanel
 ## Fenêtre des affectations : les héros assistants de chaque bâtiment construit.
 var assignment_panel: AssignmentPanel
+## Boutons fermés pendant le tutoriel (lieux hors des remparts, Construction, Affectations).
+var locked_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -52,6 +54,7 @@ func _ready() -> void:
 		button.custom_minimum_size.y = 80
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		outside.add_child(button)
+		locked_buttons.append(button)
 
 	var city_buttons := HBoxContainer.new()
 	city_buttons.add_theme_constant_override("separation", 16)
@@ -62,6 +65,7 @@ func _ready() -> void:
 		button.custom_minimum_size.y = 70
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		city_buttons.add_child(button)
+		locked_buttons.append(button)
 
 	var info_panel := PanelContainer.new()
 	info_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b")))
@@ -79,6 +83,22 @@ func _ready() -> void:
 	add_child(construction_panel)
 	assignment_panel = AssignmentPanel.new()
 	add_child(assignment_panel)
+	GameData.tutorial_changed.connect(_refresh_tutorial)
+	_refresh_tutorial()
+
+
+## Tutoriel : les boutons du hub sont fermés (seule la chambre de synthèse se touche, voir _on_zone_pressed).
+func _refresh_tutorial() -> void:
+	for button in locked_buttons:
+		button.disabled = GameData.tutorial_step != ""
+	if GameData.tutorial_step == "synthese":
+		info_label.text = "Touche la chambre de synthèse."
+
+
+## Tutoriel : la chambre de synthèse vient de se construire sous les yeux du Maître : la fenêtre de l'étape.
+func _on_construction_finished(key: String) -> void:
+	if key == "synthese" and GameData.tutorial_step == "synthese":
+		GameData.show_tutorial_tip()
 
 
 ## La cité : en 3D avec les nouveaux visuels (HubCity3D, où l'on voit vivre les héros),
@@ -89,6 +109,7 @@ func _make_map() -> Control:
 		var city := HubCity3D.new()
 		city.zone_pressed.connect(_on_zone_pressed)
 		city.hero_pressed.connect(_on_hero_pressed)
+		city.construction_finished.connect(_on_construction_finished)
 		new_map = city
 	else:
 		var plan := HubMap.new()
@@ -141,9 +162,17 @@ func on_shown() -> void:
 	code_pad.visible = false
 	construction_panel.visible = false
 	assignment_panel.visible = false
+	_refresh_tutorial()
+	# Tutoriel avec l'ancien plan 2D (pas d'animation de construction) : la fenêtre de l'étape tout de suite.
+	if GameData.tutorial_step == "synthese" and not map is HubCity3D:
+		GameData.show_tutorial_tip()
 
 
 func _on_zone_pressed(zone: Dictionary) -> void:
+	# Tutoriel : seule la chambre de synthèse s'ouvre.
+	if GameData.tutorial_step == "synthese" and zone["target"] != "synthesis":
+		info_label.text = "Tutoriel : touche la chambre de synthèse."
+		return
 	info_label.text = "%s : %s" % [zone["name"], zone["info"]]
 	# Le terrain d'entraînement ne s'ouvre qu'après quelques tirages d'armes.
 	if zone["target"] == "training" and not GameData.training_unlocked():

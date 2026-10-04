@@ -393,8 +393,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		elif battle.victory:
 			if not "synthese" in buildings:
 				buildings.append("synthese")
-			advance_tutorial("etage")
-			report["tips"].append("tuto_synthese")
+			advance_tutorial("etage")  # sa fenêtre vient après l'animation de construction dans la cité (hub_screen.gd)
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 

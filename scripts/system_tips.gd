@@ -27,7 +27,7 @@ static func tutorial_goal(step: String) -> String:
 		"etage":
 			return number + "Donjons > « Entrer dans la Tour » et conquiers l'étage 1."
 		"synthese":
-			return number + "choisis un héros à renforcer, puis au moins un héros à sacrifier."
+			return number + "touche la chambre de synthèse dans la cité, puis fais une synthèse."
 	return ""
 
 
@@ -61,7 +61,7 @@ static func lines(tip_id: String) -> Array:
 			]
 		"tuto_synthese":
 			return [
-				"Étage conquis ! La porte de la chambre de synthèse s'ouvre.",
+				"Étage conquis ! La chambre de synthèse vient d'être construite : touchez-la dans la cité pour y entrer.",
 				"La synthèse sacrifie des héros pour en renforcer un autre : les sacrifiés disparaissent pour toujours, le héros renforcé gagne au moins un niveau.",
 				"Conseil : renforcez votre meilleur héros en sacrifiant un héros d'une étoile.",
 			]

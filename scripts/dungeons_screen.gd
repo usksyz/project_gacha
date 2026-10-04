@@ -5,6 +5,9 @@ extends Control
 ## L'écran a cinq « pages » : la liste des donjons, la composition des équipes à l'avance,
 ## l'annonce de la quête de l'étage, le choix de l'équipe, et le combat.
 
+## Demande à l'écran principal d'afficher un autre écran (tutoriel : la cité après l'étage 1).
+signal navigate(screen_name: String)
+
 ## Temps entre deux fenêtres d'avertissement, en secondes.
 const WARNING_DELAY := 0.7
 
@@ -65,7 +68,10 @@ func _ready() -> void:
 		_show_page(list_page)
 		# Conseils de fin de combat (premier blessé, première mort), une fois les fenêtres de fin lues.
 		for tip_id in battle_view.last_report.get("tips", []):
-			GameData.show_tip(tip_id))
+			GameData.show_tip(tip_id)
+		# Tutoriel : l'étage 1 conquis, la chambre de synthèse va se construire dans la cité.
+		if GameData.tutorial_step == "synthese":
+			navigate.emit("hub"))
 	for page in _pages():
 		page.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(page)

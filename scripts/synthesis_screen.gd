@@ -14,7 +14,6 @@ signal navigate(screen_name: String)
 ## Au-delà de ce nombre de héros trouvés, on demande d'affiner la recherche.
 const MAX_CARDS := 40
 
-## « Retour à la cité » : fermé pendant le tutoriel (sa dernière étape est une synthèse).
 var back_button: Button
 var title_label: Label
 var info_label: Label
@@ -96,7 +95,6 @@ func _refresh() -> void:
 		grid.remove_child(child)
 		child.queue_free()
 	hint_label.text = ""
-	back_button.disabled = GameData.tutorial_step != ""
 
 	if not "synthese" in GameData.buildings:
 		title_label.text = "La chambre de synthèse n'est pas construite."

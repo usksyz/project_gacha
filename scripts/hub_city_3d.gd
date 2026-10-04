@@ -22,6 +22,8 @@ extends SubViewportContainer
 
 signal zone_pressed(zone: Dictionary)
 signal hero_pressed(hero: Dictionary)
+## L'animation de construction d'un lieu vient de se terminer (le tutoriel attend celle de la synthèse).
+signal construction_finished(key: String)
 
 # --- La cité (en mètres ; x vers la droite, z vers le bas de l'écran, le nord en haut) ---
 
@@ -194,6 +196,8 @@ var portal_material: StandardMaterial3D
 ## Les noms affichés par-dessus la 3D, et ceux des lieux : [Label, point de la cité, lieu].
 var overlay: Control
 var place_labels: Array = []
+## Tutoriel : la flèche « Touche ici » au-dessus de la chambre de synthèse (voir _place_tutorial_pointer).
+var tutorial_pointer: Label
 
 # Toucher
 var pressing := false
@@ -346,6 +350,10 @@ func _is_built(key: String) -> bool:
 func _update_city() -> void:
 	var built: Array = PLACES.keys().filter(_is_built)
 	if not city_built:
+		# Tutoriel : la chambre de synthèse vient d'être construite (étage 1 conquis) et le Maître n'a pas
+		# encore vu sa fenêtre : on la laisse hors de la cité, elle sera construite sous ses yeux (animation).
+		if GameData.tutorial_step == "synthese" and not "tuto_synthese" in GameData.seen_tips:
+			built.erase("synthese")
 		city_built = true
 		built_places = built
 		_build_city()
@@ -641,7 +649,8 @@ func _play_construction(key: String) -> void:
 		for node in originals:
 			if is_instance_valid(node):
 				node.material_override = originals[node]
-		animating = false)
+		animating = false
+		construction_finished.emit(key))
 	# Les pixels de l'hologramme, qui apparaissent et disparaissent.
 	var radius: float = PLACES[key]["radius"]
 	for i in 34:
@@ -951,6 +960,9 @@ func _tap(screen_pos: Vector2) -> void:
 	var best_walker: Dictionary = {}
 	var best := 34.0
 	for walker in walkers:
+		# Tutoriel : on vise la chambre de synthèse, un héros qui passe devant ne doit pas prendre le toucher.
+		if GameData.tutorial_step != "":
+			break
 		var head: Vector3 = walker["node"].global_position + Vector3(0, 1.2, 0)
 		if camera.is_position_behind(head):
 			continue
@@ -1016,12 +1028,28 @@ func _place_labels() -> void:
 		_stick_label(entry[0], entry[1])
 		if entry[2] in pending_constructions or not place_groups[entry[2]].visible:
 			entry[0].visible = false
+	_place_tutorial_pointer()
 	var show_names := cam_distance < NAME_DISTANCE
 	for walker in walkers:
 		var label: Label = walker["label"]
 		label.visible = show_names
 		if show_names:
 			_stick_label(label, walker["node"].position + Vector3(0, 2.2, 0))
+
+
+## Tutoriel (étape synthèse) : une flèche dorée qui sautille au-dessus de la chambre de synthèse, une fois
+## son animation de construction finie, pour montrer où toucher.
+func _place_tutorial_pointer() -> void:
+	var show: bool = GameData.tutorial_step == "synthese" and "synthese" in built_places \
+		and not "synthese" in pending_constructions and not animating
+	if not show:
+		if tutorial_pointer:
+			tutorial_pointer.visible = false
+		return
+	if tutorial_pointer == null:
+		tutorial_pointer = _make_label("Touche ici\n▼", 30, Color("f5c542"))
+	var bounce := sin(Time.get_ticks_msec() / 180.0) * 0.6
+	_stick_label(tutorial_pointer, _pos3("synthese") + Vector3(0, PLACES["synthese"]["height"] + 2.5 + bounce, 0))
 
 
 func _stick_label(label: Label, point: Vector3) -> void:
