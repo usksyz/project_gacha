@@ -172,6 +172,13 @@ func dev_change_mental(hero: Dictionary, amount: float) -> void:
 	save_game()
 
 
+## Met un héros « En rupture », santé mentale à 0 (pour tester la rupture et la mort de stress).
+func dev_break(hero: Dictionary) -> void:
+	hero["mental"] = 0.0
+	break_hero(hero)
+	save_game()
+
+
 ## Construit tous les bâtiments, gratuitement et sans conditions.
 func dev_build_all() -> void:
 	for building_id in BUILDINGS:

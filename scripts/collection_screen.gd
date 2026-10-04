@@ -231,6 +231,7 @@ func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
 	_add_dev_row(content, [
 		["-20 santé mentale", func(): GameData.dev_change_mental(hero, -20)],
 		["Santé mentale 100", func(): GameData.dev_change_mental(hero, GameData.MENTAL_MAX)],
+		["Mettre en rupture", func(): GameData.dev_break(hero)],
 	])
 	var star_row: Array = []
 	if hero["rarity"] < GameData.MAX_PROMOTION_RARITY:
