@@ -34,7 +34,9 @@ static func open(parent: Node, new_challenger: Dictionary, new_rival: Dictionary
 
 func _ready() -> void:
 	color = Color(0, 0, 0, 0.85)
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Déjà dans l'arbre ici : il faut aussi régler les marges, sinon le panneau garde sa taille nulle
+	# (et le duel s'affichait dans une bande étroite, sans qu'on voie les héros).
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_show_confirm()
 

@@ -240,14 +240,18 @@ func _draw_boss_bar() -> void:
 ## Encadrée en jaune s'il est choisi, en rouge s'il est en Berserk ; grisée s'il est tombé.
 func _draw_portraits() -> void:
 	var font := ThemeDB.fallback_font
-	var width := portraits.size.x / GameData.TEAM_SIZE
-	for i in battle.heroes.size():
-		var hero: Dictionary = battle.heroes[i]
+	# Duel : les deux duellistes côte à côte, chacun sur la moitié de l'encart.
+	var shown: Array = battle.heroes + battle.enemies if _is_duel() else battle.heroes
+	var width := portraits.size.x / (2 if _is_duel() else GameData.TEAM_SIZE)
+	for i in shown.size():
+		var hero: Dictionary = shown[i]
 		var box := Rect2(Vector2(i * width, 0), Vector2(width, PORTRAIT_HEIGHT)).grow(-3)
 		var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
 		var fallen: bool = hero["hp"] <= 0
 		portraits.draw_rect(box, Color("262a3b") if not fallen else Color("1b1d2a"))
 		var border := color
+		if _is_duel():
+			border = HERO_COLOR if hero["is_hero"] else ENEMY_COLOR
 		if hero["berserk"]:
 			border = Color("ff4040")
 		if battle.panicking(hero):
@@ -280,6 +284,10 @@ func _draw_portraits() -> void:
 		if battle.panicking(hero):
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "PANIQUE", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, Color("e0e0ff"))
+
+
+func _is_duel() -> bool:
+	return battle != null and battle.quest.get("duel", false)
 
 
 func _draw_bar(rect: Rect2, ratio: float, color: Color) -> void:
@@ -485,7 +493,11 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 		arena.draw_circle(center, radius + 5, Color(1, 0.15, 0.15, 0.45))
 	var fill := Color("7a2a2a")
 	var outline := ENEMY_COLOR
-	if unit["is_hero"]:
+	if _is_duel():
+		# Duel : les deux sont des héros (couleur de leur rareté) ; le cercle dit le camp (vert / rouge).
+		fill = GameData.RARITY_COLORS[unit["rarity"]].darkened(0.35)
+		outline = HERO_COLOR if unit["is_hero"] else ENEMY_COLOR
+	elif unit["is_hero"]:
 		fill = GameData.RARITY_COLORS[unit["rarity"]].darkened(0.35)
 		outline = HERO_COLOR
 	elif unit["boss"]:
@@ -506,8 +518,17 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 
 
 ## Nom des héros sous leur pion, seulement s'il a la place (pas d'autre héros trop près).
+## Duel : les deux noms, toujours, celui du défié au-dessus de son pion pour ne pas se chevaucher.
 func _draw_names(positions: Dictionary, cell: float) -> void:
 	var font := ThemeDB.fallback_font
+	if _is_duel():
+		for id in positions:
+			var duelist: Dictionary = battle.units[id]
+			var at := _to_screen(positions[id])
+			var offset := Vector2(-cell * 1.5, cell * 0.36 + 14) if duelist["is_hero"] else Vector2(-cell * 1.5, -cell * 0.36 - 12)
+			arena.draw_string(font, at + offset, duelist["name"], HORIZONTAL_ALIGNMENT_CENTER, cell * 3, 14,
+				HERO_COLOR.lightened(0.4) if duelist["is_hero"] else ENEMY_COLOR.lightened(0.3))
+		return
 	for id in positions:
 		var unit: Dictionary = battle.units[id]
 		if not unit["is_hero"]:
