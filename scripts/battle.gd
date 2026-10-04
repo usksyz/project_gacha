@@ -194,7 +194,13 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 	for hero in team:
 		heroes.append(_make_fighter(hero, true))
 	for enemy in foes:
-		enemies.append(_make_fighter(enemy, false))
+		if quest.get("duel", false):
+			# Duel (voir GameData.duel_quest) : l'adversaire est un héros, avec ses armes, dans le camp d'en face.
+			var rival := _make_fighter(enemy, true)
+			rival["is_hero"] = false
+			enemies.append(rival)
+		else:
+			enemies.append(_make_fighter(enemy, false))
 	units.append_array(heroes)
 	units.append_array(enemies)
 	for i in units.size():
@@ -236,7 +242,13 @@ func step() -> void:
 	if clock_start < 0 and time >= CONTACT_WAIT_MAX:
 		_start_clock()
 	if not finished and clock_time() >= quest["seconds"]:
-		if quest["lasting"]:
+		if quest.get("duel", false):
+			# Duel au temps écoulé : celui qui garde la plus grande part de sa vie l'emporte.
+			var hero: Dictionary = heroes[0]
+			var rival: Dictionary = enemies[0]
+			victory = float(hero["hp"]) / hero["max_hp"] >= float(rival["hp"]) / rival["max_hp"]
+			_log("Le temps est écoulé : %s l'emporte aux points !" % (hero if victory else rival)["name"])
+		elif quest["lasting"]:
 			victory = true
 			_log("Le compte à rebours est terminé : ton équipe a tenu bon ! Victoire !")
 		else:
@@ -276,7 +288,7 @@ func _finish() -> void:
 
 ## Envoie un héros à un endroit (en cases) : il y va sans s'arrêter, puis en fait son nouveau poste.
 func order_move(hero: Dictionary, pos: Vector2) -> void:
-	if not _obeys(hero):
+	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
 	if _is_blocked(pos):
 		pos = _free_cell_near(_cell_of(pos))
@@ -286,7 +298,7 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 
 ## Demande à un héros d'attaquer un ennemi précis, jusqu'à ce qu'il tombe.
 func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
-	if not _obeys(hero):
+	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
 	hero["order"] = {"kind": "attack", "target": enemy["id"]}
 	hero["path"] = PackedVector2Array()
@@ -907,6 +919,8 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	var amount := mini(maxi(1, roundi(raw)), target["hp"])
 	target["hp"] -= amount
 	attacker["contribution"] += amount
+	if _duel_yields(target):
+		return amount
 	if target["hp"] > 0:
 		_stress_wound(target, amount)
 		if critical or amount >= target["max_hp"] * BLEED_HIT:
@@ -970,6 +984,8 @@ func _bleed_tick(unit: Dictionary) -> void:
 	var amount := mini(maxi(1, roundi(bleed["amount"] * (1.0 - resist))), unit["hp"])
 	unit["hp"] -= amount
 	_effect("bleed", unit, unit, "-%d" % amount, false)
+	if _duel_yields(unit):
+		return
 	if unit["hp"] <= 0:
 		_announce_fall(unit, "mort " + bleed["cause"])
 		return
@@ -985,8 +1001,8 @@ func _bleed_tick(unit: Dictionary) -> void:
 
 ## Appelée quand un combattant vient de perdre de la vie sans tomber.
 func _check_critical_state(fighter: Dictionary) -> void:
-	if not fighter["is_hero"]:
-		return
+	if not fighter["is_hero"] or quest.get("duel", false):
+		return  # (un duel s'arrête bien avant la situation critique)
 	var ratio: float = float(fighter["hp"]) / fighter["max_hp"]
 	# Second souffle (compétence de promotion) : une fois par combat, le héros reprend de la vie.
 	var wind := GameData.skill_level(fighter["skills"], "Second souffle")
@@ -1195,8 +1211,8 @@ func _mind(unit: Dictionary) -> float:
 
 ## Un héros perd de la santé mentale (moins avec Calme). À 0, c'est la rupture (une fois par combat).
 func _stress(fighter: Dictionary, amount: float) -> void:
-	if not fighter["is_hero"] or fighter["hp"] <= 0 or amount <= 0.0:
-		return
+	if not fighter["is_hero"] or fighter["hp"] <= 0 or amount <= 0.0 or quest.get("duel", false):
+		return  # (un duel compte à part, voir GameData.finish_duel)
 	fighter["mental"] = maxf(0.0, fighter["mental"] - amount * (1.0 - GameData.mental_guard(fighter["skills"])))
 	if fighter["mental"] <= 0.0 and not fighter["ruptured"]:
 		_rupture(fighter)
@@ -1301,6 +1317,20 @@ func _panic_think(unit: Dictionary, foes: Array) -> void:
 		_try_attack(unit, target, foes)
 	else:
 		_move_towards(unit, target["pos"])
+
+
+## Duel : à DUEL_STOP_HP de sa vie, un duelliste s'arrête (jamais de mort) et l'autre l'emporte.
+## Renvoie vrai si le duel vient de se terminer.
+func _duel_yields(unit: Dictionary) -> bool:
+	if not quest.get("duel", false) or finished or unit["hp"] > unit["max_hp"] * GameData.DUEL_STOP_HP:
+		return false
+	unit["hp"] = maxi(unit["hp"], ceili(unit["max_hp"] * GameData.DUEL_STOP_HP))  # le coup est retenu
+	unit["bleed"]["ticks"] = 0
+	victory = not unit["is_hero"]
+	var winner: Dictionary = enemies[0] if unit["is_hero"] else heroes[0]
+	_log("%s pose un genou à terre : %s remporte le duel !" % [unit["name"], winner["name"]], "awaken")
+	_finish()
+	return true
 
 
 ## Une fenêtre système, affichée par l'écran de combat.

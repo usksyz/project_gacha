@@ -61,6 +61,8 @@ var controls: HBoxContainer
 var pause_button: Button
 
 var paused := false
+## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
+var finish_callback := Callable()
 ## Temps accumulé depuis le dernier pas du combat (secondes).
 var accumulator := 0.0
 ## Héros choisi pour recevoir un ordre (son numéro), ou -1.
@@ -98,8 +100,11 @@ func _ready() -> void:
 
 
 ## Lance l'affichage d'un combat déjà préparé (battle.start() a été appelée).
-func play(new_battle: Battle, title: String) -> void:
+## « on_finish » : appelée avec le combat terminé, elle renvoie les fenêtres de fin à afficher (duel) ;
+## sans elle, c'est un combat de la Tour (GameData.finish_tower_battle).
+func play(new_battle: Battle, title: String, on_finish := Callable()) -> void:
 	battle = new_battle
+	finish_callback = on_finish
 	accumulator = 0.0
 	next_event = 0
 	first_effect = 0
@@ -189,7 +194,10 @@ func _process(delta: float) -> void:
 		accumulator -= Battle.TICK
 	_advance()
 	if battle.finished:
-		_show_result(GameData.finish_tower_battle(battle))
+		if finish_callback.is_valid():
+			_show_windows(finish_callback.call(battle))
+		else:
+			_show_result(GameData.finish_tower_battle(battle))
 
 
 ## Met à jour le journal, le chrono et le dessin.
@@ -284,7 +292,7 @@ func _on_portraits_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
 		return
-	if battle == null or battle.finished or paused:
+	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
 		return
 	var index := int(click.position.x / (portraits.size.x / GameData.TEAM_SIZE))
 	if index < 0 or index >= battle.heroes.size() or battle.heroes[index]["hp"] <= 0:
@@ -346,7 +354,10 @@ func _show_event(event: Dictionary) -> void:
 # ---------------------------------------------------------------------------
 
 func _update_hint() -> void:
-	if paused:
+	if battle.quest.get("duel", false):
+		hint_label.text = "Duel : les deux héros règlent leur conflit seuls, sans ordres. Il s'arrête à %d %% de vie." \
+			% roundi(GameData.DUEL_STOP_HP * 100)
+	elif paused:
 		hint_label.text = "Pause. Les ordres reprendront avec le combat."
 	elif selected_id >= 0:
 		hint_label.text = "%s : touche un endroit pour l'y envoyer, ou un ennemi à attaquer." \
@@ -358,8 +369,8 @@ func _update_hint() -> void:
 func _on_arena_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if battle == null or battle.finished or paused:
-		return  # pas d'ordre pendant la pause
+	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
+		return  # pas d'ordre pendant la pause, ni pendant un duel
 	var map_pos: Vector2 = (event.position - _origin()) / _cell_size()
 	var touched := _unit_at(map_pos)
 
@@ -584,6 +595,11 @@ func _draw_bubble(font: Font, tip: Vector2, text: String, alpha: float) -> void:
 ## Remplace la carte et la pause par les fenêtres de fin de combat :
 ## une fenêtre rouge par héros mort, puis le résultat (récompenses, niveaux, MVP).
 func _show_result(report: Dictionary) -> void:
+	_show_windows(UI.make_battle_report_windows(report))
+
+
+## Remplace la carte et la pause par ces fenêtres de fin, puis un bouton « Continuer ».
+func _show_windows(windows: Array) -> void:
 	controls.queue_free()
 	arena.visible = false
 	hint_label.visible = false
@@ -598,7 +614,7 @@ func _show_result(report: Dictionary) -> void:
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 12)
 	scroll.add_child(box)
-	for window in UI.make_battle_report_windows(report):
+	for window in windows:
 		box.add_child(window)
 
 	var continue_button := UI.make_button("Continuer", func(): closed.emit())

@@ -308,6 +308,64 @@ func _make_dev_button(text: String, action: Callable) -> Button:
 	return button
 
 
+## Duel (voir GameData, personality.gd) : fenêtre « X défie Y ! », puis le duel en direct par-dessus
+## la collection, et la fiche redessinée à la fin.
+func _confirm_duel(challenger: Dictionary, rival: Dictionary) -> void:
+	var problem := GameData.duel_problem(challenger, rival)
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.85)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	center.add_child(box)
+	if problem != "":
+		box.add_child(UI.make_system_window("Duel impossible", [problem]))
+		var ok := UI.make_button("Compris", func(): overlay.queue_free(), 24)
+		ok.custom_minimum_size.y = 80
+		box.add_child(ok)
+		return
+	box.add_child(UI.make_system_window("Duel", [
+		"%s défie %s !" % [GameData.hero_label(challenger), GameData.hero_label(rival)],
+		"Conseil : les duels sont un moyen de résoudre les conflits entre héros.",
+		"Le duel s'arrête à %d %% de vie : personne ne meurt." % roundi(GameData.DUEL_STOP_HP * 100),
+	]))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	var cancel := UI.make_button("Annuler", func(): overlay.queue_free(), 24)
+	cancel.custom_minimum_size = Vector2(0, 84)
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(cancel)
+	var go := UI.make_button("Que le duel commence", func():
+		overlay.queue_free()
+		_play_duel(challenger, rival), 24)
+	go.custom_minimum_size = Vector2(0, 84)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(go)
+
+
+func _play_duel(challenger: Dictionary, rival: Dictionary) -> void:
+	var stage := ColorRect.new()
+	stage.color = Color("101119")
+	stage.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(stage)
+	var view := BattleView.new()
+	view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	stage.add_child(view)
+	view.closed.connect(func():
+		stage.queue_free()
+		_redraw_detail())
+	var battle := Battle.new([challenger], [rival], GameData.duel_quest())
+	battle.start()
+	view.play(battle, "Duel : %s contre %s" % [challenger["name"], rival["name"]], func(done: Battle) -> Array:
+		return [UI.make_system_window("Fin du duel", GameData.finish_duel(challenger, rival, done.victory))])
+
+
 ## Redessine la fiche du héros affiché (après un outil du mode dev, ou le bouton Favori), au même endroit de la page.
 func _redraw_detail() -> void:
 	var scroll_position := detail_scroll.scroll_vertical
@@ -446,6 +504,11 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 			if not other["alive"]:
 				line.modulate = Color(1, 1, 1, 0.5)
 			content.add_child(line)
+			# Hostiles : le conflit se règle par un duel, organisé par le Maître.
+			if link["level"] == GameData.BOND_HOSTILE and other["alive"] and hero["alive"]:
+				var duel := UI.make_button("Organiser un duel contre %s" % other["name"], func(): _confirm_duel(hero, other), 20)
+				duel.custom_minimum_size.y = 64
+				content.add_child(duel)
 
 	# Mana (mages et soigneurs) : la réserve, et ce qu'elle regagne chaque seconde en combat.
 	var mana: int = GameData.combat_stats(hero)["mana"]

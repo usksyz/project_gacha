@@ -400,6 +400,54 @@ func update_quarrels() -> void:
 	save_game()
 
 
+# --- Duels ---
+# Le moyen officiel de régler un conflit (cahier) : depuis la fiche, le Maître organise un duel entre deux
+# hostiles. Un contre un avec le moteur de combat (battle.gd, quête « duel ») ; on s'arrête à DUEL_STOP_HP de
+# sa vie, sans jamais mourir. Le gagnant reprend confiance, le perdant en perd un peu, et l'hostilité
+# retombe à « connaissance ». (Pas encore fait : les paris du cahier.)
+const DUEL_STOP_HP := 0.1
+const DUEL_SECONDS := 90
+const DUEL_WIN_MENTAL := 10.0
+const DUEL_LOSE_MENTAL := 5.0
+
+
+## La « quête » d'un duel, pour battle.gd : pas de remparts, ni de niveau caché, 90 secondes au plus.
+func duel_quest() -> Dictionary:
+	return {"type": "duel", "name": "Duel", "duel": true, "lasting": false, "seconds": DUEL_SECONDS,
+		"hidden_level": false, "walls": 0}
+
+
+## Pourquoi ce duel est impossible (texte), ou "" s'il peut avoir lieu.
+func duel_problem(challenger: Dictionary, rival: Dictionary) -> String:
+	if not challenger["alive"] or not rival["alive"]:
+		return "Un duel se fait entre deux héros vivants."
+	if bond_level(challenger, rival) != BOND_HOSTILE:
+		return "%s et %s ne sont pas hostiles : pas de duel." % [challenger["name"], rival["name"]]
+	for hero in [challenger, rival]:
+		if is_away(hero):
+			return "%s n'est pas à la cité : il est parti en mission." % hero["name"]
+	return ""
+
+
+## Fin d'un duel : le gagnant gagne DUEL_WIN_MENTAL, le perdant perd DUEL_LOSE_MENTAL (moins avec Calme),
+## et leur hostilité retombe à « connaissance ». Sauvegarde. Renvoie les lignes de la fenêtre de fin.
+func finish_duel(challenger: Dictionary, rival: Dictionary, challenger_won: bool) -> Array[String]:
+	var winner := challenger if challenger_won else rival
+	var loser := rival if challenger_won else challenger
+	var winner_before := mental(winner)
+	var loser_before := mental(loser)
+	change_mental(winner, DUEL_WIN_MENTAL)
+	mental_loss(loser, DUEL_LOSE_MENTAL)
+	set_bond_level(challenger, rival, BOND_ACQUAINTANCE)
+	save_game()
+	return [
+		"%s remporte le duel contre %s." % [hero_label(winner), hero_label(loser)],
+		"%s : santé mentale %d → %d" % [winner["name"], roundi(winner_before), roundi(mental(winner))],
+		"%s : santé mentale %d → %d" % [loser["name"], roundi(loser_before), roundi(mental(loser))],
+		"Le conflit est réglé : %s et %s ne sont plus hostiles (connaissance)." % [challenger["name"], rival["name"]],
+	]
+
+
 ## Les liens d'un héros (hostiles compris, pas les inconnus), du plus fort au plus faible :
 ## [{"hero": autre héros, "level": palier}]. Les morts y restent.
 func hero_bonds(hero: Dictionary) -> Array[Dictionary]:
