@@ -35,7 +35,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - `scripts/game_data.gd` : autoload `GameData`, données et règles du jeu. Le code est rangé par thème
   dans `scripts/game_data/`, en une pile de classes : chaque fichier `extends` le précédent et
   `game_data.gd` est en haut, donc on écrit toujours `GameData.xxx` partout. De bas en haut :
-  `game_state.gd` (`GameState` : variables enregistrées, or et gemmes, signaux), `heroes.gd` (`GameHeroes` :
+  `game_state.gd` (`GameState` : variables enregistrées, or et gemmes, signaux, conseils du Système, tutoriel), `heroes.gd` (`GameHeroes` :
   fiche, stats, héros secrets, compétences, expérience, changement de classe, équipes, favoris, `is_away`),
   `personality.gd` (`GamePersonality` : santé mentale, traits de caractère), `training.gd`
   (`GameTraining` : terrain d'entraînement), `items.gd` (`GameItems` : armes, arsenal, équipement,
@@ -66,7 +66,23 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   fermeture (`seen_tips`, sauvegardé « conseils_vus » ; une ancienne sauvegarde les compte tous comme vus).
   Textes dans `scripts/system_tips.gd` (`SystemTips`). Paramètres : « Conseils du Système » (activé / désactivé,
   `parametres.cfg`) et « Réafficher les conseils » (`reset_tips`). Nouveau conseil : un id dans `TIP_IDS`, son
-  texte dans `SystemTips`, un `show_tip` là où ça arrive.
+  texte dans `SystemTips`, un `show_tip` là où ça arrive. Les ids « tuto_... » et « bienvenue » sont ceux du
+  tutoriel (`is_tutorial_tip`) : obligatoires, le réglage ne les coupe pas, « Réafficher » ne les rejoue pas.
+- Tutoriel obligatoire d'une partie neuve (demande du porteur du projet ; cahier, « Tutoriel et interface » :
+  premier combat puis la synthèse, « dont la porte s'ouvre à ce moment ») : `GameData.tutorial_step`
+  (`game_state.gd`, sauvegardé « tutoriel » ; absent d'une ancienne sauvegarde = pas de tutoriel), étapes
+  `TUTORIAL_STEPS` : invocation, equipe, etage, synthese, puis "" (fini). On commence avec exactement l'or d'une
+  invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes 3000 comme avant). 1. Seule la normale x10 est
+  permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
+  (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Composer une équipe
+  (« Terminé » avec au moins un héros ; « Entrer dans la Tour » fermé avant). 3. Gagner l'étage 1 (défaite :
+  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 4. Une
+  synthèse (« Retour à la cité » fermé) ; moins de 2 héros vivants : le tutoriel s'arrête (`end_tutorial`).
+  Passage d'étape : `advance_tutorial(étape)` (signal `tutorial_changed`). `main.gd` : bandeau en haut
+  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS`, aucun pendant la
+  synthèse), reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), chambre
+  de synthèse ouverte en fermant « tuto_synthese », hub en fermant « tuto_fin ». Mode dev : « Passer le
+  tutoriel » (`dev_skip_tutorial`).
 - Poids de la mort : `UI.make_death_window(hero, memorial)` (portrait `FramedHeroCard.HeroPortrait`, nom,
   étoiles, classe et niveau, cause, traits révélés, liens, puis « Y a perdu un ami / un frère d'armes » pour
   chaque ami ou frère d'armes vivant) remplace l'ancienne fenêtre « Un héros est tombé » des rapports de combat,
@@ -362,8 +378,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
   L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
   en jeu, précision du porteur du projet). Raretés (choix du porteur du projet, aligné sur l'œuvre ; onglet
-  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles (provisoire : 1 étoile 60 %,
-  2 étoiles 30 %, 3 étoiles 10 %), invocation en gemmes de 3 à 5 étoiles (provisoire : 3 étoiles 75 %,
+  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles, les 2 et 3 étoiles très très rares
+  (demande du porteur du projet ; provisoire : 1 étoile 97,5 %, 2 étoiles 2 %, 3 étoiles 0,5 % ; avant : 60 / 30 /
+  10 %), sauf la première x10 du tutoriel (un 3 étoiles garanti), invocation en gemmes de 3 à 5 étoiles (provisoire : 3 étoiles 75 %,
   4 étoiles 21 %, 5 étoiles 4 %, pity de 50). Ancien réglage : or de 1 à 4 étoiles, gemmes de 1 à 5.
   Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
   niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
