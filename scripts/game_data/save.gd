@@ -50,6 +50,7 @@ func save_game() -> void:
 	file.set_value("partie", "nouvelles_relations", relation_news)
 	file.set_value("partie", "defis", pending_challenges)
 	file.set_value("partie", "conseils_vus", seen_tips)
+	file.set_value("partie", "tutoriel", tutorial_step)
 	file.save(SAVE_PATH)
 
 
@@ -87,6 +88,7 @@ func load_game() -> bool:
 	# Conseils du Système : une partie d'avant les conseils n'est pas celle d'un nouveau joueur, on les
 	# compte comme vus (Paramètres > « Réafficher les conseils » pour les revoir).
 	seen_tips = file.get_value("partie", "conseils_vus", TIP_IDS.duplicate())
+	tutorial_step = file.get_value("partie", "tutoriel", "")  # partie d'avant le tutoriel : pas de tutoriel
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
@@ -122,7 +124,9 @@ func reset_game() -> void:
 ## Prépare une partie neuve.
 func _new_game() -> void:
 	real_gems = 3000
-	real_gold = 0
+	# Tutoriel : de quoi payer exactement l'invocation normale x10 qu'il impose.
+	real_gold = SUMMON_TYPES["normal"]["cost"] * TUTORIAL_SUMMON_COUNT
+	tutorial_step = TUTORIAL_STEPS[0]
 	pity_counter = 0
 	tower_floor = 1
 	roster.clear()

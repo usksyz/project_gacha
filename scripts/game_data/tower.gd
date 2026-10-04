@@ -383,6 +383,18 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	var hard: bool = is_boss_floor(floor_number) or not report["dead"].is_empty() \
 		or (max_hp > 0 and hp < max_hp * HARD_VICTORY_HP)
 	report["bonds"] = bonds_after_battle(survivors.map(func(fighter): return fighter["source"]), battle.victory, hard)
+	# Tutoriel : l'étage gagné ouvre la chambre de synthèse (cahier : « la synthèse, dont la porte s'ouvre à
+	# ce moment »), sans frais. Perdu : on recommence l'étage. Moins de 2 héros vivants : pas de synthèse
+	# possible, le tutoriel s'arrête là.
+	if tutorial_step == "etage":
+		if alive_heroes().size() < 2:
+			end_tutorial()
+			report["tips"].append("tuto_fin")
+		elif battle.victory:
+			if not "synthese" in buildings:
+				buildings.append("synthese")
+			advance_tutorial("etage")
+			report["tips"].append("tuto_synthese")
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 

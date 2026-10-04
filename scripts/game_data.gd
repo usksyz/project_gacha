@@ -222,6 +222,15 @@ func dev_break(hero: Dictionary) -> void:
 	save_game()
 
 
+## Passe le tutoriel : il s'arrête là (rien n'est donné), ses fenêtres sont comptées comme vues.
+func dev_skip_tutorial() -> void:
+	for tip_id in TIP_IDS:
+		if is_tutorial_tip(tip_id) and not tip_id in seen_tips:
+			seen_tips.append(tip_id)
+	end_tutorial()
+	save_game()
+
+
 ## Construit tous les bâtiments, gratuitement et sans conditions.
 func dev_build_all() -> void:
 	for building_id in BUILDINGS:

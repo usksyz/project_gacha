@@ -49,6 +49,8 @@ var floor_enemies: Array[Dictionary] = []
 ## Étage qu'on s'apprête à jouer (l'étage actuel, ou un étage déjà conquis qu'on refait).
 var chosen_floor := 1
 var replay_button: Button
+## « Entrer dans la Tour » : fermé pendant l'étape « équipe » du tutoriel (on compose d'abord une équipe).
+var enter_button: Button
 ## Numéros (id) des héros choisis pour le combat.
 var selected_ids: Array[int] = []
 
@@ -87,6 +89,7 @@ func _show_page(page: Control) -> void:
 		var quest := GameData.floor_quest(GameData.tower_floor)
 		floor_label.text = "Étage actuel : %d (%s)" % [GameData.tower_floor, quest["name"]]
 		replay_button.disabled = GameData.tower_floor <= 1  # aucun étage conquis à refaire
+		enter_button.disabled = GameData.tutorial_step == "equipe"
 		_refresh_daily()
 
 
@@ -103,9 +106,9 @@ func _build_list_page() -> Control:
 	floor_label = UI.make_label("", 26)
 	floor_label.add_theme_color_override("font_color", Color("f5b82e"))
 	tower.add_child(floor_label)
-	var enter := UI.make_button("Entrer dans la Tour", func(): _open_tower(GameData.tower_floor))
-	enter.custom_minimum_size.y = 80
-	tower.add_child(enter)
+	enter_button = UI.make_button("Entrer dans la Tour", func(): _open_tower(GameData.tower_floor))
+	enter_button.custom_minimum_size.y = 80
+	tower.add_child(enter_button)
 	replay_button = UI.make_button("Refaire un étage (entraînement)", _open_replay_picker, 24)
 	replay_button.custom_minimum_size.y = 70
 	tower.add_child(replay_button)
@@ -361,7 +364,12 @@ func _build_teams_page() -> Control:
 	compose_grid.add_theme_constant_override("v_separation", 8)
 	centered.add_child(compose_grid)
 
-	var back := UI.make_button("Terminé", func(): _show_page(list_page))
+	var back := UI.make_button("Terminé", func():
+		# Tutoriel : une équipe avec au moins un héros, et on passe à l'étage 1.
+		if GameData.tutorial_step == "equipe" and GameData.teams.any(func(team): return not team.is_empty()):
+			GameData.advance_tutorial("equipe")
+			GameData.show_tutorial_tip()
+		_show_page(list_page))
 	back.custom_minimum_size.y = 90
 	layout.add_child(back)
 	return margin

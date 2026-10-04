@@ -8,7 +8,27 @@ class_name SystemTips
 static func title(tip_id: String) -> String:
 	if tip_id == "bienvenue":
 		return "Bienvenue, Maître"
+	if tip_id == "tuto_fin":
+		return "Tutoriel terminé"
+	if tip_id.begins_with("tuto_"):
+		var step := GameData.TUTORIAL_STEPS.find(tip_id.trim_prefix("tuto_")) + 1
+		return "Tutoriel — étape %d / %d" % [step, GameData.TUTORIAL_STEPS.size()]
 	return "Conseil"
+
+
+## Le bandeau du tutoriel (en haut de l'écran) : ce qu'il faut faire maintenant.
+static func tutorial_goal(step: String) -> String:
+	var number := "Tutoriel %d/%d : " % [GameData.TUTORIAL_STEPS.find(step) + 1, GameData.TUTORIAL_STEPS.size()]
+	match step:
+		"invocation":
+			return number + "invoque %d héros (invocation normale x%d)." % [GameData.TUTORIAL_SUMMON_COUNT, GameData.TUTORIAL_SUMMON_COUNT]
+		"equipe":
+			return number + "Donjons > « Composer les équipes », place des héros, puis « Terminé »."
+		"etage":
+			return number + "Donjons > « Entrer dans la Tour » et conquiers l'étage 1."
+		"synthese":
+			return number + "choisis un héros à renforcer, puis au moins un héros à sacrifier."
+	return ""
 
 
 ## Les lignes de la fenêtre (une ligne = un paragraphe centré).
@@ -19,7 +39,37 @@ static func lines(tip_id: String) -> Array:
 				"Le Système vous a choisi comme Maître de cette cité suspendue dans le néant.",
 				"Votre mission : invoquer des héros, les mener dans la Tour et la gravir, étage par étage.",
 				"Attention : un héros qui tombe au combat meurt pour toujours. Rien ne le ramènera.",
-				"Pour commencer : l'onglet « Invocation ». L'invocation spéciale se paie en gemmes ; l'invocation normale en or, que vous gagnerez dans la Tour.",
+				"Le Système vous guide pour vos premiers pas : suivez le bandeau en haut de l'écran.",
+			]
+		"tuto_invocation":
+			return [
+				"Le Système vous offre %s or : de quoi invoquer vos %d premiers héros." % [
+					UI.format_number(GameData.SUMMON_TYPES["normal"]["cost"] * GameData.TUTORIAL_SUMMON_COUNT), GameData.TUTORIAL_SUMMON_COUNT],
+				"Touchez l'invocation normale x%d." % GameData.TUTORIAL_SUMMON_COUNT,
+				"Pour cette première fois, un héros 3 étoiles vous est garanti.",
+			]
+		"tuto_equipe":
+			return [
+				"Vos premiers héros sont arrivés. Il faut maintenant former une équipe.",
+				"Ouvrez « Donjons », puis « Composer les équipes ». Placez de 1 à %d héros, puis touchez « Terminé »." % GameData.TEAM_SIZE,
+			]
+		"tuto_etage":
+			return [
+				"Votre équipe est prête. La Tour vous attend.",
+				"Touchez « Entrer dans la Tour », choisissez votre équipe et conquérez l'étage 1.",
+				"En cas de défaite, les survivants rentrent à la cité : vous pourrez retenter l'étage.",
+			]
+		"tuto_synthese":
+			return [
+				"Étage conquis ! La porte de la chambre de synthèse s'ouvre.",
+				"La synthèse sacrifie des héros pour en renforcer un autre : les sacrifiés disparaissent pour toujours, le héros renforcé gagne au moins un niveau.",
+				"Conseil : renforcez votre meilleur héros en sacrifiant un héros d'une étoile.",
+			]
+		"tuto_fin":
+			return [
+				"Le tutoriel est terminé : toute la cité vous est ouverte.",
+				"L'or se gagne dans la Tour. L'invocation normale (or) donne surtout des héros d'une étoile ; l'invocation spéciale (gemmes) donne des héros de 3 à 5 étoiles.",
+				"Bonne chance, Maître.",
 			]
 		"invocation":
 			return [

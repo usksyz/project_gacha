@@ -67,6 +67,13 @@ func _ready() -> void:
 	_add_row(content, stars)
 	_add_note(content, "Pour les niveaux, l'expérience, les étoiles, les stats et les compétences d'un héros : sa fiche, dans la Collection.")
 
+	_add_section(content, "Tutoriel")
+	_add_row(content, [["Passer le tutoriel", func():
+		if GameData.tutorial_step == "":
+			return "Pas de tutoriel en cours."
+		GameData.dev_skip_tutorial()
+		return "Tutoriel passé : tous les onglets sont ouverts."]])
+
 	_add_section(content, "Tour")
 	floor_label = UI.make_label("", 22)
 	content.add_child(floor_label)

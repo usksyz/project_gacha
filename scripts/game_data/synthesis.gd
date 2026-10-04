@@ -225,4 +225,5 @@ func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
 		lines.append("Compétence rare : Analyse froide !")
 	lines.append(mental_after_synthesis(sacrifices.size()))
 	tidy_arsenal()  # les armes des sacrifiés sont perdues (et la partie est sauvegardée)
+	advance_tutorial("synthese")  # (tutoriel) la synthèse était la dernière étape
 	return lines

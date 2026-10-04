@@ -17,9 +17,12 @@ extends GameItems
 ## « cost » : prix d'une invocation ; « currency » : "gold" ou "gems" ;
 ## « rates » : probabilité de chaque rareté, de la plus haute à la plus basse (le total fait 1.0,
 ## soit 100 %). Une rareté absente ne peut pas sortir. Taux provisoires.
+## Invocation normale, demande du porteur du projet : des 1 étoile presque toujours, des 2 et 3 étoiles
+## très très rares (avant : 3 étoiles 10 %, 2 étoiles 30 %). Sa première x10 (tutoriel) est à part :
+## voir _first_summon_rarities.
 const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
-		"rates": {3: 0.10, 2: 0.30, 1: 0.60}},
+		"rates": {3: 0.005, 2: 0.02, 1: 0.975}},
 	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
 		"rates": {5: 0.04, 4: 0.21, 3: 0.75}},
 }
@@ -80,12 +83,37 @@ func free_hero_slots() -> int:
 	return maxi(0, HERO_LIMIT - alive_heroes().size())
 
 
+## Première invocation du tutoriel (normale x10) : chance d'y trouver aussi un 2 étoiles.
+const FIRST_SUMMON_TWO_STAR_CHANCE := 0.5
+
+
+## Vrai si le tutoriel permet cette invocation : pendant son étape « invocation », seule la normale x10 ;
+## pendant les étapes suivantes, aucune (l'onglet est fermé de toute façon).
+func summon_allowed(summon_type: String, count: int) -> bool:
+	if tutorial_step == "":
+		return true
+	return tutorial_step == "invocation" and summon_type == "normal" and count == TUTORIAL_SUMMON_COUNT
+
+
+## Raretés de la première invocation (tutoriel), demande du porteur du projet : un 3 étoiles garanti,
+## peut-être un 2 étoiles (FIRST_SUMMON_TWO_STAR_CHANCE), et que des 1 étoile pour le reste, mélangés.
+func _first_summon_rarities(count: int) -> Array:
+	var rarities := [3]
+	if randf() < FIRST_SUMMON_TWO_STAR_CHANCE:
+		rarities.append(2)
+	while rarities.size() < count:
+		rarities.append(1)
+	rarities.shuffle()
+	return rarities
+
+
 ## Invoque « count » héros (invocation « normal » ou « special ») et renvoie la liste des héros
-## obtenus (liste vide si on n'a pas de quoi payer).
+## obtenus (liste vide si on n'a pas de quoi payer, ou si le tutoriel ne le permet pas).
 func summon(summon_type: String, count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	if not can_afford(summon_type, count) or count > free_hero_slots():
+	if not can_afford(summon_type, count) or count > free_hero_slots() or not summon_allowed(summon_type, count):
 		return results
+	var forced: Array = _first_summon_rarities(count) if tutorial_step == "invocation" else []
 
 	var info: Dictionary = SUMMON_TYPES[summon_type]
 	if info["currency"] == "gold":
@@ -95,11 +123,13 @@ func summon(summon_type: String, count: int) -> Array[Dictionary]:
 		gems -= info["cost"] * count
 		gems_changed.emit(gems)
 	for i in count:
-		var hero := _create_hero(_roll_rarity(summon_type), info["mages"])
+		var rarity: int = forced[i] if not forced.is_empty() else _roll_rarity(summon_type)
+		var hero := _create_hero(rarity, info["mages"])
 		roster.append(hero)
 		results.append(hero)
 	roll_linked_group(results)  # certains se connaissent peut-être déjà (voir personality.gd)
 	save_game()
+	advance_tutorial("invocation")  # (tutoriel) étape suivante : composer une équipe
 	return results
 
 

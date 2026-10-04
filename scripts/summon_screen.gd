@@ -57,7 +57,11 @@ func _on_summon(summon_type: String, count: int) -> void:
 	_show_results(heroes)
 	_refresh_labels()
 	# Première invocation : un conseil du Système, une fois les cartes retournées.
-	reveal_tween.finished.connect(func(): GameData.show_tip("invocation"))
+	# Tutoriel : ensuite, la fenêtre de l'étape suivante (composer une équipe).
+	reveal_tween.finished.connect(func():
+		GameData.show_tip("invocation")
+		if GameData.tutorial_step != "":
+			GameData.show_tutorial_tip())
 
 
 ## Affiche les cartes des héros obtenus, l'une après l'autre.
@@ -100,9 +104,13 @@ func _refresh_labels() -> void:
 		roster_label.text += " — résidences pleines"
 	for entry in summon_buttons:
 		# On ne peut invoquer que si l'on peut payer ET s'il reste assez de place dans les résidences.
-		var affordable: bool = GameData.can_afford(entry[0], entry[1]) and entry[1] <= GameData.free_hero_slots()
+		# Pendant le tutoriel, seule l'invocation qu'il demande est permise (GameData.summon_allowed).
+		var affordable: bool = GameData.can_afford(entry[0], entry[1]) and entry[1] <= GameData.free_hero_slots() \
+			and GameData.summon_allowed(entry[0], entry[1])
 		if entry[2] is SummonButton:
 			entry[2].set_affordable(affordable)
+			if not GameData.summon_allowed(entry[0], entry[1]):
+				entry[2].modulate = Color(0.25, 0.25, 0.28)  # tutoriel : bien éteint, pour voir le seul permis
 		else:
 			entry[2].disabled = not affordable
 

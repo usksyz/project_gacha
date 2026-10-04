@@ -33,6 +33,10 @@ var settings_panel: SettingsPanel
 var tip_queue: Array[String] = []
 ## Noms des fenêtres de main.gd : un conseil attend qu'elles soient fermées.
 const WINDOW_NAMES := ["Tip", "RelationNews", "Challenge", "Facility", "Absence"]
+## Tutoriel (voir GameData, game_state.gd) : l'écran de chaque étape. Son onglet est le seul permis.
+const TUTORIAL_SCREENS := {"invocation": "summon", "equipe": "dungeons", "etage": "dungeons", "synthese": "synthesis"}
+var tutorial_banner: PanelContainer
+var tutorial_label: Label
 
 
 func _ready() -> void:
@@ -47,6 +51,18 @@ func _ready() -> void:
 	add_child(layout)
 
 	layout.add_child(_build_top_bar())
+
+	# Bandeau du tutoriel, sous la barre du haut : ce qu'il faut faire maintenant (voir _refresh_tutorial).
+	tutorial_banner = PanelContainer.new()
+	var banner_style := UI.make_panel_style(Color("2a2140"), Color("9b6be0"), 2)
+	banner_style.set_corner_radius_all(0)
+	tutorial_banner.add_theme_stylebox_override("panel", banner_style)
+	tutorial_label = UI.make_label("", 22)
+	tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tutorial_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tutorial_label.add_theme_color_override("font_color", Color("d9c4ff"))
+	tutorial_banner.add_child(tutorial_label)
+	layout.add_child(tutorial_banner)
 
 	var content := Control.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -85,14 +101,29 @@ func _ready() -> void:
 	GameData.gold_changed.connect(func(_amount): _refresh_money())
 	Settings.visuals_changed.connect(_refresh_money)
 	_refresh_money()
-	show_screen("hub")
+	# Pendant le tutoriel, on reprend directement à l'écran de son étape.
+	show_screen(TUTORIAL_SCREENS.get(GameData.tutorial_step, "hub"))
 	if not GameData.absence_report.is_empty():
 		_show_absence_report()
 	GameData.facility_completed.connect(_show_facility_completed)
 	GameData.relations_changed.connect(_show_relation_news)
 	_show_relation_news()
 	GameData.tip_requested.connect(_queue_tip)
+	GameData.tutorial_changed.connect(_refresh_tutorial)
+	_refresh_tutorial()
 	GameData.show_tip("bienvenue")  # partie neuve : le Système accueille le Maître (une seule fois)
+	if GameData.tutorial_step != "":
+		GameData.show_tutorial_tip()  # la fenêtre de l'étape en cours, si elle n'a pas encore été lue
+
+
+## Tutoriel : le bandeau dit quoi faire, et seul l'onglet de l'étape est permis (aucun pendant la
+## synthèse, qui se fait dans la chambre de synthèse, ouverte par la fenêtre de l'étape).
+func _refresh_tutorial() -> void:
+	var step := GameData.tutorial_step
+	tutorial_banner.visible = step != ""
+	tutorial_label.text = SystemTips.tutorial_goal(step)
+	for screen_name in nav_buttons:
+		nav_buttons[screen_name].disabled = step != "" and TUTORIAL_SCREENS.get(step, "") != screen_name
 
 
 ## Un conseil du Système est demandé : il attend son tour (un seul à la fois, et pas deux fois le même).
@@ -123,7 +154,7 @@ func _show_next_tip() -> void:
 	if tip_queue.is_empty() or _window_open():
 		return
 	var tip_id: String = tip_queue.pop_front()
-	if tip_id in GameData.seen_tips or not Settings.tips:
+	if tip_id in GameData.seen_tips or not (Settings.tips or GameData.is_tutorial_tip(tip_id)):
 		_show_next_tip()
 		return
 	HubCity3D.paused = true
@@ -140,14 +171,20 @@ func _show_next_tip() -> void:
 	box.add_theme_constant_override("separation", 14)
 	center.add_child(box)
 	box.add_child(UI.make_system_window(SystemTips.title(tip_id), SystemTips.lines(tip_id)))
-	var hint := UI.make_label("Paramètres : « Conseils du Système » pour les couper.", 18)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.modulate = Color(1, 1, 1, 0.5)
-	box.add_child(hint)
+	if not GameData.is_tutorial_tip(tip_id):
+		var hint := UI.make_label("Paramètres : « Conseils du Système » pour les couper.", 18)
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.modulate = Color(1, 1, 1, 0.5)
+		box.add_child(hint)
 	var ok := UI.make_button("Compris", func():
 		_close_window(overlay)
 		HubCity3D.paused = has_node("Facility")
 		GameData.mark_tip_seen(tip_id)
+		# Tutoriel : la synthèse se fait dans sa chambre ; une fois fini, on découvre la cité.
+		if tip_id == "tuto_synthese" and GameData.tutorial_step == "synthese":
+			show_screen("synthesis")
+		elif tip_id == "tuto_fin":
+			show_screen("hub")
 		_show_next_tip(), 24)
 	ok.custom_minimum_size.y = 80
 	box.add_child(ok)
@@ -224,7 +261,7 @@ func _show_facility_completed(title: String, lines: Array) -> void:
 	var close := func(go_to_hub: bool):
 		_close_window(overlay)
 		HubCity3D.paused = has_node("Facility") or has_node("Tip")
-		if go_to_hub:
+		if go_to_hub and GameData.tutorial_step == "":  # pas pendant le tutoriel (onglets fermés)
 			show_screen("hub")
 		_show_next_tip()  # un conseil attendait peut-être la fermeture (premier bâtiment)
 	var see := UI.make_button("Voir dans la cité", func(): close.call(true), 24)

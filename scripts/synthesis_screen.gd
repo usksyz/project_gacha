@@ -14,6 +14,8 @@ signal navigate(screen_name: String)
 ## Au-delà de ce nombre de héros trouvés, on demande d'affiner la recherche.
 const MAX_CARDS := 40
 
+## « Retour à la cité » : fermé pendant le tutoriel (sa dernière étape est une synthèse).
+var back_button: Button
 var title_label: Label
 var info_label: Label
 var filter: HeroFilter
@@ -38,9 +40,9 @@ func _ready() -> void:
 	layout.add_theme_constant_override("separation", 12)
 	margin.add_child(layout)
 
-	var back := UI.make_button("← Retour à la cité", func(): navigate.emit("hub"), 22)
-	back.custom_minimum_size.y = 64
-	layout.add_child(back)
+	back_button = UI.make_button("← Retour à la cité", func(): navigate.emit("hub"), 22)
+	back_button.custom_minimum_size.y = 64
+	layout.add_child(back_button)
 	title_label = UI.make_label("", 28)
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(title_label)
@@ -94,6 +96,7 @@ func _refresh() -> void:
 		grid.remove_child(child)
 		child.queue_free()
 	hint_label.text = ""
+	back_button.disabled = GameData.tutorial_step != ""
 
 	if not "synthese" in GameData.buildings:
 		title_label.text = "La chambre de synthèse n'est pas construite."
@@ -247,6 +250,7 @@ func _do_synthesis() -> void:
 		sacrifices = []
 		_refresh()
 		if not lines.is_empty():
+			GameData.show_tutorial_tip()  # (tutoriel) sa fin, s'il vient de se terminer
 			GameData.show_tip("mort"), 26)  # première mort (un sacrifice en est une)
 	ok.custom_minimum_size.y = 90
 	box.add_child(ok)
