@@ -16,14 +16,15 @@ extends GameHeroes
 
 const MENTAL_MAX := 100.0
 
-## Pertes à la fin d'un combat de la Tour (pour chaque héros qui y a survécu).
-const MENTAL_LOSS_WOUNDS := 12.0       # blessures : jusqu'à ceci, selon la part de vie perdue à la fin
-const MENTAL_LOSS_BLEEDING := 4.0      # a saigné pendant le combat
-const MENTAL_LOSS_BOSS := 8.0          # étage de boss
-const MENTAL_LOSS_WARNINGS := 6.0      # quête à triple avertissement (défense de la cité)
-const MENTAL_LOSS_ALLY_DEATH := 10.0   # pour chaque allié tombé dans ce combat
+## Pertes pendant un combat de la Tour (battle.gd les applique en direct, d'où la rupture en plein combat).
+const MENTAL_LOSS_WOUNDS := 12.0       # blessures : ceci pour une vie entière perdue (en proportion des coups)
+const MENTAL_LOSS_BLEEDING := 4.0      # se met à saigner (la première fois du combat)
+const MENTAL_LOSS_BOSS := 8.0          # un boss arrive sur le terrain
+const MENTAL_LOSS_WARNINGS := 6.0      # quête à triple avertissement (défense de la cité), au début
+const MENTAL_LOSS_ALLY_DEATH := 10.0   # un allié tombe
+const MENTAL_LOSS_BERSERK := 8.0       # entre en Berserk : la rage use l'esprit
+## Perte à la fin du combat.
 const MENTAL_LOSS_DEFEAT := 10.0       # défaite (ou fuite)
-const MENTAL_LOSS_BERSERK := 8.0       # est entré en Berserk : la rage use l'esprit
 ## Gain d'une victoire (après les pertes du combat).
 const MENTAL_GAIN_VICTORY := 5.0
 ## Synthèse (vue comme une exécution) : chaque héros vivant qui reste perd ceci par héros sacrifié.
@@ -155,16 +156,24 @@ func change_mental(hero: Dictionary, amount: float) -> void:
 
 ## Fait perdre « amount » de santé mentale, moins ce que Calme protège. Renvoie la perte réelle.
 func mental_loss(hero: Dictionary, amount: float) -> float:
-	var guard := minf(1.0, skill_level(hero["skills"], "Calme") * CALM_MENTAL_GUARD_PER_LEVEL)
 	var before := mental(hero)
-	change_mental(hero, -amount * (1.0 - guard))
+	change_mental(hero, -amount * (1.0 - mental_guard(hero["skills"])))
 	return before - mental(hero)
 
 
+## Part des pertes de santé mentale que Calme retire (0 sans Calme, 0,5 au niveau 10).
+func mental_guard(skills: Array) -> float:
+	return minf(1.0, skill_level(skills, "Calme") * CALM_MENTAL_GUARD_PER_LEVEL)
+
+
 ## Efficacité en combat selon la santé mentale : 1.0 (normal) au-dessus de MENTAL_MALUS_START,
-## puis de moins en moins, jusqu'à 1 - MENTAL_MALUS_MAX à 0. Utilisée par battle.gd.
+## puis de moins en moins, jusqu'à 1 - MENTAL_MALUS_MAX à 0.
 func mental_combat_factor(hero: Dictionary) -> float:
-	var value := mental(hero)
+	return mental_factor(mental(hero))
+
+
+## La même chose à partir d'une valeur de santé mentale (battle.gd, qui la suit en direct).
+func mental_factor(value: float) -> float:
 	if value >= MENTAL_MALUS_START:
 		return 1.0
 	return 1.0 - MENTAL_MALUS_MAX * (1.0 - value / MENTAL_MALUS_START)
@@ -186,6 +195,30 @@ func disobey_chance(mental_value: float) -> float:
 	return DISOBEY_MAX * (1.0 - mental_value / DISOBEY_START)
 
 
+## Rupture (cahier, onglet « Personnalité », section 2) : quand la santé mentale d'un héros tombe à 0
+## pendant un combat (une fois par combat), son esprit lâche. Le plus souvent, effondrement : il panique
+## PANIC_SECONDS secondes (il fuit, ou frappe au hasard, alliés compris) et ébranle ses alliés proches.
+## Plus rarement, éveil : l'éveil des compétences, et sa santé mentale remonte à RUPTURE_AWAKEN_MENTAL.
+const RUPTURE_AWAKEN_CHANCE := 0.15
+const BRAVE_AWAKEN_CHANCE := 0.25      # Courageux
+const RUPTURE_AWAKEN_MENTAL := 30.0
+const PANIC_SECONDS := 6.0
+const PANIC_FLEE_CHANCE := 0.5         # sinon, il frappe au hasard
+const COWARD_FLEE_CHANCE := 0.8        # Lâche
+const PANIC_RADIUS := 3.0              # en cases : les alliés aussi proches sont ébranlés...
+const PANIC_SPREAD_LOSS := 8.0         # ... de tant de santé mentale
+
+
+## Chance qu'une rupture soit un éveil (sinon un effondrement).
+func rupture_awaken_chance(hero: Dictionary) -> float:
+	return BRAVE_AWAKEN_CHANCE if has_trait(hero, "Courageux") else RUPTURE_AWAKEN_CHANCE
+
+
+## Chance qu'un héros qui s'effondre fuie (sinon il frappe au hasard).
+func panic_flee_chance(hero: Dictionary) -> float:
+	return COWARD_FLEE_CHANCE if has_trait(hero, "Lâche") else PANIC_FLEE_CHANCE
+
+
 ## Texte court de l'état d'esprit (fiche du héros).
 func mental_text(hero: Dictionary) -> String:
 	var value := mental(hero)
@@ -198,40 +231,17 @@ func mental_text(hero: Dictionary) -> String:
 	return "au bord de la rupture"
 
 
-## Fin d'un combat de la Tour, pour un héros qui a survécu : ses pertes (blessures, saignement, boss,
-## avertissements, alliés tombés, défaite, Berserk), puis le gain de la victoire. Ses traits agissent
-## (Courageux, Lâche, Protecteur) et peuvent se révéler ; les révélations vont dans « news ».
-## « fighter » : ce qu'il était dans le combat (battle.gd) ; « dead_allies » : héros tombés.
+## Fin d'un combat de la Tour, pour un héros qui a survécu. Pendant le combat, battle.gd a suivi sa santé
+## mentale en direct (blessures, saignement, boss, avertissements, alliés tombés, Berserk, rupture) et
+## noté ce qui s'est passé dans fighter["mind_news"] (traits révélés, ruptures) : on reprend tout ça,
+## puis la perte de la défaite et le gain de la victoire. Les annonces vont dans « news ».
 ## Renvoie le texte « Han : santé mentale 100 → 84 » (ou "" si rien n'a changé).
-func mental_after_battle(hero: Dictionary, fighter: Dictionary, quest: Dictionary, boss: bool,
-		dead_allies: int, victory: bool, news: Array) -> String:
-	news.append_array(fighter.get("trait_news", []))  # traits révélés pendant le combat (Loyal...)
+func mental_after_battle(hero: Dictionary, fighter: Dictionary, victory: bool, news: Array) -> String:
+	news.append_array(fighter["mind_news"])
 	var before := mental(hero)
-	var loss := MENTAL_LOSS_WOUNDS * (1.0 - clampf(float(fighter["hp"]) / fighter["max_hp"], 0.0, 1.0))
-	if fighter["has_bled"]:
-		loss += MENTAL_LOSS_BLEEDING
-	if boss:
-		var boss_loss := MENTAL_LOSS_BOSS
-		if has_trait(hero, "Courageux"):
-			boss_loss *= BRAVE_BOSS_FACTOR
-			_trait_acts(hero, "Courageux", news)
-		if has_trait(hero, "Lâche"):
-			boss_loss *= COWARD_BOSS_FACTOR
-			_trait_acts(hero, "Lâche", news)
-		loss += boss_loss
-	if quest.get("warnings", 0) > 0:
-		loss += MENTAL_LOSS_WARNINGS
-	if dead_allies > 0:
-		var death_loss := MENTAL_LOSS_ALLY_DEATH * dead_allies
-		if has_trait(hero, "Protecteur"):
-			death_loss *= PROTECTOR_DEATH_FACTOR
-			_trait_acts(hero, "Protecteur", news)
-		loss += death_loss
+	hero["mental"] = clampf(fighter["mental"], 0.0, MENTAL_MAX)
 	if not victory:
-		loss += MENTAL_LOSS_DEFEAT
-	if fighter["berserk"]:
-		loss += MENTAL_LOSS_BERSERK
-	mental_loss(hero, loss)
+		mental_loss(hero, MENTAL_LOSS_DEFEAT)
 	if victory:
 		change_mental(hero, MENTAL_GAIN_VICTORY)
 	# Avec le temps, on apprend à connaître un héros : un trait caché se révèle tous les quelques combats.

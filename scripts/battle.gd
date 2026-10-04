@@ -165,6 +165,9 @@ var events: Array[Dictionary] = []
 ## "text": « -12 », « esquive ! », « +20 »..., "crit": bool}.
 var effects: Array[Dictionary] = []
 
+## Fenêtres système à afficher pendant le combat (ruptures) : {"t", "title", "lines": [textes], "danger"}.
+var alerts: Array[Dictionary] = []
+
 ## Moment où le compte à rebours a démarré (-1 : pas encore). En survie, il attend le premier
 ## contact avec les ennemis (premier coup donné ou reçu) ; sinon, il démarre tout de suite.
 var clock_start := 0.0
@@ -179,6 +182,8 @@ var duration := 0.0
 var _grid := AStarGrid2D.new()
 ## Moment où chaque place d'ennemi s'est libérée (pour faire venir un renfort après un délai).
 var _free_since := {}
+## Vrai une fois que les héros ont vu un boss arriver (le stress du boss ne compte qu'une fois).
+var _boss_seen := false
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
@@ -200,6 +205,10 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 func start() -> void:
 	_build_map()
 	_place_units()
+	# Défense de la cité : le triple avertissement pèse sur les esprits dès le début.
+	if quest.get("warnings", 0) > 0:
+		for hero in heroes:
+			_stress(hero, GameData.MENTAL_LOSS_WARNINGS)
 
 
 ## Fait avancer le combat d'un pas (TICK secondes).
@@ -274,7 +283,7 @@ func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 ## (GameData.disobey_chance), puis il boude : il ignore tous les ordres pendant DISOBEY_SULK secondes.
 ## Loyal réduit le risque ; quand c'est sa loyauté qui le fait obéir, le trait se révèle.
 func _obeys(hero: Dictionary) -> bool:
-	if time < hero["sulk_until"]:
+	if time < hero["sulk_until"] or panicking(hero):
 		_effect("refuse", hero, hero, "Non !", false)
 		return false
 	var chance := GameData.disobey_chance(hero["mental"])
@@ -289,10 +298,18 @@ func _obeys(hero: Dictionary) -> bool:
 		return false
 	if loyal and roll < chance:
 		# Sans sa loyauté, il aurait refusé.
-		var line := GameData.reveal_trait(hero["source"], "Loyal")
-		if line != "":
-			hero["trait_news"].append(line)
+		if _reveal(hero, "Loyal"):
 			_log("%s obéit malgré la peur : il est loyal." % hero["name"], "disobey")
+	return true
+
+
+## Un trait du héros agit : il se révèle s'il était caché (annonce gardée pour la fin du combat).
+## Renvoie vrai s'il vient d'être révélé.
+func _reveal(fighter: Dictionary, trait_name: String) -> bool:
+	var line := GameData.reveal_trait(fighter["source"], trait_name)
+	if line == "":
+		return false
+	fighter["mind_news"].append(line)
 	return true
 
 
@@ -344,8 +361,6 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 	var max_hp := roundi(stats["hp"] * (1.0 + GameData.skill_level(skills, "Volonté de fer") * GameData.IRON_WILL_HP_PER_LEVEL))
 	var crit_bonus := GameData.skill_level(skills, "Coup précis") * GameData.PRECISE_STRIKE_CRIT_PER_LEVEL \
 		+ GameData.skill_level(skills, "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL
-	# Santé mentale basse : le héros se bat moins bien (attaque et défense, voir GameData.mental_combat_factor).
-	var mental_factor := GameData.mental_combat_factor(source) if is_hero else 1.0
 	var reach := RANGED_RANGE if fighter_class in ["Archer", "Mage", "Soigneur"] else MELEE_RANGE
 	if not gear.is_empty():
 		reach = gear["reach"]
@@ -366,8 +381,9 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"skills": source.get("skills", []).duplicate(true),
 		"hp": max_hp,
 		"max_hp": max_hp,
-		"atk": roundi((stats["atk"] + gear.get("atk", 0)) * mental_factor),
-		"def": roundi((stats["def"] + gear.get("def", 0)) * mental_factor),
+		# Attaque et défense sans la santé mentale : elle compte à chaque coup (voir _mind).
+		"atk": stats["atk"] + gear.get("atk", 0),
+		"def": stats["def"] + gear.get("def", 0),
 		"spd": stats["spd"],
 		"crit": stats["crit"] + gear.get("crit", 0.0) + crit_bonus,
 		"second_wind_used": false,  # Second souffle : une seule fois par combat
@@ -404,9 +420,16 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"element": source.get("element", "Feu" if fighter_class == "Mage" else ""),
 		"kills": [],               # ennemis achevés : [{"name", "boss"}] (pour Tueur de gobelins)
 		"took_fire": false,        # a subi des dégâts de feu (pour Résistance aux flammes)
-		"mental": GameData.mental(source) if is_hero else GameData.MENTAL_MAX,  # santé mentale au début du combat
+		# Santé mentale, suivie en direct (voir _stress) ; recopiée sur le héros à la fin du combat.
+		"mental": GameData.mental(source) if is_hero else GameData.MENTAL_MAX,
 		"sulk_until": 0.0,         # a refusé un ordre : ignore les ordres jusqu'à ce moment
-		"trait_news": [],          # traits révélés pendant le combat (Loyal), pour l'écran de fin
+		"ruptured": false,         # rupture déjà arrivée dans ce combat (une seule fois)
+		"panic": "",               # effondrement en cours : "flee" (fuit) ou "frenzy" (frappe au hasard)
+		"panic_until": 0.0,        # fin de la panique
+		"panic_target": -1,        # frénésie : la cible du moment (n'importe qui)
+		"panic_retarget": 0.0,     # frénésie : moment où il change de cible
+		"flee_to": Vector2.ZERO,   # fuite : là où il court
+		"mind_news": [],           # traits révélés, ruptures : pour la fenêtre « Personnalité » de fin
 	}
 
 
@@ -537,6 +560,7 @@ func _line_of_sight(from: Vector2, to: Vector2) -> bool:
 
 func _step() -> void:
 	_call_reinforcements()
+	_check_boss_arrival()
 	var order := _alive(units)
 	order.shuffle()
 	for unit in order:
@@ -608,6 +632,14 @@ func _check_end() -> bool:
 func _think(unit: Dictionary) -> void:
 	var foes := _alive(enemies if unit["is_hero"] else heroes)
 	var allies := _alive(heroes if unit["is_hero"] else enemies)
+
+	# Un héros en pleine panique (rupture) n'écoute plus rien.
+	if unit["is_hero"] and unit["panic"] != "":
+		if panicking(unit):
+			_panic_think(unit, foes)
+			return
+		unit["panic"] = ""
+		_log("%s reprend ses esprits." % _name_with_stars(unit), "disobey")
 
 	# Un ordre du joueur passe avant tout.
 	if unit["is_hero"] and _follow_order(unit, foes):
@@ -841,7 +873,8 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Esprit combatif : sous la moitié de sa vie, l'attaquant frappe plus fort.
 	if attacker["hp"] * 2 < attacker["max_hp"]:
 		power *= 1.0 + GameData.skill_level(attacker["skills"], "Esprit combatif") * GameData.FIGHTING_SPIRIT_PER_LEVEL
-	var raw: float = attacker["atk"] * power * randf_range(0.9, 1.1) - target["def"] * 0.5
+	# Santé mentale basse : l'attaquant frappe moins fort, la cible se défend moins bien (voir _mind).
+	var raw: float = attacker["atk"] * _mind(attacker) * power * randf_range(0.9, 1.1) - target["def"] * _mind(target) * 0.5
 	# Sort de feu : Résistance aux flammes de la cible (80 % au plus).
 	if kind == "spell" and attacker["element"] == "Feu":
 		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
@@ -858,6 +891,7 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	target["hp"] -= amount
 	attacker["contribution"] += amount
 	if target["hp"] > 0:
+		_stress_wound(target, amount)
 		if critical or amount >= target["max_hp"] * BLEED_HIT:
 			_start_bleed(attacker, target)
 		_check_critical_state(target)
@@ -869,7 +903,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 		return
 	healer["cooldown"] = _attack_time(healer)
 	healer["mana"] -= HEAL_MANA_COST
-	var amount := roundi(healer["atk"] * 2.0 * randf_range(0.9, 1.1))
+	var amount := roundi(healer["atk"] * _mind(healer) * 2.0 * randf_range(0.9, 1.1))
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
 	healer["contribution"] += amount
@@ -893,6 +927,8 @@ func _start_bleed(attacker: Dictionary, target: Dictionary) -> void:
 	bleed["cause"] = "%s causé%s par %s (niv. %d)" % [
 		"d'une hémorragie" if heavy else "d'un saignement", "e" if heavy else "",
 		attacker["name"], attacker["level"]]
+	if not target["has_bled"]:
+		_stress(target, GameData.MENTAL_LOSS_BLEEDING)  # voir son propre sang couler
 	target["has_bled"] = true
 	var who := _name_with_stars(target)
 	if heavy:
@@ -920,6 +956,7 @@ func _bleed_tick(unit: Dictionary) -> void:
 	if unit["hp"] <= 0:
 		_announce_fall(unit, "mort " + bleed["cause"])
 		return
+	_stress_wound(unit, amount)
 	_check_critical_state(unit)
 	if bleed["ticks"] == 0:
 		bleed["heavy"] = false
@@ -1016,6 +1053,7 @@ func _enter_berserk(fighter: Dictionary) -> void:
 	fighter["crit"] += bonus / 200.0
 	_log("%s est entré en mode Berserk ! Une pression écrasante envahit le champ de bataille." \
 		% _name_with_stars(fighter), "berserk")
+	_stress(fighter, GameData.MENTAL_LOSS_BERSERK)  # la rage use l'esprit
 
 
 ## Apprend une compétence au niveau 1, ou la fait monter d'un niveau, et l'annonce.
@@ -1101,7 +1139,128 @@ func _announce_fall(fighter: Dictionary, cause: String) -> void:
 		_log("%s est à terre, mais se relèvera." % fighter["name"])
 	else:
 		fighter["killer"] = cause
+		fighter["panic"] = ""
 		_log("%s tombe au combat !" % fighter["name"])
+		# Voir un allié tomber ébranle les autres (Protecteur : deux fois plus).
+		for ally in _alive(heroes):
+			var loss := GameData.MENTAL_LOSS_ALLY_DEATH
+			if GameData.has_trait(ally["source"], "Protecteur"):
+				loss *= GameData.PROTECTOR_DEATH_FACTOR
+				_reveal(ally, "Protecteur")
+			_stress(ally, loss)
+
+
+# ---------------------------------------------------------------------------
+# Santé mentale en direct, rupture
+# ---------------------------------------------------------------------------
+
+## Efficacité selon la santé mentale du moment (1.0 pour les ennemis ; voir GameData.mental_factor).
+func _mind(unit: Dictionary) -> float:
+	return GameData.mental_factor(unit["mental"]) if unit["is_hero"] else 1.0
+
+
+## Un héros perd de la santé mentale (moins avec Calme). À 0, c'est la rupture (une fois par combat).
+func _stress(fighter: Dictionary, amount: float) -> void:
+	if not fighter["is_hero"] or fighter["hp"] <= 0 or amount <= 0.0:
+		return
+	fighter["mental"] = maxf(0.0, fighter["mental"] - amount * (1.0 - GameData.mental_guard(fighter["skills"])))
+	if fighter["mental"] <= 0.0 and not fighter["ruptured"]:
+		_rupture(fighter)
+
+
+## Blessure : perte proportionnelle à la vie perdue (MENTAL_LOSS_WOUNDS pour une vie entière).
+func _stress_wound(fighter: Dictionary, amount: int) -> void:
+	_stress(fighter, GameData.MENTAL_LOSS_WOUNDS * float(amount) / fighter["max_hp"])
+
+
+## Un boss arrive sur le terrain : chaque héros debout encaisse le choc (Courageux moitié, Lâche double).
+func _check_boss_arrival() -> void:
+	if _boss_seen or not enemies.any(func(e): return e["boss"] and e["present"] and e["hp"] > 0):
+		return
+	_boss_seen = true
+	for hero in _alive(heroes):
+		var loss := GameData.MENTAL_LOSS_BOSS
+		if GameData.has_trait(hero["source"], "Courageux"):
+			loss *= GameData.BRAVE_BOSS_FACTOR
+			_reveal(hero, "Courageux")
+		if GameData.has_trait(hero["source"], "Lâche"):
+			loss *= GameData.COWARD_BOSS_FACTOR
+			_reveal(hero, "Lâche")
+		_stress(hero, loss)
+
+
+## La santé mentale d'un héros vient de tomber à 0 : éveil (rare) ou effondrement (le plus souvent).
+func _rupture(fighter: Dictionary) -> void:
+	fighter["ruptured"] = true
+	var who := _name_with_stars(fighter)
+	var source: Dictionary = fighter["source"]
+	if randf() < GameData.rupture_awaken_chance(source):
+		# Éveil : le « craquage positif ». L'esprit se brise... et se reforge.
+		if GameData.has_trait(source, "Courageux"):
+			_reveal(fighter, "Courageux")
+		fighter["mental"] = GameData.RUPTURE_AWAKEN_MENTAL
+		_log("Rupture ! L'esprit de %s se brise... et se reforge. Éveil !" % who, "awaken")
+		_awaken(fighter, float(fighter["hp"]) / fighter["max_hp"])
+		_alert("Rupture : éveil", [
+			"La santé mentale de %s est tombée à 0." % who,
+			"Au lieu de s'effondrer, il s'éveille ! Sa santé mentale remonte à %d." % GameData.RUPTURE_AWAKEN_MENTAL,
+		])
+		fighter["mind_news"].append("%s : rupture en combat, mais il s'est éveillé." % fighter["name"])
+		return
+
+	# Effondrement : panique (fuite ou frénésie), et la peur se propage aux alliés proches.
+	var flee := randf() < GameData.panic_flee_chance(source)
+	if flee and GameData.has_trait(source, "Lâche"):
+		_reveal(fighter, "Lâche")
+	fighter["panic"] = "flee" if flee else "frenzy"
+	fighter["panic_until"] = time + GameData.PANIC_SECONDS
+	fighter["panic_target"] = -1
+	fighter["order"] = {}
+	fighter["path"] = PackedVector2Array()
+	# Il court vers le bas de la carte, loin des ennemis qui arrivent par le haut.
+	fighter["flee_to"] = _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
+	var what := "Il s'enfuit, terrifié." if flee else "Il frappe au hasard, amis comme ennemis !"
+	_log("Rupture ! %s s'effondre. %s" % [who, what], "berserk")
+	_effect("refuse", fighter, fighter, "!!!", false)
+	_alert("Rupture : effondrement", [
+		"La santé mentale de %s est tombée à 0. Il panique pendant %d secondes." % [who, GameData.PANIC_SECONDS],
+		what,
+		"Ses alliés proches sont ébranlés.",
+	], true)
+	fighter["mind_news"].append("%s : rupture en combat, il s'est effondré." % fighter["name"])
+	for ally in _alive(heroes):
+		if ally["id"] != fighter["id"] and ally["pos"].distance_to(fighter["pos"]) <= GameData.PANIC_RADIUS:
+			_stress(ally, GameData.PANIC_SPREAD_LOSS)
+
+
+## En pleine panique (effondrement) ?
+func panicking(unit: Dictionary) -> bool:
+	return unit["panic"] != "" and time < unit["panic_until"]
+
+
+## Ce que fait un héros en panique : il fuit, ou il frappe n'importe qui à sa portée (même un allié).
+func _panic_think(unit: Dictionary, foes: Array) -> void:
+	if unit["panic"] == "flee":
+		_move_towards(unit, unit["flee_to"])
+		return
+	if unit["panic_target"] < 0 or time >= unit["panic_retarget"] or units[unit["panic_target"]]["hp"] <= 0:
+		# Une nouvelle cible au hasard parmi les trois plus proches, amis ou ennemis.
+		var others := _alive(units).filter(func(u): return u["id"] != unit["id"])
+		if others.is_empty():
+			return
+		others.sort_custom(func(a, b): return unit["pos"].distance_to(a["pos"]) < unit["pos"].distance_to(b["pos"]))
+		unit["panic_target"] = others.slice(0, 3).pick_random()["id"]
+		unit["panic_retarget"] = time + 1.5
+	var target: Dictionary = units[unit["panic_target"]]
+	if _in_reach(unit, target, unit["reach"]):
+		_try_attack(unit, target, foes)
+	else:
+		_move_towards(unit, target["pos"])
+
+
+## Une fenêtre système, affichée par l'écran de combat.
+func _alert(title: String, lines: Array, danger := false) -> void:
+	alerts.append({"t": time, "title": title, "lines": lines, "danger": danger})
 
 
 ## Nom suivi des étoiles, comme dans les fenêtres système : « Hansen (★) ».

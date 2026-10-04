@@ -359,8 +359,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels})
 			# Santé mentale : ce que le combat lui a coûté (voir personality.gd).
-			var mental_line := mental_after_battle(hero, fighter, battle.quest, is_boss_floor(floor_number),
-				report["dead"].size(), battle.victory, report["mental"])
+			var mental_line := mental_after_battle(hero, fighter, battle.victory, report["mental"])
 			if mental_line != "":
 				report["mental"].append(mental_line)
 	# Les ambitieux laissés à la cité stressent (voir personality.gd).

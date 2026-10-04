@@ -68,6 +68,11 @@ var selected_id := -1
 ## Prochain événement du journal à afficher, et premier effet encore visible.
 var next_event := 0
 var first_effect := 0
+## Prochaine fenêtre système du combat à afficher (Battle.alerts), et la colonne où elles s'empilent.
+var next_alert := 0
+var alert_box: VBoxContainer
+## Durée d'affichage d'une fenêtre système de rupture (secondes réelles ; le combat continue dessous).
+const ALERT_TIME := 4.0
 
 
 func _ready() -> void:
@@ -81,6 +86,16 @@ func _ready() -> void:
 	layout.add_theme_constant_override("separation", 8)
 	margin.add_child(layout)
 
+	# Fenêtres système de rupture : posées par-dessus le haut du combat, sans bloquer les touchers.
+	alert_box = VBoxContainer.new()
+	alert_box.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	alert_box.offset_left = 40
+	alert_box.offset_right = -40
+	alert_box.offset_top = 150
+	alert_box.add_theme_constant_override("separation", 10)
+	alert_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(alert_box)
+
 
 ## Lance l'affichage d'un combat déjà préparé (battle.start() a été appelée).
 func play(new_battle: Battle, title: String) -> void:
@@ -88,6 +103,9 @@ func play(new_battle: Battle, title: String) -> void:
 	accumulator = 0.0
 	next_event = 0
 	first_effect = 0
+	next_alert = 0
+	for old in alert_box.get_children():
+		old.queue_free()
 	selected_id = -1
 	paused = false
 	_build(title)
@@ -179,6 +197,9 @@ func _advance() -> void:
 	while next_event < battle.events.size():
 		_show_event(battle.events[next_event])
 		next_event += 1
+	while next_alert < battle.alerts.size():
+		_show_alert(battle.alerts[next_alert])
+		next_alert += 1
 	if selected_id >= 0 and battle.units[selected_id]["hp"] <= 0:
 		selected_id = -1  # le héros choisi est tombé
 		_update_hint()
@@ -221,6 +242,8 @@ func _draw_portraits() -> void:
 		var border := color
 		if hero["berserk"]:
 			border = Color("ff4040")
+		if battle.panicking(hero):
+			border = Color("b0b0c8")
 		if hero["id"] == selected_id:
 			border = ORDER_COLOR
 		portraits.draw_rect(box, border, false, 3.0 if hero["id"] == selected_id else 2.0)
@@ -243,6 +266,12 @@ func _draw_portraits() -> void:
 			_draw_bar(mana_bar, hero["mana"] / hero["max_mana"], MANA_COLOR)
 			portraits.draw_string(font, mana_bar.position + Vector2(0, 10), "%d / %d" % [int(hero["mana"]), hero["max_mana"]],
 				HORIZONTAL_ALIGNMENT_CENTER, mana_bar.size.x, 11, Color.WHITE)
+		# Santé mentale du moment : une fine barre tout en bas (« PANIQUE » pendant un effondrement).
+		var mind_bar := Rect2(box.position + Vector2(6, box.size.y - 9), Vector2(box.size.x - 12, 5))
+		_draw_bar(mind_bar, hero["mental"] / GameData.MENTAL_MAX, UI.mental_color(hero["mental"]))
+		if battle.panicking(hero):
+			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "PANIQUE", HORIZONTAL_ALIGNMENT_CENTER,
+				mind_bar.size.x, 13, Color("e0e0ff"))
 
 
 func _draw_bar(rect: Rect2, ratio: float, color: Color) -> void:
@@ -284,6 +313,20 @@ func _update_clock() -> void:
 func _format_time(seconds: float) -> String:
 	var total := maxi(0, ceili(seconds))
 	return "%d:%02d" % [total / 60, total % 60]
+
+
+## Une fenêtre système (rupture) : elle reste ALERT_TIME secondes puis s'efface ; le combat continue.
+func _show_alert(alert: Dictionary) -> void:
+	var window := UI.make_system_window(alert["title"], alert["lines"], alert["danger"])
+	window.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in window.find_children("*", "Control", true, false):
+		child.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	alert_box.add_child(window)
+	Settings.vibrate(300)
+	var tween := window.create_tween()
+	tween.tween_interval(ALERT_TIME)
+	tween.tween_property(window, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(window.queue_free)
 
 
 func _show_event(event: Dictionary) -> void:
