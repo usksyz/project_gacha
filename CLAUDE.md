@@ -76,13 +76,22 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
   (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Composer une équipe
   (« Terminé » avec au moins un héros ; « Entrer dans la Tour » fermé avant). 3. Gagner l'étage 1 (défaite :
-  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 4. Une
-  synthèse (« Retour à la cité » fermé) ; moins de 2 héros vivants : le tutoriel s'arrête (`end_tutorial`).
+  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 4. Retour à
+  la cité (« Continuer » : `DungeonsScreen.navigate`) : la chambre se construit sous les yeux du Maître
+  (demande du porteur du projet : `HubCity3D` la laisse hors de la cité tant que « tuto_synthese » n'est pas vu,
+  puis joue l'animation ; signal `construction_finished` → fenêtre de l'étape, `hub_screen.gd`), une flèche
+  « Touche ici » la montre (`_place_tutorial_pointer`) et il faut la toucher (les autres lieux, les boutons du
+  hub et les héros ne répondent pas). Ancien plan 2D : la fenêtre tout de suite. Puis une synthèse ; moins de
+  2 héros vivants : le tutoriel s'arrête (`end_tutorial`).
   Passage d'étape : `advance_tutorial(étape)` (signal `tutorial_changed`). `main.gd` : bandeau en haut
-  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS`, aucun pendant la
-  synthèse), reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), chambre
-  de synthèse ouverte en fermant « tuto_synthese », hub en fermant « tuto_fin ». Mode dev : « Passer le
-  tutoriel » (`dev_skip_tutorial`).
+  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS` ; synthèse : le hub),
+  reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), hub en fermant
+  « tuto_fin ». Mode dev : « Passer le tutoriel » (`dev_skip_tutorial`).
+- Police : la police de Godot n'a pas ★ ← → ♥ ♡ ◆ ▶ ∞ ✓, et sur le web aucune police de l'appareil ne prend
+  le relais (carrés vides sur le téléphone). `main.gd` (`_add_symbol_font`) ajoute DejaVu Sans
+  (`assets/fonts`, licence libre) en secours de la police par défaut. Un nouveau symbole : vérifier qu'il
+  est dans DejaVu Sans. Textes longs : toujours `autowrap_mode` (un texte sur une ligne trop large élargit
+  tout l'écran sur le téléphone, dont les lettres sont un peu plus larges que sur PC).
 - Poids de la mort : `UI.make_death_window(hero, memorial)` (portrait `FramedHeroCard.HeroPortrait`, nom,
   étoiles, classe et niveau, cause, traits révélés, liens, puis « Y a perdu un ami / un frère d'armes » pour
   chaque ami ou frère d'armes vivant) remplace l'ancienne fenêtre « Un héros est tombé » des rapports de combat,
@@ -156,6 +165,13 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
   part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture,
   Querelleur, Mauvais et Protecteur en combat (plus bas) : les huit traits ont leurs effets.
+  Peur (demande du porteur du projet : « les forts survivent, les faibles meurent ») : un héros 1 étoile (pas
+  secret) dans ses `FEAR_FIGHTS` (3) premiers combats peut prendre peur (`can_be_scared`, `fear_chance`) à sa
+  première blessure (30 %), à la chute d'un allié à moins de `FEAR_SIGHT` cases (50 %), à l'arrivée d'un boss
+  (50 %) ; Lâche x2, Courageux /2 ; une fois par combat (`Battle._scare`). Il fuit `FEAR_SECONDS` (5 s) comme
+  un effondrement (sourd aux ordres), -`FEAR_MENTAL_LOSS` ; tout fuyard (peur ou effondrement) encaisse
+  x`FLEEING_DAMAGE_TAKEN` (2) et les monstres le préfèrent (`PREY_BONUS`). Fenêtre « Peur » (la première du
+  combat), bulle « Au secours ! », ligne dans « Personnalité » en fin de combat.
   Protecteur en combat (`Battle._ward_of`, `_guardian_for`, `_cover`) : un allié à moins de `PROTECT_RANGE`
   (5) cases sous `PROTECT_HP` (30 %) de vie → il va à son côté ; à moins de `PROTECT_GUARD_RANGE` (1,6), il
   encaisse `PROTECT_SHARE` (30 %) de ses coups, quitte à tomber (« tombé en protégeant X »).
@@ -363,6 +379,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   coup échangé : `quest["wait_contact"]`, `Battle.clock_time()`), défense de la cité tous les 10 étages
   (remparts, triple avertissement), limite de tours, annonce du donjon journalier après l'étage 5 : fait.
   Au combat, 6 ennemis au plus à la fois, les autres arrivent en renfort.
+  Premiers étages plus durs (demande du porteur du projet) : jusqu'à l'étage `EARLY_FLOORS` (3), au moins
+  `FLOOR_MIN_MONSTERS` (5) monstres et `FLOOR_MIN_ENEMY_TYPES` (2) sortes (gobelins, loups noirs) ; avant :
+  2 gobelins à l'étage 1. Simulation (équipe du tutoriel, sans ordres) : étage 1 gagné 99 %, environ un mort
+  par combat (presque toujours un 1 étoile, une fois sur deux après une peur). Étages 4 et plus inchangés.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
