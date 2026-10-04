@@ -103,28 +103,40 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   possible, pas pour un héros parti), fenêtre de choix, puis fenêtre système qui annonce la nouvelle classe.
   Rien de neuf dans la sauvegarde (la classe était déjà enregistrée). Reste : classes supérieures (Grand
   chevalier...), Maîtrise de la dague (pas encore apprenable : la voie du voleur passe par l'arc).
-- Personnalité (cahier, onglet « Personnalité », sections 1 et 3 ; `personality.gd`, chiffres provisoires).
-  Santé mentale `hero["mental"]` (0 à `MENTAL_MAX` 100, départ 100, nombre à virgule) : baisse à la fin d'un
-  combat de la Tour (blessures selon la vie perdue, saignement, boss, quête à avertissements, chaque allié
-  tombé, défaite, Berserk : `mental_after_battle`) et pour tous les vivants à chaque synthèse
-  (`MENTAL_LOSS_SYNTHESIS` par sacrifié) ; remonte avec la victoire et à la cité par heure de temps réel
-  (repos `MENTAL_REST_PER_HOUR`, travail = poste ou entraînement `MENTAL_WORK_PER_HOUR`, rien si parti :
+- Personnalité (cahier, onglet « Personnalité », sections 1 à 3 ; `personality.gd`, chiffres provisoires).
+  Santé mentale `hero["mental"]` (0 à `MENTAL_MAX` 100, départ 100, nombre à virgule). En combat de la Tour,
+  battle.gd la suit en direct (`fighter["mental"]`, `Battle._stress`) : blessures (`MENTAL_LOSS_WOUNDS` pour
+  une vie entière perdue, à chaque coup), premier saignement, arrivée d'un boss, quête à avertissements (au
+  début), allié tombé, Berserk ; à la fin (`mental_after_battle`), défaite et victoire. Baisse aussi pour tous
+  les vivants à chaque synthèse (`MENTAL_LOSS_SYNTHESIS` par sacrifié) ; remonte à la cité par heure de temps
+  réel (repos `MENTAL_REST_PER_HOUR`, travail = poste ou entraînement `MENTAL_WORK_PER_HOUR`, rien si parti :
   `update_mental()`, appelée toutes les 5 s et avant chaque sauvegarde, `mental_updated_at` sauvegardé).
-  Calme réduit les pertes (5 % par niveau). Sous `MENTAL_MALUS_START` (60), attaque et défense baissent en
-  combat jusqu'à -30 % à 0 (`mental_combat_factor`, battle.gd). Barre sur la fiche et les cartes d'équipe
-  (`UI.add_mental_bar`, `TeamSlots` et grilles de l'écran Donjons), fenêtre « Personnalité » en fin de combat.
+  Calme réduit les pertes (5 % par niveau, `mental_guard`). Sous `MENTAL_MALUS_START` (60), attaque et
+  défense baissent en combat jusqu'à -30 % à 0 (`mental_factor`, appliqué à chaque coup : `Battle._mind`).
+  Barre sur la fiche, les cartes d'équipe (`UI.add_mental_bar`, `TeamSlots` et grilles de l'écran Donjons)
+  et l'encart de l'équipe en combat ; fenêtre « Personnalité » en fin de combat (`fighter["mind_news"]`).
   Traits `hero["traits"]` ([{"name", "known"}]) : 1 ou 2 tirés à l'invocation (`roll_traits`, `TRAITS` :
   Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais ; Courageux et Lâche
   incompatibles), « ? » tant qu'ils sont cachés ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
   (5) combats (`hero["fights"]`). Effets branchés : Courageux (moitié) / Lâche (double) face aux boss,
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
-  part dans la Tour à sa place (jamais sous 40).
+  part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture (plus bas).
   Désobéissance : sous `DISOBEY_START` (60), un ordre du Maître en combat peut être refusé (jusqu'à
-  `DISOBEY_MAX` 50 % à 0, `disobey_chance`), puis le héros boude `DISOBEY_SULK` (3 s) ; Loyal divise le
-  risque par deux et se révèle quand il fait obéir (`Battle._obeys`, `fighter["trait_news"]`).
+  `DISOBEY_MAX` 50 % à 0, `disobey_chance`, bulle « Non ! »), puis le héros boude `DISOBEY_SULK` (3 s) ; Loyal
+  divise le risque par deux et se révèle quand il fait obéir (`Battle._obeys`).
+  Rupture (section 2 du cahier) : santé mentale à 0 pendant un combat, une fois par combat (`Battle._rupture`).
+  Effondrement (85 %) : panique `PANIC_SECONDS` (6 s) sans écouter les ordres, fuite vers le bas de la carte
+  (`PANIC_FLEE_CHANCE`, Lâche `COWARD_FLEE_CHANCE`) ou frénésie (frappe au hasard parmi les 3 plus proches,
+  alliés compris) ; les alliés à `PANIC_RADIUS` perdent `PANIC_SPREAD_LOSS`. Éveil (15 %, Courageux 25 %) :
+  `_awaken` de battle.gd, santé mentale à `RUPTURE_AWAKEN_MENTAL` (30). Fenêtre système pendant le combat
+  (`Battle.alerts`, affichée 4 s par `BattleView` sans bloquer). État « En rupture » (`hero["broken"]`) : fin
+  de combat à 0 → `break_hero` (quitte poste et entraînement) jusqu'à `BROKEN_RECOVERY` (50, `change_mental`) ;
+  refuse l'entraînement et les affectations (`accepts_work`, raison dans `last_refusal` ; Paresseux refuse
+  `LAZY_REFUSAL_CHANCE` 20 % même sans rupture) ; fenêtre d'avertissement avant la Tour ; s'il retombe à 0 en
+  combat, mort de stress `STRESS_DEATH_CHANCE` (30 %, pas les immortels).
   Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
-  -20 santé mentale, santé mentale 100. Reste : rupture à 0 (effondrement, éveil, mort par stress), liens
-  entre héros, autres effets des traits, repas de la cafétéria, perte au donjon journalier.
+  -20 santé mentale, santé mentale 100, mettre en rupture. Reste : liens entre héros, autres effets des traits
+  (Querelleur, Mauvais...), repas de la cafétéria, perte au donjon journalier, héros en rupture au donjon journalier.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
