@@ -199,6 +199,12 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 	units.append_array(enemies)
 	for i in units.size():
 		units[i]["id"] = i
+	# Liens entre les héros de l'équipe (voir GameData, personality.gd) : {numéro du pion allié: palier}.
+	for hero in heroes:
+		for ally in heroes:
+			var level := GameData.bond_level(hero["source"], ally["source"])
+			if level > 0:
+				hero["bonds"][ally["id"]] = level
 
 
 ## Prépare le champ de bataille et place tout le monde. À appeler une fois, avant step().
@@ -431,6 +437,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"panic_retarget": 0.0,     # frénésie : moment où il change de cible
 		"flee_to": Vector2.ZERO,   # fuite : là où il court
 		"mind_news": [],           # traits révélés, ruptures : pour la fenêtre « Personnalité » de fin
+		"bonds": {},               # liens avec les autres héros de l'équipe : {numéro du pion: palier}
 	}
 
 
@@ -875,7 +882,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	if attacker["hp"] * 2 < attacker["max_hp"]:
 		power *= 1.0 + GameData.skill_level(attacker["skills"], "Esprit combatif") * GameData.FIGHTING_SPIRIT_PER_LEVEL
 	# Santé mentale basse : l'attaquant frappe moins fort, la cible se défend moins bien (voir _mind).
-	var raw: float = attacker["atk"] * _mind(attacker) * power * randf_range(0.9, 1.1) - target["def"] * _mind(target) * 0.5
+	# Un ami ou un frère d'armes tout près : l'inverse (voir _bond).
+	var raw: float = attacker["atk"] * _mind(attacker) * _bond(attacker) * power * randf_range(0.9, 1.1) \
+		- target["def"] * _mind(target) * _bond(target) * 0.5
 	# Sort de feu : Résistance aux flammes de la cible (80 % au plus).
 	if kind == "spell" and attacker["element"] == "Feu":
 		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
@@ -904,7 +913,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 		return
 	healer["cooldown"] = _attack_time(healer)
 	healer["mana"] -= HEAL_MANA_COST
-	var amount := roundi(healer["atk"] * _mind(healer) * 2.0 * randf_range(0.9, 1.1))
+	var amount := roundi(healer["atk"] * _mind(healer) * _bond(healer) * 2.0 * randf_range(0.9, 1.1))
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
 	healer["contribution"] += amount
@@ -1142,13 +1151,30 @@ func _announce_fall(fighter: Dictionary, cause: String) -> void:
 		fighter["killer"] = cause
 		fighter["panic"] = ""
 		_log("%s tombe au combat !" % fighter["name"])
-		# Voir un allié tomber ébranle les autres (Protecteur : deux fois plus).
+		# Voir un allié tomber ébranle les autres (Protecteur : deux fois plus ; un ami ou un frère d'armes :
+		# bien plus encore, voir BOND_DEATH_FACTOR).
 		for ally in _alive(heroes):
 			var loss := GameData.MENTAL_LOSS_ALLY_DEATH
 			if GameData.has_trait(ally["source"], "Protecteur"):
 				loss *= GameData.PROTECTOR_DEATH_FACTOR
 				_reveal(ally, "Protecteur")
+			var bond: int = ally["bonds"].get(fighter["id"], 0)
+			loss *= GameData.BOND_DEATH_FACTOR[bond]
+			if bond >= GameData.BOND_FRIEND:
+				_log("%s voit tomber son %s %s..." % [ally["name"],
+					"frère d'armes" if bond == GameData.BOND_BROTHERS else "ami", fighter["name"]], "bleed")
 			_stress(ally, loss)
+
+
+## Bonus d'un héros qui se bat à moins de BOND_RANGE cases d'un ami ou d'un frère d'armes
+## (le meilleur lien compte) : 1.05 ou 1.10 ; 1.0 sinon (et pour les ennemis).
+func _bond(unit: Dictionary) -> float:
+	var best := 0.0
+	for ally_id in unit["bonds"]:
+		var ally: Dictionary = units[ally_id]
+		if ally["hp"] > 0 and ally["present"] and unit["pos"].distance_to(ally["pos"]) <= GameData.BOND_RANGE:
+			best = maxf(best, GameData.BOND_FIGHT_BONUS[unit["bonds"][ally_id]])
+	return 1.0 + best
 
 
 # ---------------------------------------------------------------------------

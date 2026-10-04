@@ -220,6 +220,12 @@ const BOND_POINTS_FIGHT := 3.0
 const BOND_POINTS_VICTORY := 2.0
 const HARD_VICTORY_FACTOR := 2.0
 const HARD_VICTORY_HP := 0.5
+## En combat (battle.gd), par palier (inconnus, connaissance, ami, frère d'armes) :
+## - bonus d'attaque et de défense quand un allié lié se bat à moins de BOND_RANGE cases (le meilleur compte) ;
+## - perte de santé mentale à sa mort, multipliée (MENTAL_LOSS_ALLY_DEATH × ceci) : de quoi déclencher une rupture.
+const BOND_FIGHT_BONUS := [0.0, 0.0, 0.05, 0.10]
+const BOND_RANGE := 2.5
+const BOND_DEATH_FACTOR := [1.0, 1.0, 2.0, 3.0]
 
 
 ## La clé d'une paire dans bonds : « 3-7 » (le plus petit numéro d'abord).
