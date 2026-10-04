@@ -98,6 +98,7 @@ func summon(summon_type: String, count: int) -> Array[Dictionary]:
 		var hero := _create_hero(_roll_rarity(summon_type), info["mages"])
 		roster.append(hero)
 		results.append(hero)
+	roll_linked_group(results)  # certains se connaissent peut-être déjà (voir personality.gd)
 	save_game()
 	return results
 

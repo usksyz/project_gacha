@@ -289,6 +289,38 @@ func bonds_after_battle(survivors: Array, victory: bool, hard: bool) -> Array[St
 	return news
 
 
+## Groupes liés (cahier : « les groupes invoqués déjà liés commencent avec un lien élevé ») : quand on
+## invoque plusieurs héros d'un coup, il arrive (LINKED_GROUP_CHANCE) que 2 ou 3 d'entre eux se
+## connaissent déjà : une petite troupe venue ensemble (hero["group"] = son nom). Ils commencent amis.
+## Les noms sont inventés (l'univers du jeu reste original).
+const LINKED_GROUP_CHANCE := 0.2
+const LINKED_GROUP_NAMES := [
+	"la Compagnie de la Lanterne", "les Lames du Gué", "la Bande du Corbeau gris", "les Frères de l'Enclume",
+	"l'Escorte des Marais", "les Veilleurs du Col", "la Troupe du Chardon", "les Chiens de la Brume",
+]
+
+## Le dernier groupe lié formé par une invocation ({"name", "heroes"}, ou {} : aucun), pour l'annoncer.
+var last_linked_group := {}
+
+
+## Invocation de plusieurs héros : avec un peu de chance, 2 ou 3 d'entre eux forment un groupe lié
+## (amis dès le départ). Le groupe va dans last_linked_group. Ne sauvegarde pas.
+func roll_linked_group(summoned: Array) -> void:
+	last_linked_group = {}
+	if summoned.size() < 2 or randf() >= LINKED_GROUP_CHANCE:
+		return
+	var members := summoned.duplicate()
+	members.shuffle()
+	members = members.slice(0, randi_range(2, mini(3, members.size())))
+	var group_name: String = LINKED_GROUP_NAMES.pick_random()
+	for hero in members:
+		hero["group"] = group_name
+	for i in members.size():
+		for j in range(i + 1, members.size()):
+			set_bond_level(members[i], members[j], BOND_FRIEND)
+	last_linked_group = {"name": group_name, "heroes": members}
+
+
 ## Les liens d'un héros (à partir de connaissance), du plus fort au plus faible :
 ## [{"hero": autre héros, "level": palier}]. Les morts y restent.
 func hero_bonds(hero: Dictionary) -> Array[Dictionary]:

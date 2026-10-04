@@ -20,6 +20,7 @@ const VORTEX_COLORS := {
 var pity_label: Label
 var roster_label: Label
 var results_grid: GridContainer
+var group_box: VBoxContainer
 ## Boutons d'invocation : [sorte, nombre, bouton], pour les griser quand on ne peut pas payer.
 var summon_buttons: Array = []
 var reveal_tween: Tween
@@ -65,12 +66,28 @@ func _show_results(heroes: Array[Dictionary]) -> void:
 		results_grid.remove_child(child)
 		child.queue_free()
 
+	for child in group_box.get_children():
+		child.queue_free()
+
 	reveal_tween = create_tween()
 	for hero in heroes:
 		var card := UI.make_card(hero, 104)
 		card.modulate.a = 0.0
 		results_grid.add_child(card)
 		reveal_tween.tween_property(card, "modulate:a", 1.0, 0.15)
+
+	# Un groupe lié : annoncé une fois toutes les cartes retournées.
+	var group: Dictionary = GameData.last_linked_group
+	if not group.is_empty():
+		var names: Array = group["heroes"].map(func(hero): return hero["name"])
+		var who: String = ", ".join(names.slice(0, -1)) + " et " + names[-1]  # « A, B et C »
+		var window := UI.make_system_window("Groupe lié", [
+			"%s se connaissent déjà : ils sont venus ensemble (%s)." % [who, group["name"]],
+			"Ils commencent amis.",
+		])
+		window.modulate.a = 0.0
+		group_box.add_child(window)
+		reveal_tween.tween_property(window, "modulate:a", 1.0, 0.3)
 
 
 func _refresh_labels() -> void:
@@ -129,6 +146,9 @@ func _build_ui() -> void:
 	results_grid.add_theme_constant_override("h_separation", 8)
 	results_grid.add_theme_constant_override("v_separation", 8)
 	results_area.add_child(results_grid)
+	# Groupe lié tiré avec cette invocation (voir GameData.roll_linked_group) : une fenêtre système.
+	group_box = VBoxContainer.new()
+	layout.add_child(group_box)
 
 	roster_label = UI.make_label("", 24)
 	roster_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
