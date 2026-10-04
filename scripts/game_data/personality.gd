@@ -57,7 +57,7 @@ const TRAITS := {
 	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse (moitié moins de refus).",
 	"Paresseux": "Refuse parfois l'entraînement ou une affectation (1 fois sur 5).",
 	"Querelleur": "Se brouille parfois avec un autre héros à la cité : ils deviennent hostiles (à régler par un duel).",
-	"Protecteur": "Stresse deux fois plus quand un allié meurt. (Plus tard : couvre ses alliés.)",
+	"Protecteur": "Couvre ses alliés en danger (sous 30 % de vie) : il va à leur côté et encaisse 30 % des coups qui leur sont destinés. Stresse deux fois plus quand un allié meurt.",
 	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un héros plus faible part dans la Tour à sa place.",
 	"Mauvais": "Baisse l'efficacité du lobby (-5 % par héros mauvais) et use ceux qui travaillent avec lui.",
 }
@@ -73,6 +73,13 @@ const TRAIT_REVEAL_FIGHTS := 5
 const BRAVE_BOSS_FACTOR := 0.5
 const COWARD_BOSS_FACTOR := 2.0
 const PROTECTOR_DEATH_FACTOR := 2.0
+## Protecteur en combat (battle.gd) : quand un allié à moins de PROTECT_RANGE cases passe sous
+## PROTECT_HP de sa vie, le Protecteur va se placer près de lui ; à moins de PROTECT_GUARD_RANGE cases,
+## il encaisse PROTECT_SHARE des coups destinés à cet allié (quitte à tomber à sa place).
+const PROTECT_HP := 0.3
+const PROTECT_RANGE := 5.0
+const PROTECT_GUARD_RANGE := 1.6
+const PROTECT_SHARE := 0.3
 const MENTAL_LOSS_LEFT_OUT := 3.0
 const MENTAL_LEFT_OUT_FLOOR := 40.0
 

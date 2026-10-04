@@ -694,6 +694,13 @@ func _think(unit: Dictionary) -> void:
 				_move_towards(unit, Vector2(unit["pos"].x, GRID_H - 1.5))
 			return
 
+	# Protecteur : un allié proche en danger passe avant l'ennemi ; il va se placer à son côté.
+	if unit["is_hero"] and not quest.get("duel", false) and GameData.has_trait(unit["source"], "Protecteur"):
+		var ward := _ward_of(unit)
+		if not ward.is_empty() and unit["pos"].distance_to(ward["pos"]) > GameData.PROTECT_GUARD_RANGE * 0.8:
+			_move_towards(unit, ward["pos"])
+			return
+
 	if foes.is_empty():
 		return
 	var target := _choose_target(unit, foes, allies)
@@ -917,6 +924,10 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	if target["hp"] * 2 < target["max_hp"]:
 		raw *= 1.0 - GameData.skill_level(target["skills"], "Calme") * CALM_PER_LEVEL
 	var amount := mini(maxi(1, roundi(raw)), target["hp"])
+	# Un Protecteur tout près d'un allié en danger prend une partie du coup pour lui.
+	var guardian := _guardian_for(target)
+	if not guardian.is_empty():
+		amount = _cover(guardian, target, amount)
 	target["hp"] -= amount
 	attacker["contribution"] += amount
 	if _duel_yields(target):
@@ -1317,6 +1328,53 @@ func _panic_think(unit: Dictionary, foes: Array) -> void:
 		_try_attack(unit, target, foes)
 	else:
 		_move_towards(unit, target["pos"])
+
+
+## Protecteur : l'allié en danger le plus proche (sous PROTECT_HP de sa vie, à moins de PROTECT_RANGE
+## cases) qu'il doit couvrir, ou {}.
+func _ward_of(guardian: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	var best := GameData.PROTECT_RANGE
+	for ally in _alive(heroes):
+		if ally["id"] == guardian["id"] or float(ally["hp"]) / ally["max_hp"] >= GameData.PROTECT_HP:
+			continue
+		var distance: float = guardian["pos"].distance_to(ally["pos"])
+		if distance < best:
+			best = distance
+			result = ally
+	return result
+
+
+## Le Protecteur qui couvre cette cible (un héros sous PROTECT_HP de sa vie), s'il est assez près, debout
+## et pas en panique ; {} sinon.
+func _guardian_for(target: Dictionary) -> Dictionary:
+	if not target["is_hero"] or quest.get("duel", false) or float(target["hp"]) / target["max_hp"] >= GameData.PROTECT_HP:
+		return {}
+	for ally in _alive(heroes):
+		if ally["id"] != target["id"] and not panicking(ally) and GameData.has_trait(ally["source"], "Protecteur") \
+				and ally["pos"].distance_to(target["pos"]) <= GameData.PROTECT_GUARD_RANGE:
+			return ally
+	return {}
+
+
+## Le Protecteur encaisse PROTECT_SHARE du coup destiné à « ward » (il peut tomber à sa place).
+## Renvoie ce qui reste pour la cible.
+func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
+	var share := mini(roundi(amount * GameData.PROTECT_SHARE), guardian["hp"])
+	if share <= 0:
+		return amount
+	guardian["hp"] -= share
+	_effect("hit", guardian, guardian, "-%d" % share, false)
+	if not guardian.get("covered", {}).has(ward["id"]):
+		guardian["covered"] = guardian.get("covered", {})
+		guardian["covered"][ward["id"]] = true
+		_log("%s se jette devant %s pour le protéger !" % [guardian["name"], ward["name"]], "awaken")
+		_reveal(guardian, "Protecteur")
+	if guardian["hp"] <= 0:
+		_announce_fall(guardian, "tombé en protégeant %s" % ward["name"])
+	else:
+		_stress_wound(guardian, share)
+	return amount - share
 
 
 ## Duel : à DUEL_STOP_HP de sa vie, un duelliste s'arrête (jamais de mort) et l'autre l'emporte.
