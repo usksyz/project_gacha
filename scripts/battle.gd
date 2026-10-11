@@ -471,6 +471,11 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# Migraine (après la rage) : jusqu'à ce moment du combat ; elle continue après (GameData.migraine_left).
 		"migraine_until": GameData.migraine_left(source) if is_hero else 0.0,
 		"person": is_hero,         # un héros (l'adversaire d'un duel aussi) : sa migraine est gardée à la fin
+		# Endurance (voir GameData, tower.gd) : seuls les héros s'épuisent.
+		"stamina": GameData.STAMINA_MAX,
+		"max_stamina": GameData.STAMINA_MAX,
+		"stamina_cost": GameData.STAMINA_NOVICE_FACTOR if is_hero and GameData.is_combat_novice(source) else 1.0,
+		"exhausted": false,        # endurance tombée à 0, pas encore remontée à STAMINA_RECOVERED
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
@@ -643,6 +648,8 @@ func _step() -> void:
 			_berserk_tick(unit)
 		if unit["is_hero"] and unit["fearful"] and unit["hp"] > 0:
 			_fear_tick(unit)
+		if unit["person"] and unit["hp"] > 0:
+			_stamina_tick(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_berserk_think(unit)
 		if unit["hp"] > 0:
@@ -821,7 +828,35 @@ func _attack_time(unit: Dictionary) -> float:
 
 func _move_speed(unit: Dictionary) -> float:
 	var speed: float = BASE_SPEED + unit["spd"] * _fear(unit) * SPEED_PER_DEX
+	if unit["exhausted"]:
+		speed *= GameData.STAMINA_EXHAUSTED_SPEED
 	return speed * (0.8 if unit["boss"] else 1.0)
+
+
+## Endurance : se déplacer et frapper la vident (deux fois plus vite pour un novice). À 0 : épuisé.
+func _spend_stamina(unit: Dictionary, amount: float) -> void:
+	if not unit["person"] or amount <= 0.0:
+		return
+	unit["stamina"] = maxf(0.0, unit["stamina"] - amount * unit["stamina_cost"])
+	if unit["stamina"] <= 0.0 and not unit["exhausted"]:
+		unit["exhausted"] = true
+		_log("%s est épuisé." % _name_with_stars(unit), "disobey")
+
+
+## Endurance : elle remonte quand le héros n'est au contact d'aucun ennemi. Épuisé, il reprend ses
+## forces à STAMINA_RECOVERED.
+func _stamina_tick(unit: Dictionary) -> void:
+	var foes := _alive(enemies if unit["is_hero"] else heroes)
+	if foes.any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= GameData.STAMINA_CONTACT_RANGE):
+		return
+	unit["stamina"] = minf(unit["max_stamina"], unit["stamina"] + GameData.STAMINA_REGEN_PER_SECOND * TICK)
+	if unit["exhausted"] and unit["stamina"] >= GameData.STAMINA_RECOVERED:
+		unit["exhausted"] = false
+
+
+## Épuisé (endurance à 0) : attaque et défense x STAMINA_EXHAUSTED_FACTOR.
+func _tired(unit: Dictionary) -> float:
+	return GameData.STAMINA_EXHAUSTED_FACTOR if unit["exhausted"] else 1.0
 
 
 ## La peur : toutes ses stats x FEAR_STAT_FACTOR (attaque et défense dans _mind, vitesse, critiques).
@@ -842,6 +877,7 @@ func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 			path[path.size() - 1] = goal if not _is_blocked(goal) else path[path.size() - 1]
 		unit["path"] = path
 	var step := _move_speed(unit) * TICK
+	var start: Vector2 = unit["pos"]
 	var path: PackedVector2Array = unit["path"]
 	while step > 0 and not path.is_empty():
 		var next: Vector2 = path[0]
@@ -854,6 +890,7 @@ func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 			unit["pos"] += (next - unit["pos"]).normalized() * step
 			step = 0
 	unit["path"] = path
+	_spend_stamina(unit, start.distance_to(unit["pos"]) * GameData.STAMINA_MOVE_COST)
 
 
 ## Recule d'un pas, à l'opposé d'une menace, si la place est libre.
@@ -861,6 +898,7 @@ func _step_away(unit: Dictionary, threat: Vector2) -> void:
 	var direction: Vector2 = (unit["pos"] - threat).normalized()
 	var next: Vector2 = unit["pos"] + direction * _move_speed(unit) * TICK
 	if not _is_blocked(next):
+		_spend_stamina(unit, _move_speed(unit) * TICK * GameData.STAMINA_MOVE_COST)
 		unit["pos"] = next
 		unit["path"] = PackedVector2Array()
 
@@ -893,6 +931,7 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 	if attacker["cooldown"] > 0:
 		return
 	attacker["cooldown"] = _attack_time(attacker)
+	_spend_stamina(attacker, GameData.STAMINA_ATTACK_COST)
 	match attacker["class"]:
 		"Mage":
 			if attacker["mana"] >= SPELL_MANA_COST:
@@ -1024,6 +1063,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 		return
 	healer["cooldown"] = _attack_time(healer)
 	healer["mana"] -= HEAL_MANA_COST
+	_spend_stamina(healer, GameData.STAMINA_ATTACK_COST)
 	var amount := roundi(healer["atk"] * _mind(healer) * _bond(healer) * 2.0 * randf_range(0.9, 1.1))
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
@@ -1400,11 +1440,11 @@ func _bond(unit: Dictionary) -> float:
 # ---------------------------------------------------------------------------
 
 ## Efficacité selon la santé mentale du moment (1.0 pour les ennemis ; voir GameData.mental_factor).
-## Un héros qui a peur (voir _scare) frappe et se défend moins bien (FEAR_STAT_FACTOR).
+## Un héros qui a peur (voir _scare) ou épuisé (_tired) frappe et se défend moins bien.
 func _mind(unit: Dictionary) -> float:
 	if not unit["is_hero"]:
-		return 1.0
-	return GameData.mental_factor(unit["mental"]) * _fear(unit)
+		return _tired(unit)  # (l'adversaire d'un duel s'épuise aussi)
+	return GameData.mental_factor(unit["mental"]) * _fear(unit) * _tired(unit)
 
 
 ## Un héros perd de la santé mentale (moins avec Calme). À 0, c'est la rupture (une fois par combat).
@@ -1521,7 +1561,7 @@ func _fear_threats(fighter: Dictionary, novice_counts: bool) -> int:
 		threats += 1  # une horde
 	if fighter["mental"] < GameData.FEAR_LOW_MENTAL:
 		threats += 1
-	if novice_counts and GameData.is_fear_novice(fighter["source"]):
+	if novice_counts and GameData.is_combat_novice(fighter["source"]):
 		threats += 1
 	return threats
 

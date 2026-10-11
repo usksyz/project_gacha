@@ -276,6 +276,15 @@ func is_immortal(hero: Dictionary) -> bool:
 	return Settings.dev_mode and hero.get("immortal", false)
 
 
+## Un héros d'une étoile reste un « novice du combat » pendant ses NOVICE_FIGHTS premiers combats :
+## tout l'écrase (peur, personality.gd) et il bouge trop, s'épuisant deux fois plus vite (endurance, tower.gd).
+const NOVICE_FIGHTS := 3
+
+
+func is_combat_novice(hero: Dictionary) -> bool:
+	return hero["rarity"] == 1 and hero.get("fights", 0) < NOVICE_FIGHTS
+
+
 ## Vrai pour Han, le héros secret de départ (il a des règles à lui).
 func is_han(hero: Dictionary) -> bool:
 	return hero.get("secret", false) and hero["name"] == "Han"

@@ -80,6 +80,24 @@ const BOSS_TYPES := [
 ## des sorts sont dans battle.gd).
 const MANA_PER_INT := 4
 
+# --- Endurance (feuille de route v2, phase 1 ; cahier, lot A : « les novices s'épuisent parce qu'ils
+# bougent trop », ch. 10) ---
+# Chaque héros a une réserve d'endurance en combat (battle.gd, fighter["stamina"]). Se déplacer et frapper
+# la vident ; elle remonte quand il n'est pas au contact d'un ennemi (à moins de STAMINA_CONTACT_RANGE
+# cases). À 0, il est épuisé : attaque et défense x STAMINA_EXHAUSTED_FACTOR, déplacements x
+# STAMINA_EXHAUSTED_SPEED, jusqu'à ce qu'elle remonte à STAMINA_RECOVERED. Un novice du combat
+# (is_combat_novice) la vide STAMINA_NOVICE_FACTOR fois plus vite. Les monstres ne s'épuisent pas.
+# Chiffres provisoires.
+const STAMINA_MAX := 100.0
+const STAMINA_MOVE_COST := 1.5        # par case parcourue
+const STAMINA_ATTACK_COST := 5.0      # par coup (ou tir, sort, soin)
+const STAMINA_REGEN_PER_SECOND := 8.0 # hors du contact
+const STAMINA_CONTACT_RANGE := 1.8
+const STAMINA_NOVICE_FACTOR := 2.0
+const STAMINA_EXHAUSTED_FACTOR := 0.6 # attaque et défense -40 %
+const STAMINA_EXHAUSTED_SPEED := 0.6  # déplacements ralentis
+const STAMINA_RECOVERED := 30.0
+
 
 ## Transforme les 4 statistiques (d'un héros ou d'un ennemi) en valeurs de combat :
 ## points de vie, attaque, défense, vitesse, chance de coup critique, mana.

@@ -192,7 +192,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   se battent contre leur peur). N'importe quel héros (secrets compris) peut avoir peur, seulement s'il y a
   une menace (`Battle._fear_threats`) : ennemi `FEAR_STRONGER_LEVELS` (5) niveaux au-dessus ou boss à portée
   d'engagement, horde (survie, défense), santé mentale sous `FEAR_LOW_MENTAL` (35), ou novice (1 étoile dans
-  ses `FEAR_FIGHTS` 3 premiers combats, `is_fear_novice` : le plus exposé). Moments : vue du premier ennemi à
+  ses `NOVICE_FIGHTS` 3 premiers combats, `is_combat_novice` : le plus exposé). Moments : vue du premier ennemi à
   portée (`FEAR_SIGHT_ENEMY_CHANCE` 25 %, la menace « novice » ne compte pas), première blessure (30 %), chute
   d'un allié à moins de `FEAR_SIGHT` cases (50 %), arrivée d'un boss (50 %). `fear_chance` : chance du moment
   x `FEAR_RARITY_FACTOR` (1 étoile 1, 3 étoiles 0,45, 5 étoiles 0,2) x 1 / (1 + combats / 5) x (+25 % par
@@ -313,6 +313,18 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
+- Phase 1.1 de la feuille de route v2 (cahier, « Améliorations combat... », lot A ; chiffres dans `tower.gd`,
+  section « Combat ») :
+  Endurance : `fighter["stamina"]` (`STAMINA_MAX` 100), héros seulement (l'adversaire d'un duel aussi). Se
+  déplacer (`STAMINA_MOVE_COST` 1,5 par case parcourue) et frapper (`STAMINA_ATTACK_COST` 5 par coup, tir,
+  sort ou soin) la vident (`_spend_stamina`) ; elle remonte de `STAMINA_REGEN_PER_SECOND` (8) quand aucun
+  ennemi n'est à moins de `STAMINA_CONTACT_RANGE` (1,8) cases (`_stamina_tick`). À 0 : épuisé (journal
+  « X est épuisé. »), attaque et défense x`STAMINA_EXHAUSTED_FACTOR` (0,6, `_tired`, dans `_mind`),
+  déplacements x`STAMINA_EXHAUSTED_SPEED` (0,6), jusqu'à `STAMINA_RECOVERED` (30). Novice du combat
+  (`is_combat_novice`, `heroes.gd` : 1 étoile dans ses `NOVICE_FIGHTS` 3 premiers combats, aussi utilisé par
+  la peur) : coûts x`STAMINA_NOVICE_FACTOR` (2). Écran : barre jaune sous la vie (portrait et pion), grise
+  si épuisé. Simulation : 0,3 à 0,5 épuisement par combat aux étages 1 à 5, victoires inchangées (à la
+  marge) ; elle compte surtout dans les combats longs.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

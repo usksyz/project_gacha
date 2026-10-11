@@ -686,8 +686,8 @@ func panic_flee_chance(hero: Dictionary) -> float:
 ## face à une menace écrasante ; levée par un allié ; peut revenir après une blessure grave »).
 ## Elle dépend de la menace, plus des étoiles. Menaces (battle.gd, Battle._fear_threats) : un ennemi bien
 ## plus fort (FEAR_STRONGER_LEVELS niveaux de plus) ou un boss à portée, une horde (survie, défense de la
-## cité), une santé mentale basse (FEAR_LOW_MENTAL) ; et, pour un 1 étoile dans ses FEAR_FIGHTS premiers
-## combats, tout est écrasant (il reste le plus exposé). Sans menace, pas de peur.
+## cité), une santé mentale basse (FEAR_LOW_MENTAL) ; et, pour un novice du combat (is_combat_novice,
+## heroes.gd), tout est écrasant (il reste le plus exposé). Sans menace, pas de peur.
 ## Moments où elle peut le prendre : la vue de l'ennemi (FEAR_SIGHT_ENEMY_CHANCE, sans compter la menace
 ## « novice »), sa première blessure, la chute d'un allié à moins de FEAR_SIGHT cases, l'arrivée d'un boss.
 ## Chance = chance du moment x étoiles (FEAR_RARITY_FACTOR) x expérience (1 / (1 + combats / FEAR_EXPERIENCE_FIGHTS))
@@ -699,7 +699,6 @@ func panic_flee_chance(hero: Dictionary) -> float:
 ## Un allié proche (FEAR_LIFT_RANGE cases) qui est son ami (ou frère d'armes), ou Courageux, la lève après
 ## FEAR_LIFT_SECONDS à ses côtés : « X n'est plus effrayé. ». Une fois passée, une blessure grave (un coup qui
 ## fait saigner) peut la faire revenir (FEAR_RETURN_CHANCE). Chiffres provisoires.
-const FEAR_FIGHTS := 3
 const FEAR_SIGHT_ENEMY_CHANCE := 0.25
 const FEAR_FIRST_WOUND_CHANCE := 0.3
 const FEAR_ALLY_DEATH_CHANCE := 0.5
@@ -720,11 +719,6 @@ const FEAR_LIFT_SECONDS := 3.0
 const FEAR_RETURN_CHANCE := 0.5
 const FEAR_MENTAL_LOSS := 10.0
 const FLEEING_DAMAGE_TAKEN := 2.0
-
-
-## Novice du combat : un héros d'une étoile dans ses FEAR_FIGHTS premiers combats (tout l'écrase).
-func is_fear_novice(hero: Dictionary) -> bool:
-	return hero["rarity"] == 1 and hero.get("fights", 0) < FEAR_FIGHTS
 
 
 ## Les traits : Lâche double, Courageux divise par deux.

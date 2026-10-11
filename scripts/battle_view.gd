@@ -44,9 +44,12 @@ const BUBBLE_TIME := 1.5
 const TAP_RADIUS := 0.8
 
 ## Portraits de l'équipe : hauteur de la rangée, couleurs des barres (cahier : vie rouge, mana bleue).
-const PORTRAIT_HEIGHT := 96
+const PORTRAIT_HEIGHT := 106
 const HP_COLOR := Color("e04848")
 const MANA_COLOR := Color("4a8fe8")
+## Endurance (sous la vie) : jaune, grise quand le héros est épuisé.
+const STAMINA_COLOR := Color("e8c547")
+const STAMINA_TIRED_COLOR := Color("7a7466")
 
 var battle: Battle
 var layout: VBoxContainer
@@ -284,11 +287,14 @@ func _draw_portraits() -> void:
 		var ratio: float = float(hero["hp"]) / hero["max_hp"]
 		var bar := Rect2(box.position + Vector2(6, 30), Vector2(box.size.x - 12, 12))
 		_draw_bar(bar, ratio, HP_COLOR)
-		portraits.draw_string(font, bar.position + Vector2(0, 27), "%d / %d · %d %%" % [hero["hp"], hero["max_hp"],
+		# Endurance : une fine barre jaune sous la vie (grise quand il est épuisé).
+		var stamina_bar := Rect2(bar.position + Vector2(0, 14), Vector2(bar.size.x, 5))
+		_draw_bar(stamina_bar, hero["stamina"] / hero["max_stamina"], STAMINA_TIRED_COLOR if hero["exhausted"] else STAMINA_COLOR)
+		portraits.draw_string(font, bar.position + Vector2(0, 33), "%d / %d · %d %%" % [hero["hp"], hero["max_hp"],
 			ceili(ratio * 100)], HORIZONTAL_ALIGNMENT_CENTER, bar.size.x, 13, Color(1, 0.8, 0.8))
 		# Mana (mages et soigneurs) : la barre avec ses points dessus.
 		if hero["max_mana"] > 0:
-			var mana_bar := Rect2(bar.position + Vector2(0, 36), Vector2(bar.size.x, 12))
+			var mana_bar := Rect2(bar.position + Vector2(0, 40), Vector2(bar.size.x, 12))
 			_draw_bar(mana_bar, hero["mana"] / hero["max_mana"], MANA_COLOR)
 			portraits.draw_string(font, mana_bar.position + Vector2(0, 10), "%d / %d" % [int(hero["mana"]), hero["max_mana"]],
 				HORIZONTAL_ALIGNMENT_CENTER, mana_bar.size.x, 11, Color.WHITE)
@@ -558,11 +564,16 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 	arena.draw_string(font, center + Vector2(-radius, radius * 0.45), unit["name"].left(1),
 		HORIZONTAL_ALIGNMENT_CENTER, radius * 2, int(radius * 1.2), Color.WHITE)
 
-	# Barre de vie au-dessus du pion.
+	# Barre de vie au-dessus du pion (et, pour un héros, l'endurance juste dessous, en jaune).
 	var bar_width := cell * 0.8
-	var bar_pos := center + Vector2(-bar_width / 2, -radius - 7)
+	var bar_pos := center + Vector2(-bar_width / 2, -radius - 10 if unit["person"] else -radius - 7)
 	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width, 4)), Color("12131c"))
 	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width * clampf(float(unit["hp"]) / unit["max_hp"], 0, 1), 4)), outline)
+	if unit["person"]:
+		var stamina_pos := bar_pos + Vector2(0, 4)
+		arena.draw_rect(Rect2(stamina_pos, Vector2(bar_width, 2.5)), Color("12131c"))
+		arena.draw_rect(Rect2(stamina_pos, Vector2(bar_width * clampf(unit["stamina"] / unit["max_stamina"], 0, 1), 2.5)),
+			STAMINA_TIRED_COLOR if unit["exhausted"] else STAMINA_COLOR)
 
 	if unit["bleed"]["ticks"] > 0:  # saigne : une goutte rouge
 		arena.draw_circle(center + Vector2(radius * 0.8, -radius * 0.6), 3.5, Color("ff3030"))
