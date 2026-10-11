@@ -158,6 +158,27 @@ const SHIELD_WALL_MAX_ALLIES := 2
 const SPEAR_WALL_RANGE := 1.6
 const SPEAR_WALL_REACH := 0.6
 
+# --- Usure des armes et flèches (phase 1.2 ; cahier, lot A ; œuvre : ch. 10) ---
+# Usure : chaque coup porté au contact avec une arme l'émousse ; ses dégâts sont multipliés par
+# 1 - coups x WEAR_PER_HIT, jamais sous WEAR_MIN_FACTOR. Le journal le dit une fois, sous WEAR_NOTICE.
+# Les armes sont réparées automatiquement au retour (l'usure ne dure que le combat).
+# Flèches : un héros à l'arc a un carquois de QUIVER_SIZE flèches. À court, il se bat au contact avec sa
+# dague de secours (OUT_OF_ARROWS_POWER des dégâts). Quand aucun ennemi n'est à moins de ARROW_PICKUP_CALM
+# cases, il ramasse ARROW_PICKUP_PER_SECOND flèches par seconde, jusqu'à ARROW_RECOVER_SHARE de celles
+# qu'il a tirées. Ordre « Tir de barrage » : il tire d'un coup toutes ses flèches sur les ennemis à sa
+# portée, chacune à BARRAGE_POWER de la force d'un tir, pour BARRAGE_STAMINA_COST d'endurance.
+# Les monstres (archers squelettes compris) ne s'usent pas et ne manquent pas de flèches. Chiffres provisoires.
+const WEAR_PER_HIT := 0.004
+const WEAR_MIN_FACTOR := 0.6
+const WEAR_NOTICE := 0.85
+const QUIVER_SIZE := 25
+const OUT_OF_ARROWS_POWER := 0.5
+const ARROW_PICKUP_CALM := 4.0
+const ARROW_PICKUP_PER_SECOND := 1.0
+const ARROW_RECOVER_SHARE := 0.5
+const BARRAGE_POWER := 0.6
+const BARRAGE_STAMINA_COST := 10.0
+
 # --- Agonie (cahier, lot A : fin du ch. 10) ---
 # À 0 point de vie, un héros ne meurt pas tout de suite : il tombe à l'agonie AGONY_SECONDS secondes
 # (fenêtre rouge « X est dans un état critique, sa vie est en danger ! »). L'allié libre le plus proche
@@ -557,6 +578,11 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if not "synthese" in buildings:
 				buildings.append("synthese")
 			advance_tutorial("etage")  # sa fenêtre vient après l'animation de construction dans la cité (hub_screen.gd)
+	# Usure : les armes émoussées pendant le combat sont réparées au retour (l'usure ne dure que le combat).
+	var blunted := battle.heroes.filter(func(fighter): return fighter["source"]["alive"] \
+		and battle.wear_factor(fighter) <= WEAR_NOTICE)
+	if not blunted.is_empty():
+		report["repairs"] = "Armes émoussées, réparées au retour : %s." % ", ".join(blunted.map(func(fighter): return fighter["name"]))
 	# Les potions de soin bues pendant le combat (agonie) sont retirées de l'entrepôt.
 	if battle.potions_used > 0:
 		_take_material(POTION, battle.potions_used)

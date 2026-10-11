@@ -232,6 +232,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		lines.append("%s passe au niveau %d !%s" % [hero["name"], hero["level"], " (%s)" % growth if growth != "" else ""])
 	if report.get("potions", "") != "":
 		lines.append(report["potions"])  # (agonie : potions de soin bues)
+	if report.get("repairs", "") != "":
+		lines.append(report["repairs"])  # (usure des armes)
 	if report["mvp"] != "":
 		lines.append("MVP : %s" % report["mvp"])
 	var title := "Défaite"

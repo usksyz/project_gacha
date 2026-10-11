@@ -589,6 +589,15 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"care": 0.0,               # soin d'urgence : temps passé avec un aidant à son côté pendant une hémorragie
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
+		# Usure de l'arme (voir GameData, tower.gd, WEAR_PER_HIT) : coups portés au contact pendant ce combat.
+		"wear_hits": 0,
+		"wear_noticed": false,
+		# Carquois (héros à l'arc ; -1 : pas de carquois) : flèches restantes, tirées, ramassées.
+		"arrows": GameData.QUIVER_SIZE if is_hero and gear.get("type", "") == "Arc" else -1,
+		"arrows_spent": 0,
+		"arrows_picked": 0,
+		"arrow_progress": 0.0,     # flèche en train d'être ramassée (une entière à 1)
+		"bow": {},                 # à court de flèches : la portée et la force de son arc, rendues quand il en retrouve
 		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
 		# coups portés (Force), esquives et tirs (Dextérité), coups encaissés (Santé), sorts et soins (Intelligence).
 		"acts": {"str": 0, "dex": 0, "vit": 0, "int": 0},
@@ -813,6 +822,8 @@ func _step() -> void:
 			_fear_tick(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_stamina_tick(unit)
+		if unit["arrows"] >= 0 and unit["hp"] > 0:
+			_arrow_tick(unit)
 		if unit["is_hero"] and unit["hp"] > 0 and GameData.has_trait(unit["source"], "Meneur"):
 			_lead(unit)
 		if unit["person"] and unit["hp"] > 0:
@@ -1248,6 +1259,7 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 				_hit(attacker, target, power * attacker["weapon_power"], critical, "arrow")
 				if attacker["is_hero"]:
 					attacker["shots"] += 1
+				_use_arrows(attacker, 1)
 			else:
 				# Un coup au contact (épée, lance, dague, fouet...).
 				var power := 1.0
@@ -1260,7 +1272,94 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 					_:
 						critical = randf() < attacker["crit"] * _fear(attacker)
 						power = 1.5 if critical else 1.0
-				_hit(attacker, target, power * attacker["weapon_power"], critical, "hit")
+				_hit(attacker, target, power * attacker["weapon_power"] * _wear(attacker), critical, "hit")
+
+
+## Usure (voir GameData, tower.gd, WEAR_PER_HIT) : un coup de plus avec son arme au contact ; renvoie la force
+## qui lui reste (1 = neuve, jamais sous WEAR_MIN_FACTOR). L'arc ne s'émousse pas, la dague de secours non plus.
+func _wear(unit: Dictionary) -> float:
+	if not unit["is_hero"] or unit["weapon"] in ["", "Arc"]:
+		return 1.0
+	unit["wear_hits"] += 1
+	var factor := wear_factor(unit)
+	if factor <= GameData.WEAR_NOTICE and not unit["wear_noticed"]:
+		unit["wear_noticed"] = true
+		_log("L'arme de %s s'émousse : ses coups portent moins." % unit["name"], "disobey")
+	return factor
+
+
+## Ce qu'il reste de la force de son arme après les coups de ce combat (1 = neuve).
+func wear_factor(unit: Dictionary) -> float:
+	return maxf(GameData.WEAR_MIN_FACTOR, 1.0 - unit["wear_hits"] * GameData.WEAR_PER_HIT)
+
+
+## Carquois : « count » flèches tirées. À court, l'archer tire sa dague de secours et se bat au contact.
+func _use_arrows(unit: Dictionary, count: int) -> void:
+	if unit["arrows"] < 0:
+		return  # pas de carquois (monstre, mage...)
+	unit["arrows"] = maxi(0, unit["arrows"] - count)
+	unit["arrows_spent"] += count
+	if unit["arrows"] == 0 and unit["bow"].is_empty():
+		unit["bow"] = {"reach": unit["reach"], "power": unit["weapon_power"], "skill": unit["weapon_skill"]}
+		unit["reach"] = MELEE_RANGE
+		unit["ranged"] = false
+		unit["weapon_power"] = GameData.OUT_OF_ARROWS_POWER
+		unit["weapon_skill"] = ""
+		_log("%s n'a plus de flèches : il tire sa dague de secours." % _name_with_stars(unit), "disobey")
+
+
+## Carquois, chaque pas : loin des ennemis, l'archer ramasse des flèches (une partie de celles qu'il a tirées).
+func _arrow_tick(unit: Dictionary) -> void:
+	if unit["arrows"] >= GameData.QUIVER_SIZE \
+			or unit["arrows_picked"] >= int(unit["arrows_spent"] * GameData.ARROW_RECOVER_SHARE):
+		return
+	if _alive(enemies).any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= GameData.ARROW_PICKUP_CALM):
+		return
+	unit["arrow_progress"] += GameData.ARROW_PICKUP_PER_SECOND * TICK
+	if unit["arrow_progress"] < 1.0:
+		return
+	unit["arrow_progress"] -= 1.0
+	unit["arrows"] += 1
+	unit["arrows_picked"] += 1
+	if not unit["bow"].is_empty():
+		# Il retrouve son arc.
+		unit["reach"] = unit["bow"]["reach"]
+		unit["weapon_power"] = unit["bow"]["power"]
+		unit["weapon_skill"] = unit["bow"]["skill"]
+		unit["ranged"] = true
+		unit["bow"] = {}
+		_log("%s ramasse des flèches et reprend son arc." % unit["name"])
+
+
+## Ordre « Tir de barrage » possible ? Un héros à l'arc, debout, avec des flèches et des ennemis à sa portée.
+func can_barrage(hero: Dictionary) -> bool:
+	return hero["is_hero"] and hero["hp"] > 0 and hero["present"] and hero["arrows"] > 0 \
+		and not hero["resting"] and not _barrage_targets(hero).is_empty()
+
+
+func _barrage_targets(hero: Dictionary) -> Array:
+	return _alive(enemies).filter(func(foe): return _in_reach(hero, foe, hero["reach"]))
+
+
+## Ordre « Tir de barrage » : toutes ses flèches d'un coup, au hasard sur les ennemis à sa portée (chacune à
+## BARRAGE_POWER d'un tir). Il se retrouve sans flèches. Comme tout ordre, il peut être refusé (_obeys).
+func order_barrage(hero: Dictionary) -> void:
+	if quest.get("duel", false) or not can_barrage(hero) or not _obeys(hero):
+		return
+	var count: int = hero["arrows"]
+	var fired := 0
+	for i in count:
+		var targets := _barrage_targets(hero)
+		if targets.is_empty():
+			break
+		_hit(hero, targets.pick_random(), GameData.BARRAGE_POWER * hero["weapon_power"], false, "arrow")
+		fired += 1
+	hero["shots"] += fired
+	hero["cooldown"] = _attack_time(hero)
+	hero["resting"] = false
+	_spend_stamina(hero, GameData.BARRAGE_STAMINA_COST)
+	_log("%s lâche un tir de barrage : %d flèches !" % [_name_with_stars(hero), fired], "awaken")
+	_use_arrows(hero, count)
 
 
 ## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.

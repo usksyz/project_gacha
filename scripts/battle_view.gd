@@ -68,6 +68,8 @@ var pause_button: Button
 var berserk_button: Button
 ## Ordre « Échanger de place » (rotation : il part se reposer à l'arrière, un allié frais prend son poste).
 var swap_button: Button
+## Ordre « Tir de barrage » (un archer tire toutes ses flèches d'un coup), visible quand c'est possible.
+var barrage_button: Button
 
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
@@ -196,6 +198,15 @@ func _build(title: String) -> void:
 	swap_button.add_theme_color_override("font_color", Color("e8c547"))
 	swap_button.visible = false
 	controls.add_child(swap_button)
+	barrage_button = UI.make_button("Tir de barrage", _order_barrage, 22)
+	barrage_button.custom_minimum_size.y = 80
+	barrage_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	barrage_button.add_theme_color_override("font_color", Color("f5d98a"))
+	barrage_button.visible = false
+	controls.add_child(barrage_button)
+	# Jusqu'à quatre boutons côte à côte : leur texte passe à la ligne plutôt que d'élargir l'écran.
+	for button in [berserk_button, swap_button, barrage_button]:
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pause_button = UI.make_button("Pause", _toggle_pause, 26)
 	pause_button.custom_minimum_size.y = 80
 	pause_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -320,6 +331,15 @@ func _draw_portraits() -> void:
 			_draw_bar(mana_bar, hero["mana"] / hero["max_mana"], MANA_COLOR)
 			portraits.draw_string(font, mana_bar.position + Vector2(0, 10), "%d / %d" % [int(hero["mana"]), hero["max_mana"]],
 				HORIZONTAL_ALIGNMENT_CENTER, mana_bar.size.x, 11, Color.WHITE)
+		elif hero.get("arrows", -1) >= 0:
+			# Carquois (héros à l'arc) : les flèches qui restent ; « dague » quand il n'en a plus.
+			var arrows_text := "Flèches %d / %d" % [hero["arrows"], GameData.QUIVER_SIZE] if hero["arrows"] > 0 else "Plus de flèches"
+			portraits.draw_string(font, bar.position + Vector2(0, 50), arrows_text, HORIZONTAL_ALIGNMENT_CENTER,
+				bar.size.x, 12, Color("f5d98a") if hero["arrows"] > 0 else Color("ffb060"))
+		elif battle.wear_factor(hero) <= GameData.WEAR_NOTICE:
+			# Arme émoussée : ce qu'il lui reste de force.
+			portraits.draw_string(font, bar.position + Vector2(0, 50), "Arme %d %%" % roundi(battle.wear_factor(hero) * 100),
+				HORIZONTAL_ALIGNMENT_CENTER, bar.size.x, 12, Color("c0b090"))
 		# Santé mentale du moment : une fine barre tout en bas (« PEUR » quand il a peur, voir Battle._scare,
 		# qu'il fuie ou non ; « PANIQUE » pendant un effondrement).
 		var mind_bar := Rect2(box.position + Vector2(6, box.size.y - 9), Vector2(box.size.x - 12, 5))
@@ -451,6 +471,9 @@ func _update_berserk_button() -> void:
 	var swap_shown: bool = not paused and not hero.is_empty() and not _is_duel() and battle.can_swap(hero)
 	if swap_button.visible != swap_shown:
 		swap_button.visible = swap_shown
+	var barrage_shown: bool = not paused and not hero.is_empty() and not _is_duel() and battle.can_barrage(hero)
+	if barrage_button.visible != barrage_shown:
+		barrage_button.visible = barrage_shown
 
 
 ## Ordre du Maître : le héros choisi part se reposer à l'arrière, un allié frais prend sa place.
@@ -458,6 +481,18 @@ func _order_swap() -> void:
 	if selected_id < 0 or paused or battle.finished:
 		return
 	battle.order_swap(battle.units[selected_id])
+	Settings.vibrate(30)
+	selected_id = -1
+	_update_hint()
+	arena.queue_redraw()
+	portraits.queue_redraw()
+
+
+## Ordre du Maître : l'archer choisi tire toutes ses flèches d'un coup (il peut refuser, voir Battle.order_barrage).
+func _order_barrage() -> void:
+	if selected_id < 0 or paused or battle.finished:
+		return
+	battle.order_barrage(battle.units[selected_id])
 	Settings.vibrate(30)
 	selected_id = -1
 	_update_hint()

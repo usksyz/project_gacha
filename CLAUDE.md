@@ -385,6 +385,17 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Lancier juste derrière un bouclier (à moins de `SPEAR_WALL_RANGE` 1,6 case de lui, le bouclier plus près de
   l'ennemi) : portée +`SPEAR_WALL_REACH` (0,6, donc 2,4 cases), il frappe sans être au contact
   (`_behind_shield`, dans `_in_reach`) et son endurance remonte (hors du contact).
+  Usure (ch. 10) : chaque coup au contact émousse l'arme du héros (pas l'arc) : force x(1 - coups x
+  `WEAR_PER_HIT` 0,004), jamais sous `WEAR_MIN_FACTOR` (0,6) ; journal « L'arme de X s'émousse » sous
+  `WEAR_NOTICE` (0,85), « Arme 80 % » sur le portrait (`_wear`, `wear_factor`). Réparée au retour : l'usure ne
+  dure que le combat (ligne « Armes émoussées, réparées au retour » du résultat, `report["repairs"]`).
+  Flèches : un héros à l'arc a `QUIVER_SIZE` (25) flèches (`fighter["arrows"]`, « Flèches 12 / 25 » sur le
+  portrait). À court : dague de secours au contact (`OUT_OF_ARROWS_POWER` 0,5, `_use_arrows`). Sans ennemi à
+  moins de `ARROW_PICKUP_CALM` (4) cases, il ramasse `ARROW_PICKUP_PER_SECOND` (1) flèche par seconde, jusqu'à
+  `ARROW_RECOVER_SHARE` (50 %) de celles tirées (`_arrow_tick`), et reprend son arc. Ordre « Tir de barrage »
+  (bouton de `BattleView`, `order_barrage`, `can_barrage`, refus possible) : toutes ses flèches d'un coup au
+  hasard sur les ennemis à sa portée, chacune à `BARRAGE_POWER` (0,6) d'un tir, -`BARRAGE_STAMINA_COST` (10)
+  d'endurance. Les monstres ne s'usent pas et ne manquent pas de flèches. Boutons d'ordre : texte à la ligne.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
