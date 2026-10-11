@@ -335,19 +335,32 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   x`ROTATION_DAMAGE_TAKEN` (1,5). Trait Meneur (`TRAITS`, tiré à l'invocation comme les autres) : `_lead`
   fait tourner un allié au contact sous `LEADER_TIRED_STAMINA` (20 %) s'il y a un remplaçant, au plus toutes
   les `LEADER_COOLDOWN` (8) s ; fenêtre « X fait tourner la première ligne. » ; le trait se révèle.
-  Agonie : à 0 point de vie, un héros ne meurt pas tout de suite (`_announce_fall` → `_start_agony`) : il
-  agonise `AGONY_SECONDS` (10 s), fenêtre rouge « X est dans un état critique, sa vie est en danger ! » ;
+  Agonie (rendue plus exigeante comme au ch. 11, demande du porteur du projet) : à 0 point de vie, un héros
+  ne meurt pas tout de suite (`_announce_fall` → `_start_agony`) : il
+  agonise `AGONY_SECONDS` (8 s ; avant 10), fenêtre rouge « X est dans un état critique, sa vie est en danger ! » ;
   pion rouge qui bat avec les secondes restantes, « AGONIE 7 s » sur le portrait. `_assign_helpers` envoie
   l'allié libre le plus proche (moins de `AGONY_HELP_RANGE` 8 cases, pas au contact d'un ennemi, sans ordre
-  du Maître, pas en panique ; une fois en route il continue) ; un allié à moins de `AGONY_ALLY_RANGE` (1,5)
-  pendant `AGONY_RESCUE_SECONDS` (2 s) le stabilise (`_agony_tick`, `_stabilize`) : il sort du combat
+  du Maître, ni effrayé ni en panique, `_can_rescue` ; une fois en route il continue) ; un allié libre (pas
+  au contact d'un ennemi, pas effrayé) à moins de `AGONY_ALLY_RANGE` (1,5)
+  pendant `AGONY_RESCUE_SECONDS` (3 s ; avant 2) le stabilise (`_agony_tick`, `_stabilize`) : il sort du combat
   (`present` faux, « à l'abri ») avec `AGONY_STABILIZED_HP` (10 %) de vie ; fenêtre « Stabilisé ». Potion de
   soin (`POTION`, matériau de l'entrepôt, grade F ; pas encore fabriquée, mode dev > Matériaux) : l'équipe en
   emporte `POTIONS_PER_MISSION` (3) au plus (`mission_potions`), bue tout de suite par un héros qui tombe à
   l'agonie ; les potions bues sont retirées de l'entrepôt (`finish_tower_battle`, ligne dans le résultat).
-  Sinon, à la fin des 10 s, mort définitive (`_die` : stress des alliés, peur). Fin du combat (`_after_fight`) :
+  Sinon, à la fin des 8 s, mort définitive (`_die` : stress des alliés, peur). Fin du combat (`_after_fight`) :
   sauvé si un allié debout peut le rejoindre avant la fin de son agonie, sinon il meurt. Mort de stress :
   sans agonie (`instant`). Immortel du mode dev : même agonie, puis « à terre » au lieu de mourir.
+  Arme plantée (œuvre, ch. 11 : Jenna laisse la lame dans la plaie de Zid, qui se viderait de son sang) : le coup
+  qui met à l'agonie peut laisser l'arme dans la plaie (`fighter["embedded"]`, `GameData.embed_chance`) :
+  lance, monstre Guerrier armé ou boss `EMBED_HEAVY_CHANCE` (45 %), autre lame `EMBED_BLADE_CHANCE` (25 %),
+  flèche `EMBED_ARROW_CHANCE` (25 %) ; jamais les bêtes (`EMBED_BEASTS` : loup, golem), la magie, le saignement
+  ni Berserk (provisoire ; en moyenne 20 à 26 % des agonies). Aucun allié ne peut alors le stabiliser, même à la
+  fin du combat : seule une potion (plus tard un soigneur) le sauve. Fenêtre « Une arme est plantée dans X : la
+  retirer le tuerait. », « arme plantée » sous le portrait.
+  Simulation après ces réglages (200 à 600 combats, sans ordres) : équipe neuve étage 1 : 96 % de victoires,
+  1,15 mort par combat (cible du porteur du projet : 0,5 à 1 ; 0,36 arme plantée et 0,45 stabilisé par
+  combat) ; étages 2 à 4 : 19 / 7 / 8 %, 4,1-4,6 morts. « Préparée » étages 1 à 4 : 100 / 95 / 84 / 83 %, morts
+  0 / 0,9 / 1,7 / 1,8.
   Simulation (équipe neuve « brute ») : morts à l'étage 1 de 1,5 à 0,1 par combat ; étages 2 à 4 de 4,4-4,8 à
   2,5-3 ; victoires à peu près inchangées (étage 1 : 98 %, étages 2 à 4 : 14-23 %). « Préparée » : morts de
   1-2 à 0,4-0,9 aux étages 2 à 4, victoires 90-98 %.
@@ -508,6 +521,13 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (~1 mort), 2 niveaux de plus sans armes 72-81 % ; étages 6 et 8 brute 34-40 %, préparée 90 % ; étage 5
   (survie, boss) brute 5 %, préparée 47 % ; étage 10 (défense) brute 28 %, préparée 49 %. À refaire après
   tout changement d'équilibre.
+  Étage 5, survie (demande du porteur du projet : dur mais gagnable, 30 à 60 % pour une équipe préparée) :
+  avec la peur, l'endurance et l'agonie, la préparée n'y gagnait plus que 7 à 10 % (horde de 8 monstres
+  niveau 9 et chef gobelin niveau 11, balayée en 25 s). La horde de survie compte maintenant
+  `SURVIVAL_HORDE_EXTRA` (1 ; avant 4) + étage / 2 monstres (étage 5 : 5 et le boss ; le niveau et le boss ne
+  changent pas). Simulation (300 combats, préparée niveau 7) : 22 % sans expérience, 31 % avec 4 combats,
+  35 % avec un Maître simulé qui fait tourner les fatigués, 60 % avec 3 potions (morts 3,8 → 1). La rotation
+  ne pèse presque pas (0,1 rotation par combat) : le combat se décide en 25 s, avant la fatigue.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque

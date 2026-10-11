@@ -49,6 +49,12 @@ const TIER_BONUS_LEVELS := 2
 ## normale (déjà assez dure). Chiffres réglés par simulation (voir CLAUDE.md, « Tour »).
 const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [6, 3], 3: [6, 3], 4: [6, 3]}
 
+## Survie : la horde compte SURVIVAL_HORDE_EXTRA + étage / 2 monstres de plus (étage 5 : 5 monstres et le
+## boss). Demande du porteur du projet : l'étage 5 doit être dur mais gagnable pour une équipe préparée
+## (30 à 60 % de victoires). Avant : 4 (horde de 8 à l'étage 5, 7 à 10 % de victoires). Chiffre provisoire,
+## réglé par simulation (voir CLAUDE.md, « Tour »).
+const SURVIVAL_HORDE_EXTRA := 1
+
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
 
@@ -117,7 +123,8 @@ const LEADER_COOLDOWN := 8.0
 # --- Agonie (cahier, lot A : fin du ch. 10) ---
 # À 0 point de vie, un héros ne meurt pas tout de suite : il tombe à l'agonie AGONY_SECONDS secondes
 # (fenêtre rouge « X est dans un état critique, sa vie est en danger ! »). L'allié libre le plus proche
-# (à moins de AGONY_HELP_RANGE cases) court à son côté ; s'il y reste AGONY_RESCUE_SECONDS (à moins de
+# (à moins de AGONY_HELP_RANGE cases, pas au contact d'un ennemi, pas effrayé) court à son côté ; s'il y
+# reste AGONY_RESCUE_SECONDS (à moins de
 # AGONY_ALLY_RANGE cases), ou si l'équipe a une potion de soin, il est stabilisé : il sort du combat avec
 # AGONY_STABILIZED_HP de sa vie. Sinon, il meurt (mort définitive). Quand le combat s'arrête, un héros encore
 # à l'agonie est sauvé si un allié debout peut le rejoindre et rester à son côté avant la fin de ses
@@ -125,10 +132,20 @@ const LEADER_COOLDOWN := 8.0
 # Les potions : l'équipe en
 # emporte jusqu'à POTIONS_PER_MISSION de l'entrepôt (POTION, items.gd) et rend celles qu'elle n'a pas bues.
 # Un immortel du mode dev passe aussi par l'agonie, mais reste « à terre » au lieu de mourir.
-const AGONY_SECONDS := 10.0
+const AGONY_SECONDS := 8.0
 const AGONY_HELP_RANGE := 8.0
 const AGONY_ALLY_RANGE := 1.5
-const AGONY_RESCUE_SECONDS := 2.0
+const AGONY_RESCUE_SECONDS := 3.0
+# Arme plantée (œuvre, ch. 11 : Jenna laisse la lame dans la plaie de Zid, qui se viderait de son sang si on
+# la retirait). Parfois, l'arme qui met un héros à l'agonie reste dans la plaie : un allié ne peut pas le
+# stabiliser (la retirer le tuerait), seule une potion de soin (ou plus tard un soigneur) le sauve.
+# Chance selon le coup : lance ou lame lourde (EMBED_HEAVY_CHANCE : lance, monstre Guerrier armé, boss),
+# autre lame (EMBED_BLADE_CHANCE), flèche (EMBED_ARROW_CHANCE) ; jamais les bêtes (EMBED_BEASTS), la magie,
+# le saignement ni l'épuisement.
+const EMBED_HEAVY_CHANCE := 0.45
+const EMBED_BLADE_CHANCE := 0.25
+const EMBED_ARROW_CHANCE := 0.25
+const EMBED_BEASTS := ["Loup noir", "Golem de pierre"]
 const AGONY_STABILIZED_HP := 0.1
 const POTIONS_PER_MISSION := 3
 
@@ -139,6 +156,20 @@ const POTIONS_PER_MISSION := 3
 # (Un héros à l'agonie passe avant.)
 const CARE_SECONDS := 3.0
 const CARE_HELP_RANGE := 6.0
+
+
+## Chance que l'arme reste plantée dans un héros mis à l'agonie par ce coup (« kind » : "hit" ou "arrow" ;
+## « weapon » : le type d'arme de l'attaquant, "" pour un monstre ; voir EMBED_HEAVY_CHANCE).
+func embed_chance(attacker_name: String, attacker_class: String, weapon: String, boss: bool, kind: String) -> float:
+	if attacker_name in EMBED_BEASTS:
+		return 0.0
+	if kind == "arrow":
+		return EMBED_ARROW_CHANCE
+	if kind != "hit":
+		return 0.0
+	if weapon == "Lance" or boss or (weapon == "" and attacker_class == "Guerrier"):
+		return EMBED_HEAVY_CHANCE
+	return EMBED_BLADE_CHANCE
 
 
 ## Potions de soin qu'une équipe emporte dans la Tour (celles de l'entrepôt, POTIONS_PER_MISSION au plus).
@@ -256,7 +287,7 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 		"annihilation":
 			monster_count += floor_number / 3
 		"survival":
-			monster_count += 4 + floor_number / 2
+			monster_count += SURVIVAL_HORDE_EXTRA + floor_number / 2
 		"defense":
 			monster_count += 4 + floor_number / 2
 	var known_types := ENEMY_TYPES.slice(0, mini(maxi(1 + floor_number / 2, early[1]), ENEMY_TYPES.size()))

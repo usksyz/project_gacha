@@ -291,6 +291,9 @@ func _draw_portraits() -> void:
 			# À l'agonie : les secondes qui restent pour le sauver.
 			portraits.draw_string(font, box.position + Vector2(6, 48), "AGONIE %d s" % ceili(hero["agony_until"] - battle.time),
 				HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 12, 15, Color("ff4040"))
+			if hero.get("embedded", false):  # arme plantée : seule une potion peut le sauver
+				portraits.draw_string(font, box.position + Vector2(6, 68), "arme plantée", HORIZONTAL_ALIGNMENT_LEFT,
+					box.size.x - 12, 13, Color("ffb060"))
 			continue
 		if hero.get("stabilized", false) and not hero["present"]:
 			portraits.draw_string(font, box.position + Vector2(6, 48), "à l'abri", HORIZONTAL_ALIGNMENT_LEFT,
