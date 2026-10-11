@@ -39,13 +39,15 @@ const DEFENSE_SECONDS := 60
 ## « broyeur de héros », ch. 10 et 11). La difficulté vient de la durée et de l'usure, pas d'un seul choc :
 ## SURVIVAL_SECONDS à tenir (le compte à rebours démarre au premier contact), la horde arrive en
 ## SURVIVAL_WAVES vagues, une toutes les SURVIVAL_WAVE_SECONDS du compte à rebours. Chaque vague compte
-## SURVIVAL_WAVE_MONSTERS + étage / 5 monstres ; le boss arrive avec la dernière (étage 5 : 5 vagues de 4,
-## soit 20 monstres et le chef gobelin). Entre deux vagues, les héros soufflent (endurance, flèches).
-## Avant : une seule horde de 8 monstres (5 après le dernier réglage), 60 s. Chiffres provisoires.
+## SURVIVAL_WAVE_MONSTERS + étage / 5 monstres ; le boss arrive avec la dernière (étage 5 : 6 vagues de 2,
+## soit 12 monstres et le chef gobelin). Entre deux vagues, les héros soufflent (endurance, flèches).
+## Avant : une seule horde de 8 monstres (5 après le dernier réglage), 60 s. Chiffres provisoires, réglés par
+## simulation pour qu'une équipe préparée gagne l'étage 5 à 30-60 % (voir CLAUDE.md, « Tour ») : avec des
+## vagues de 3 ou 4, les monstres s'accumulent plus vite qu'on ne les tue (0 à 15 % de victoires).
 const SURVIVAL_SECONDS := 210
-const SURVIVAL_WAVES := 5
-const SURVIVAL_WAVE_SECONDS := 40.0
-const SURVIVAL_WAVE_MONSTERS := 3
+const SURVIVAL_WAVES := 6
+const SURVIVAL_WAVE_SECONDS := 35.0
+const SURVIVAL_WAVE_MONSTERS := 1
 
 ## Terrain des quêtes de survie (phase 1.2 ; œuvre, ch. 9 et 11) : une rangée de maisons coupe la carte,
 ## percée de SURVIVAL_ALLEYS ruelles larges d'une case (peu d'ennemis peuvent attaquer en même temps) ;

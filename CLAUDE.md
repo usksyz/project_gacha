@@ -528,7 +528,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   mourir ! »). Pendant `AWAKENING_RAGE_SECONDS` (8 s), pas de coupure automatique et il ne peut pas tomber
   sous 1 point de vie (coups, part d'un Protecteur, saignement, coût de la rage) ; « REFUS DE MOURIR » sous le
   portrait. Ensuite, règles normales (sous 15 % de vie, il la coupe) ; la migraine de cette première rage dure
-  x`AWAKENING_MIGRAINE_FACTOR` (2, donc 6 min).
+  x`AWAKENING_MIGRAINE_FACTOR` (2, donc 6 min). Simulation (200 combats par étage, sans ordres) : héros qui
+  survivent au combat où ils apprennent Berserk, avant → après : équipe neuve étage 1 : 42 → 92-95 %, étages
+  2 à 4 : 6-10 → 25-36 % ; préparée étages 2 à 4 : 34-46 → 56-78 %. Effet de bord : la rage d'éveil fait
+  aussi gagner l'équipe (équipe neuve, étages 2 à 4 : 7-17 → 20-37 % de victoires).
   Écran de combat : « BERSERK » / « MIGRAINE » sous le portrait. Fiche : statistiques en Berserk
   « valeur actuelle / valeur de base (+5) » (`berserk_preview`) et migraine restante.
   Résistance aux flammes (feu subi, ou 3 combats avec un mage de feu ; les mages ont un élément
@@ -560,9 +563,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Survie par vagues (phase 1.2, demande du porteur du projet ; œuvre : l'étage 5, 30 minutes, « broyeur de
   héros ») : la difficulté vient de la durée et de l'usure, pas d'un seul choc de 25 s (l'ancienne horde
   unique : 8 monstres, réduite à 5 au réglage précédent par `SURVIVAL_HORDE_EXTRA`, supprimé). `tower.gd` :
-  `SURVIVAL_SECONDS` à tenir (la défense garde `DEFENSE_SECONDS`, 60 s), `SURVIVAL_WAVES` vagues, une toutes
-  les `SURVIVAL_WAVE_SECONDS` du compte à rebours, de `SURVIVAL_WAVE_MONSTERS` + étage / 5 monstres chacune
-  (`enemy["wave"]`, `tower_enemies`) ; le boss vient avec la dernière. `battle.gd` : `current_wave()`, seule la
+  `SURVIVAL_SECONDS` (210 s) à tenir (la défense garde `DEFENSE_SECONDS`, 60 s), `SURVIVAL_WAVES` (6) vagues,
+  une toutes les `SURVIVAL_WAVE_SECONDS` (35 s) du compte à rebours, de `SURVIVAL_WAVE_MONSTERS` (1) + étage / 5
+  monstres chacune (étage 5 : 6 x 2 = 12 monstres et le chef gobelin ; `enemy["wave"]`, `tower_enemies`) ; le
+  boss vient avec la dernière. `battle.gd` : `current_wave()`, seule la
   vague 0 est placée au départ, les suivantes entrent par `_call_reinforcements` (6 ennemis au plus à la
   fois), chaque vague annoncée (journal, fenêtre « Vague N »). Écran : « Vague 2/5 » à côté du compte à
   rebours (affiché en permanence, « 3:30 au premier contact » tant qu'il attend) ; annonce de l'étage.
@@ -576,6 +580,17 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Le Maître y envoie un héros par un ordre (toucher la hauteur, cases claires) ; un héros dont le poste est
   en hauteur la tient (il ne descend pas courir après les ennemis, il frappe ce qui est à sa portée). Les
   héros n'y vont pas d'eux-mêmes.
+  Simulation de la phase 1.2 (200 combats par réglage, 150 à 420 pour l'étage 5 ; équipe du tutoriel ;
+  « préparée » : 2 niveaux de plus, épée et bouclier D, arc D ; Maître simulé : rotation des fatigués et
+  tireurs sur les hauteurs) — victoires avant → après (morts par combat) :
+  neuve étages 1 à 4 : 96 / 17 / 7 / 7 % → 98 / 37 / 20 / 28 % (morts 1,2 / 4,3 / 4,6 / 4,5 → 0,8 / 3,4 / 4 /
+  3,8 : surtout la rage d'éveil) ; préparée sans ordres étages 1 à 4 : 100 / 95 / 88 / 83 % → 100 / 97 / 93 / 88 %
+  (mur de boucliers) ; avec Maître et 3 potions : 100 / 97 / 92 / 93 % → 100 / 97 / 94 / 95 %, morts 0,1 à 0,3.
+  Étage 5, réglages essayés (préparée, Maître) : 5 vagues de 4 : 0 % ; 5 x 3 : 8 % ; 6 x 2 : 28 à 36 % selon les
+  séries (environ 33 %), 39 % avec 3 potions ; sans Maître 23-24 %, rotation sans hauteurs 20 %. Avant (une seule
+  horde de 5) : préparée 21 %, Maître 15 %, Maître et potions 30 %. Équipe neuve : 0 %. Un combat de l'étage 5
+  dure maintenant 3 min environ (190 s) au lieu de 25 s. Ce Maître simulé est simpliste : un joueur qui tient
+  la sortie des ruelles et fait tourner ses héros devrait faire mieux.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
