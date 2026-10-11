@@ -181,12 +181,12 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Barre sur la fiche, les cartes d'équipe (`UI.add_mental_bar`, `TeamSlots` et grilles de l'écran Donjons)
   et l'encart de l'équipe en combat ; fenêtre « Personnalité » en fin de combat (`fighter["mind_news"]`).
   Traits `hero["traits"]` ([{"name", "known"}]) : 1 ou 2 tirés à l'invocation (`roll_traits`, `TRAITS` :
-  Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais ; Courageux et Lâche
+  Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais, Meneur ; Courageux et Lâche
   incompatibles), « ? » tant qu'ils sont cachés ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
   (5) combats (`hero["fights"]`). Effets branchés : Courageux (moitié) / Lâche (double) face aux boss,
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
   part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture,
-  Querelleur, Mauvais et Protecteur en combat (plus bas) : les huit traits ont leurs effets.
+  Querelleur, Mauvais et Protecteur en combat (plus bas), Meneur en combat (rotation, voir « Phase 1.1 ») : les neuf traits ont leurs effets.
   Peur selon la menace (feuille de route v2, phase 0 ; avant : seulement les 1 étoile novices ; demandes
   antérieures gardées : « les forts survivent, les faibles meurent », pas de message pour la fuite, certains
   se battent contre leur peur). N'importe quel héros (secrets compris) peut avoir peur, seulement s'il y a
@@ -325,6 +325,16 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   la peur) : coûts x`STAMINA_NOVICE_FACTOR` (2). Écran : barre jaune sous la vie (portrait et pion), grise
   si épuisé. Simulation : 0,3 à 0,5 épuisement par combat aux étages 1 à 5, victoires inchangées (à la
   marge) ; elle compte surtout dans les combats longs.
+  Rotation : bouton « Échanger de place » de `BattleView` pour le héros choisi (`order_swap`, `can_swap`,
+  refus possible). `_rotate` : il part à `ROTATION_REAR_DISTANCE` (3) cases derrière lui et se repose
+  (`fighter["resting"]`, « REPOS » sous le portrait) : il ne combat que si un ennemi vient au contact, son
+  endurance remonte x`ROTATION_REST_FACTOR` (3), il revient quand elle est pleine (« X a repris son
+  souffle. ») ; un ordre du Maître met fin au repos. L'allié le plus frais (`_find_relief` : au moins
+  `ROTATION_FRESH_STAMINA` 50 %, corps à corps de préférence) prend son poste. Pendant
+  `ROTATION_VULNERABLE_SECONDS` (1 s, `swap_until`), les deux ne frappent pas et encaissent
+  x`ROTATION_DAMAGE_TAKEN` (1,5). Trait Meneur (`TRAITS`, tiré à l'invocation comme les autres) : `_lead`
+  fait tourner un allié au contact sous `LEADER_TIRED_STAMINA` (20 %) s'il y a un remplaçant, au plus toutes
+  les `LEADER_COOLDOWN` (8) s ; fenêtre « X fait tourner la première ligne. » ; le trait se révèle.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

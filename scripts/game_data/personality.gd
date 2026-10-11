@@ -60,6 +60,7 @@ const TRAITS := {
 	"Protecteur": "Couvre ses alliés en danger (sous 30 % de vie) : il va à leur côté et encaisse 30 % des coups qui leur sont destinés. Stresse deux fois plus quand un allié meurt.",
 	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un héros plus faible part dans la Tour à sa place.",
 	"Mauvais": "Baisse l'efficacité du lobby (-5 % par héros mauvais) et use ceux qui travaillent avec lui.",
+	"Meneur": "En combat, fait tourner la première ligne : il envoie lui-même à l'arrière un allié épuisé, et un allié frais prend sa place.",
 }
 ## Chance d'avoir un deuxième trait (sinon un seul).
 const TRAIT_TWO_CHANCE := 0.4

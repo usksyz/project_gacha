@@ -98,6 +98,22 @@ const STAMINA_EXHAUSTED_FACTOR := 0.6 # attaque et défense -40 %
 const STAMINA_EXHAUSTED_SPEED := 0.6  # déplacements ralentis
 const STAMINA_RECOVERED := 30.0
 
+# --- Rotation (cahier, lot A : survie de l'étage 5, ch. 10) ---
+# L'ordre « échanger de place » (battle.gd, order_swap) envoie un héros à l'arrière (ROTATION_REAR_DISTANCE
+# cases derrière lui), où il se repose : il ne combat que si un ennemi vient au contact, et son endurance
+# remonte ROTATION_REST_FACTOR fois plus vite ; il revient au combat quand elle est pleine. Un allié frais
+# (au moins ROTATION_FRESH_STAMINA de son endurance) prend son poste. Pendant ROTATION_VULNERABLE_SECONDS,
+# les deux ne frappent pas et encaissent x ROTATION_DAMAGE_TAKEN : c'est le moment le plus dangereux.
+# Trait Meneur (personality.gd) : il ordonne lui-même la rotation d'un allié au contact dont l'endurance
+# passe sous LEADER_TIRED_STAMINA, au plus une fois toutes les LEADER_COOLDOWN secondes.
+const ROTATION_REAR_DISTANCE := 3.0
+const ROTATION_REST_FACTOR := 3.0
+const ROTATION_FRESH_STAMINA := 0.5
+const ROTATION_VULNERABLE_SECONDS := 1.0
+const ROTATION_DAMAGE_TAKEN := 1.5
+const LEADER_TIRED_STAMINA := 0.2
+const LEADER_COOLDOWN := 8.0
+
 
 ## Transforme les 4 statistiques (d'un héros ou d'un ennemi) en valeurs de combat :
 ## points de vie, attaque, défense, vitesse, chance de coup critique, mana.

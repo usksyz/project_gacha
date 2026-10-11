@@ -64,6 +64,8 @@ var controls: HBoxContainer
 var pause_button: Button
 ## Ordre « Berserk » (entrer en rage ou en sortir), visible quand le héros choisi possède Berserk.
 var berserk_button: Button
+## Ordre « Échanger de place » (rotation : il part se reposer à l'arrière, un allié frais prend son poste).
+var swap_button: Button
 
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
@@ -186,6 +188,12 @@ func _build(title: String) -> void:
 	berserk_button.add_theme_color_override("font_color", Color("ff6060"))
 	berserk_button.visible = false
 	controls.add_child(berserk_button)
+	swap_button = UI.make_button("Échanger de place", _order_swap, 22)
+	swap_button.custom_minimum_size.y = 80
+	swap_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	swap_button.add_theme_color_override("font_color", Color("e8c547"))
+	swap_button.visible = false
+	controls.add_child(swap_button)
 	pause_button = UI.make_button("Pause", _toggle_pause, 26)
 	pause_button.custom_minimum_size.y = 80
 	pause_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -311,6 +319,9 @@ func _draw_portraits() -> void:
 		elif hero["berserk"]:
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "BERSERK", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, Color("ff4040"))
+		elif hero.get("resting", false):
+			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "REPOS", HORIZONTAL_ALIGNMENT_CENTER,
+				mind_bar.size.x, 13, STAMINA_COLOR)
 		elif battle.has_migraine(hero):
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "MIGRAINE", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, Color("c9a2ff"))
@@ -398,7 +409,7 @@ func _update_hint() -> void:
 	elif paused:
 		hint_label.text = "Pause. Les ordres reprendront avec le combat."
 	elif selected_id >= 0:
-		hint_label.text = "%s : touche un endroit pour l'y envoyer, ou un ennemi à attaquer." \
+		hint_label.text = "%s : touche un endroit pour l'y envoyer, un ennemi à attaquer, ou un bouton en bas." \
 			% battle.units[selected_id]["name"]
 	else:
 		hint_label.text = "Touche un héros pour le guider."
@@ -416,6 +427,22 @@ func _update_berserk_button() -> void:
 	var text := "Sortir du Berserk" if shown and hero["berserk"] else "Berserk !"
 	if berserk_button.text != text:
 		berserk_button.text = text
+	# (Même rangée : « Échanger de place », pour un héros choisi qui n'est pas déjà au repos.)
+	var swap_shown: bool = not paused and not hero.is_empty() and not _is_duel() and battle.can_swap(hero)
+	if swap_button.visible != swap_shown:
+		swap_button.visible = swap_shown
+
+
+## Ordre du Maître : le héros choisi part se reposer à l'arrière, un allié frais prend sa place.
+func _order_swap() -> void:
+	if selected_id < 0 or paused or battle.finished:
+		return
+	battle.order_swap(battle.units[selected_id])
+	Settings.vibrate(30)
+	selected_id = -1
+	_update_hint()
+	arena.queue_redraw()
+	portraits.queue_redraw()
 
 
 ## Ordre du Maître : le héros choisi entre en rage, ou en sort (il peut refuser, voir Battle.order_berserk).

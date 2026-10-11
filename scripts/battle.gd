@@ -299,6 +299,7 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 		return
 	if _is_blocked(pos):
 		pos = _free_cell_near(_cell_of(pos))
+	hero["resting"] = false  # (un ordre du Maître met fin au repos de la rotation)
 	hero["order"] = {"kind": "move", "pos": pos}
 	hero["path"] = PackedVector2Array()
 
@@ -307,8 +308,80 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
+	hero["resting"] = false
 	hero["order"] = {"kind": "attack", "target": enemy["id"]}
 	hero["path"] = PackedVector2Array()
+
+
+## Ordre « échanger de place » : le héros part se reposer à l'arrière, un allié frais prend son poste
+## (voir _rotate). Comme tout ordre, il peut être refusé (_obeys).
+func order_swap(hero: Dictionary) -> void:
+	if quest.get("duel", false) or not can_swap(hero) or not _obeys(hero):
+		return
+	_rotate(hero)
+
+
+## Vrai si ce héros peut recevoir l'ordre « échanger de place » (debout, pas déjà au repos ni en échange).
+func can_swap(hero: Dictionary) -> bool:
+	return hero["is_hero"] and hero["hp"] > 0 and hero["present"] and not hero["resting"] and time >= hero["swap_until"]
+
+
+## La rotation : « tired » part à ROTATION_REAR_DISTANCE cases derrière lui et s'y repose ; l'allié le plus
+## frais (au moins ROTATION_FRESH_STAMINA d'endurance, de préférence au corps à corps) prend sa place.
+## Pendant ROTATION_VULNERABLE_SECONDS, les deux ne frappent pas et encaissent plus (voir _damage).
+## Renvoie l'allié qui prend le poste ({} si personne n'est assez frais : il part quand même).
+func _rotate(tired: Dictionary) -> Dictionary:
+	var spot: Vector2 = tired["pos"]
+	var relief := _find_relief(tired)
+	var rear := _free_cell_near(_cell_of(Vector2(spot.x, minf(GRID_H - 2.5, spot.y + GameData.ROTATION_REAR_DISTANCE))))
+	tired["order"] = {"kind": "move", "pos": rear}
+	tired["path"] = PackedVector2Array()
+	tired["resting"] = true
+	tired["swap_until"] = time + GameData.ROTATION_VULNERABLE_SECONDS
+	if relief.is_empty():
+		_log("%s se replie pour reprendre son souffle, mais personne n'est assez frais pour le relever." % tired["name"])
+		return relief
+	relief["order"] = {"kind": "move", "pos": spot}
+	relief["path"] = PackedVector2Array()
+	relief["swap_until"] = time + GameData.ROTATION_VULNERABLE_SECONDS
+	_log("%s se replie pour reprendre son souffle ; %s prend son poste." % [tired["name"], relief["name"]])
+	return relief
+
+
+## L'allié le plus apte à relever « tired » (assez frais, ni au repos, ni effrayé, ni en panique), ou {}.
+func _find_relief(tired: Dictionary) -> Dictionary:
+	var relief: Dictionary = {}
+	var best := -INF
+	for ally in _alive(heroes):
+		if ally["id"] == tired["id"] or ally["resting"] or panicking(ally) or afraid(ally) \
+				or ally["stamina"] < ally["max_stamina"] * GameData.ROTATION_FRESH_STAMINA:
+			continue
+		# Le plus frais et le plus proche ; un combattant au corps à corps passe avant un tireur.
+		var score: float = ally["stamina"] - ally["pos"].distance_to(tired["pos"]) * 3.0 - (50.0 if ally["ranged"] else 0.0)
+		if score > best:
+			best = score
+			relief = ally
+	return relief
+
+
+## Meneur : un allié au contact d'un ennemi et à bout de souffle (sous LEADER_TIRED_STAMINA de son endurance) ?
+## Le Meneur fait tourner la première ligne lui-même (fenêtre au Maître), au plus toutes les LEADER_COOLDOWN s.
+func _lead(leader: Dictionary) -> void:
+	if time < leader["lead_ready"] or panicking(leader) or afraid(leader):
+		return
+	for ally in _alive(heroes):
+		if not can_swap(ally) or not ally["order"].is_empty() \
+				or ally["stamina"] > ally["max_stamina"] * GameData.LEADER_TIRED_STAMINA:
+			continue
+		if not _alive(enemies).any(func(foe): return ally["pos"].distance_to(foe["pos"]) <= GameData.STAMINA_CONTACT_RANGE):
+			continue
+		if _find_relief(ally).is_empty():
+			continue  # personne d'assez frais pour le relever
+		_rotate(ally)
+		leader["lead_ready"] = time + GameData.LEADER_COOLDOWN
+		_reveal(leader, "Meneur")
+		_alert("Rotation", ["%s fait tourner la première ligne." % _name_with_stars(leader)])
+		return
 
 
 ## Ordonne à un héros qui possède Berserk d'entrer en rage (« on » vrai) ou d'en sortir.
@@ -476,6 +549,10 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"max_stamina": GameData.STAMINA_MAX,
 		"stamina_cost": GameData.STAMINA_NOVICE_FACTOR if is_hero and GameData.is_combat_novice(source) else 1.0,
 		"exhausted": false,        # endurance tombée à 0, pas encore remontée à STAMINA_RECOVERED
+		# Rotation (voir order_swap) : se repose à l'arrière ; vulnérable pendant l'échange jusqu'à « swap_until ».
+		"resting": false,
+		"swap_until": 0.0,
+		"lead_ready": 0.0,         # Meneur : prochain moment où il peut faire tourner la première ligne
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
@@ -650,6 +727,8 @@ func _step() -> void:
 			_fear_tick(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_stamina_tick(unit)
+		if unit["is_hero"] and unit["hp"] > 0 and GameData.has_trait(unit["source"], "Meneur"):
+			_lead(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_berserk_think(unit)
 		if unit["hp"] > 0:
@@ -727,6 +806,10 @@ func _think(unit: Dictionary) -> void:
 
 	# Un ordre du joueur passe avant tout.
 	if unit["is_hero"] and _follow_order(unit, foes):
+		return
+
+	# Au repos à l'arrière (rotation) : il ne combat que si un ennemi vient au contact.
+	if unit["resting"] and not foes.any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= GameData.STAMINA_CONTACT_RANGE):
 		return
 
 	# Soigneur : un allié blessé passe avant tout (s'il lui reste assez de mana pour soigner).
@@ -849,9 +932,16 @@ func _stamina_tick(unit: Dictionary) -> void:
 	var foes := _alive(enemies if unit["is_hero"] else heroes)
 	if foes.any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= GameData.STAMINA_CONTACT_RANGE):
 		return
-	unit["stamina"] = minf(unit["max_stamina"], unit["stamina"] + GameData.STAMINA_REGEN_PER_SECOND * TICK)
+	# Au repos à l'arrière (rotation, arrivé à son poste de repos) : trois fois plus vite.
+	var rate := GameData.STAMINA_REGEN_PER_SECOND
+	if unit["resting"] and unit["order"].is_empty():
+		rate *= GameData.ROTATION_REST_FACTOR
+	unit["stamina"] = minf(unit["max_stamina"], unit["stamina"] + rate * TICK)
 	if unit["exhausted"] and unit["stamina"] >= GameData.STAMINA_RECOVERED:
 		unit["exhausted"] = false
+	if unit["resting"] and unit["stamina"] >= unit["max_stamina"]:
+		unit["resting"] = false  # reposé : il retourne au combat
+		_log("%s a repris son souffle." % unit["name"])
 
 
 ## Épuisé (endurance à 0) : attaque et défense x STAMINA_EXHAUSTED_FACTOR.
@@ -928,8 +1018,8 @@ func _separate() -> void:
 # ---------------------------------------------------------------------------
 
 func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
-	if attacker["cooldown"] > 0:
-		return
+	if attacker["cooldown"] > 0 or time < attacker["swap_until"]:
+		return  # (pendant un échange de place, il ne frappe pas)
 	attacker["cooldown"] = _attack_time(attacker)
 	_spend_stamina(attacker, GameData.STAMINA_ATTACK_COST)
 	match attacker["class"]:
@@ -1033,6 +1123,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Un fuyard (peur, effondrement) tourne le dos : il encaisse plus.
 	if _fleeing(target):
 		raw *= GameData.FLEEING_DAMAGE_TAKEN
+	# En plein échange de place (rotation) : le moment le plus dangereux.
+	if time < target["swap_until"]:
+		raw *= GameData.ROTATION_DAMAGE_TAKEN
 	var amount := mini(maxi(1, roundi(raw)), target["hp"])
 	# Un Protecteur tout près d'un allié en danger prend une partie du coup pour lui.
 	var guardian := _guardian_for(target)
@@ -1059,7 +1152,7 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 
 
 func _try_heal(healer: Dictionary, target: Dictionary) -> void:
-	if healer["cooldown"] > 0:
+	if healer["cooldown"] > 0 or time < healer["swap_until"]:
 		return
 	healer["cooldown"] = _attack_time(healer)
 	healer["mana"] -= HEAL_MANA_COST
