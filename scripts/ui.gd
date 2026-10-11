@@ -224,7 +224,12 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 			lines.append("Rangés dans l'entrepôt.")
 	else:
 		lines.append("Les survivants sont ramenés à la cité.")
-	lines.append("+%d expérience pour chaque survivant" % report["xp"])
+	var idle: Array = report.get("idle", [])
+	lines.append("+%d expérience pour chaque survivant%s" % [report["xp"], " qui a combattu" if not idle.is_empty() else ""])
+	if not idle.is_empty():
+		# Expérience méritée : sans avoir porté ni reçu un seul coup, pas d'expérience.
+		lines.append("Pas d'expérience pour %s : %s rien fait pendant le combat." % [", ".join(idle),
+			"il n'a" if idle.size() == 1 else "ils n'ont"])
 	for level_up in report["level_ups"]:
 		var hero: Dictionary = level_up["hero"]
 		# Le détail de la croissance (selon ce qu'il a fait) : « Force +2, Santé +1, Intelligence -1 ».

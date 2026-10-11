@@ -396,6 +396,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (bouton de `BattleView`, `order_barrage`, `can_barrage`, refus possible) : toutes ses flèches d'un coup au
   hasard sur les ennemis à sa portée, chacune à `BARRAGE_POWER` (0,6) d'un tir, -`BARRAGE_STAMINA_COST` (10)
   d'endurance. Les monstres ne s'usent pas et ne manquent pas de flèches. Boutons d'ordre : texte à la ligne.
+  Expérience méritée (ch. 2 et 4) : `fighter["engaged"]` devient vrai quand le héros porte, reçoit ou esquive
+  un coup (`_hit`), soigne (`_try_heal`) ou protège (`_cover`). Un survivant qui n'a rien fait ne gagne pas
+  d'expérience (`finish_tower_battle`, `report["idle"]`) ; le résultat dit « +15 expérience pour chaque
+  survivant qui a combattu » et « Pas d'expérience pour X : il n'a rien fait pendant le combat. ».
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

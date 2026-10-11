@@ -489,6 +489,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"floor": floor_number,
 		"replay": replay,  # étage déjà conquis, rejoué pour s'entraîner
 		"tips": [],       # conseils du Système à montrer après les fenêtres de fin (voir show_tip)
+		"idle": [],       # survivants qui n'ont rien fait pendant le combat : pas d'expérience (noms)
 	}
 	if battle.victory and not replay and floor_number == DAILY_UNLOCK_FLOOR:
 		report["notices"].append("Félicitations, Maître ! Vous avez franchi le %de étage. Le donjon journalier est débloqué." % DAILY_UNLOCK_FLOOR)
@@ -544,7 +545,12 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			report["skills"].append_array(check_evolutions(hero))
 			# Ce qu'il a fait pendant le combat oriente la croissance de ses stats (voir heroes.gd).
 			add_activity(hero, fighter["acts"])
-			var levels := gain_xp(hero, report["xp"])
+			# Expérience méritée (phase 1.2 ; œuvre, ch. 2 et 4) : sans avoir porté ni reçu un seul coup
+			# (ni soigné), il ne gagne pas d'expérience ; le rapport le signale.
+			var earned: int = report["xp"] if fighter.get("engaged", true) else 0
+			if earned == 0 and report["xp"] > 0:
+				report["idle"].append(hero["name"])
+			var levels := gain_xp(hero, earned)
 			if levels > 0:
 				report["level_ups"].append({"hero": hero, "levels": levels, "growth": last_growth.duplicate()})
 			# Conseil du Système la première fois qu'un héros revient blessé ou ébranlé.

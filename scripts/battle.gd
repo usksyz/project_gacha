@@ -601,6 +601,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
 		# coups portés (Force), esquives et tirs (Dextérité), coups encaissés (Santé), sorts et soins (Intelligence).
 		"acts": {"str": 0, "dex": 0, "vit": 0, "int": 0},
+		# Expérience méritée (phase 1.2) : a-t-il porté, reçu (ou esquivé) un coup, ou soigné ? Sinon, pas d'XP.
+		"engaged": false,
 		"base_name": source.get("base_name", source["name"]),  # nom sans lettre (Gobelin, pas Gobelin A)
 		"wave": source.get("wave", 0),  # survie : sa vague (voir current_wave) ; 0 = sur le terrain dès le début
 		# Élément de la magie d'un mage (un mage sans élément noté fait du feu).
@@ -1365,6 +1367,8 @@ func order_barrage(hero: Dictionary) -> void:
 ## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.
 func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool, kind: String) -> void:
 	var amount := _damage(attacker, target, power, critical, kind)
+	attacker["engaged"] = true  # il a pris part au combat (expérience méritée)
+	target["engaged"] = true
 	# Activité (croissance) : l'esquive exerce la Dextérité ; le coup porté, la stat de l'attaque ;
 	# le coup encaissé, la Santé.
 	if amount < 0:
@@ -1473,6 +1477,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
 	healer["contribution"] += amount
+	healer["engaged"] = true  # soigner, c'est prendre part au combat
 	healer["acts"]["int"] += 1  # la magie exerce l'Intelligence
 	_effect("heal", healer, target, "+%d" % amount, false)
 
@@ -2305,6 +2310,7 @@ func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
 	if share <= 0:
 		return amount
 	guardian["hp"] -= share
+	guardian["engaged"] = true
 	guardian["acts"]["vit"] += 1  # encaisser exerce la Santé
 	_effect("hit", guardian, guardian, "-%d" % share, false)
 	if not guardian.get("covered", {}).has(ward["id"]):
