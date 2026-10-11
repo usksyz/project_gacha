@@ -528,13 +528,16 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (~1 mort), 2 niveaux de plus sans armes 72-81 % ; étages 6 et 8 brute 34-40 %, préparée 90 % ; étage 5
   (survie, boss) brute 5 %, préparée 47 % ; étage 10 (défense) brute 28 %, préparée 49 %. À refaire après
   tout changement d'équilibre.
-  Étage 5, survie (demande du porteur du projet : dur mais gagnable, 30 à 60 % pour une équipe préparée) :
-  avec la peur, l'endurance et l'agonie, la préparée n'y gagnait plus que 7 à 10 % (horde de 8 monstres
-  niveau 9 et chef gobelin niveau 11, balayée en 25 s). La horde de survie compte maintenant
-  `SURVIVAL_HORDE_EXTRA` (1 ; avant 4) + étage / 2 monstres (étage 5 : 5 et le boss ; le niveau et le boss ne
-  changent pas). Simulation (300 combats, préparée niveau 7) : 22 % sans expérience, 31 % avec 4 combats,
-  35 % avec un Maître simulé qui fait tourner les fatigués, 60 % avec 3 potions (morts 3,8 → 1). La rotation
-  ne pèse presque pas (0,1 rotation par combat) : le combat se décide en 25 s, avant la fatigue.
+  Survie par vagues (phase 1.2, demande du porteur du projet ; œuvre : l'étage 5, 30 minutes, « broyeur de
+  héros ») : la difficulté vient de la durée et de l'usure, pas d'un seul choc de 25 s (l'ancienne horde
+  unique : 8 monstres, réduite à 5 au réglage précédent par `SURVIVAL_HORDE_EXTRA`, supprimé). `tower.gd` :
+  `SURVIVAL_SECONDS` à tenir (la défense garde `DEFENSE_SECONDS`, 60 s), `SURVIVAL_WAVES` vagues, une toutes
+  les `SURVIVAL_WAVE_SECONDS` du compte à rebours, de `SURVIVAL_WAVE_MONSTERS` + étage / 5 monstres chacune
+  (`enemy["wave"]`, `tower_enemies`) ; le boss vient avec la dernière. `battle.gd` : `current_wave()`, seule la
+  vague 0 est placée au départ, les suivantes entrent par `_call_reinforcements` (6 ennemis au plus à la
+  fois), chaque vague annoncée (journal, fenêtre « Vague N »). Écran : « Vague 2/5 » à côté du compte à
+  rebours (affiché en permanence, « 3:30 au premier contact » tant qu'il attend) ; annonce de l'étage.
+  Quête sans `waves` (ancienne sauvegarde en plein combat) : tous les ennemis en vague 0, comme avant.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque

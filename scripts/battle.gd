@@ -198,6 +198,8 @@ var _helpers := {}
 var _free_since := {}
 ## Vrai une fois que les héros ont vu un boss arriver (le stress du boss ne compte qu'une fois).
 var _boss_seen := false
+## Survie : dernière vague annoncée (voir current_wave).
+var _wave_announced := 0
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
@@ -578,6 +580,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# coups portés (Force), esquives et tirs (Dextérité), coups encaissés (Santé), sorts et soins (Intelligence).
 		"acts": {"str": 0, "dex": 0, "vit": 0, "int": 0},
 		"base_name": source.get("base_name", source["name"]),  # nom sans lettre (Gobelin, pas Gobelin A)
+		"wave": source.get("wave", 0),  # survie : sa vague (voir current_wave) ; 0 = sur le terrain dès le début
 		# Élément de la magie d'un mage (un mage sans élément noté fait du feu).
 		"element": source.get("element", "Feu" if fighter_class == "Mage" else ""),
 		"kills": [],               # ennemis achevés : [{"name", "boss"}] (pour Tueur de gobelins)
@@ -670,8 +673,10 @@ func _place_units() -> void:
 	for hero in heroes:
 		hero["post"] = hero["pos"]
 
-	for i in mini(ENEMY_SLOTS, enemies.size()):
-		_spawn_enemy(enemies[i], randi_range(1, 3))
+	# (Survie : seulement la première vague ; les autres attendent leur tour, voir current_wave.)
+	var first := enemies.filter(func(e): return e["wave"] == 0)
+	for i in mini(ENEMY_SLOTS, first.size()):
+		_spawn_enemy(first[i], randi_range(1, 3))
 
 
 ## Aligne des combattants sur une ligne, centrés, sur des cases libres.
@@ -765,13 +770,31 @@ func _step() -> void:
 	_separate()
 
 
+## Survie par vagues (voir GameData, tower.gd, SURVIVAL_WAVES) : la vague en cours (0 = la première).
+## Une nouvelle vague arrive toutes les quest["wave_seconds"] du compte à rebours (pas avant le premier
+## contact). Sans vagues (autres quêtes) : toujours 0.
+func current_wave() -> int:
+	if quest.get("wave_seconds", 0.0) <= 0.0 or clock_start < 0:
+		return 0
+	return mini(quest["waves"] - 1, int(clock_time() / quest["wave_seconds"]))
+
+
 ## Au besoin, un ennemi en réserve entre par le haut de la carte à la place d'un ennemi tombé.
+## En survie, seulement ceux des vagues déjà arrivées ; chaque nouvelle vague est annoncée.
 func _call_reinforcements() -> void:
+	var wave := current_wave()
+	if wave > _wave_announced:
+		_wave_announced = wave
+		var text := "Vague %d sur %d : la horde revient !" % [wave + 1, quest["waves"]]
+		if wave == quest["waves"] - 1 and enemies.any(func(e): return e["boss"]):
+			text += " Le chef est avec elle."
+		_log(text, "reinforce")
+		_alert("Vague %d" % (wave + 1), [text], wave == quest["waves"] - 1)
 	var on_field := 0
 	for enemy in enemies:
 		if enemy["present"] and enemy["hp"] > 0:
 			on_field += 1
-	var waiting := _reserve()
+	var waiting := _reserve().filter(func(e): return e["wave"] <= wave)
 	if waiting.is_empty() or on_field >= ENEMY_SLOTS:
 		_free_since.clear()
 		return

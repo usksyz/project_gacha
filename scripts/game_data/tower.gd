@@ -32,7 +32,20 @@ const QUEST_TYPES := {
 
 ## Limite de temps, en secondes de combat : pour tuer tous les ennemis, ou à tenir (survie, défense).
 const KILL_QUEST_SECONDS := 90
-const SURVIVAL_SECONDS := 60
+## Défense de la cité : temps à tenir (avant la phase 1.2, la survie avait le même : 60 s).
+const DEFENSE_SECONDS := 60
+
+## Survie par vagues (feuille de route v2, phase 1.2 ; œuvre : la survie de l'étage 5, 30 minutes,
+## « broyeur de héros », ch. 10 et 11). La difficulté vient de la durée et de l'usure, pas d'un seul choc :
+## SURVIVAL_SECONDS à tenir (le compte à rebours démarre au premier contact), la horde arrive en
+## SURVIVAL_WAVES vagues, une toutes les SURVIVAL_WAVE_SECONDS du compte à rebours. Chaque vague compte
+## SURVIVAL_WAVE_MONSTERS + étage / 5 monstres ; le boss arrive avec la dernière (étage 5 : 5 vagues de 4,
+## soit 20 monstres et le chef gobelin). Entre deux vagues, les héros soufflent (endurance, flèches).
+## Avant : une seule horde de 8 monstres (5 après le dernier réglage), 60 s. Chiffres provisoires.
+const SURVIVAL_SECONDS := 210
+const SURVIVAL_WAVES := 5
+const SURVIVAL_WAVE_SECONDS := 40.0
+const SURVIVAL_WAVE_MONSTERS := 3
 
 ## Solidité des remparts d'une quête de défense : chaque coup d'un ennemi arrivé
 ## au pied des remparts leur retire 1 point. À 0, la cité tombe.
@@ -48,12 +61,6 @@ const TIER_BONUS_LEVELS := 2
 ## l'étage 2, les archers squelettes. Avant : 2 gobelins à l'étage 1. À partir de l'étage 5, la formule
 ## normale (déjà assez dure). Chiffres réglés par simulation (voir CLAUDE.md, « Tour »).
 const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [6, 3], 3: [6, 3], 4: [6, 3]}
-
-## Survie : la horde compte SURVIVAL_HORDE_EXTRA + étage / 2 monstres de plus (étage 5 : 5 monstres et le
-## boss). Demande du porteur du projet : l'étage 5 doit être dur mais gagnable pour une équipe préparée
-## (30 à 60 % de victoires). Avant : 4 (horde de 8 à l'étage 5, 7 à 10 % de victoires). Chiffre provisoire,
-## réglé par simulation (voir CLAUDE.md, « Tour »).
-const SURVIVAL_HORDE_EXTRA := 1
 
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
@@ -258,7 +265,13 @@ func floor_quest(floor_number: int) -> Dictionary:
 	var quest: Dictionary = QUEST_TYPES[type].duplicate()
 	quest["type"] = type
 	quest["lasting"] = type in ["survival", "defense"]  # il faut tenir, pas tout tuer
-	quest["seconds"] = SURVIVAL_SECONDS if quest["lasting"] else KILL_QUEST_SECONDS
+	quest["seconds"] = KILL_QUEST_SECONDS
+	if type == "survival":
+		quest["seconds"] = SURVIVAL_SECONDS
+		quest["waves"] = SURVIVAL_WAVES  # la horde arrive par vagues (voir Battle.current_wave)
+		quest["wave_seconds"] = SURVIVAL_WAVE_SECONDS
+	elif type == "defense":
+		quest["seconds"] = DEFENSE_SECONDS
 	quest["warnings"] = 3 if type == "defense" else 0
 	quest["hidden_level"] = type == "survival"
 	# Survie (cahier) : « le décompte ne démarre qu'au premier contact avec les ennemis ».
@@ -286,13 +299,26 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 	match quest["type"]:
 		"annihilation":
 			monster_count += floor_number / 3
-		"survival":
-			monster_count += SURVIVAL_HORDE_EXTRA + floor_number / 2
 		"defense":
 			monster_count += 4 + floor_number / 2
 	var known_types := ENEMY_TYPES.slice(0, mini(maxi(1 + floor_number / 2, early[1]), ENEMY_TYPES.size()))
-	for i in monster_count:
-		enemies.append(_create_enemy(known_types.pick_random(), level))
+	if quest["type"] == "survival":
+		# Survie par vagues : chaque monstre porte le numéro de sa vague (0 = la première, sur le terrain dès
+		# le début) ; le boss arrive avec la dernière.
+		var boss: Array[Dictionary] = enemies.duplicate()
+		enemies.clear()
+		for wave in SURVIVAL_WAVES:
+			if wave == SURVIVAL_WAVES - 1:
+				for chief in boss:
+					chief["wave"] = wave
+					enemies.append(chief)
+			for i in SURVIVAL_WAVE_MONSTERS + floor_number / 5:
+				var monster := _create_enemy(known_types.pick_random(), level)
+				monster["wave"] = wave
+				enemies.append(monster)
+	else:
+		for i in monster_count:
+			enemies.append(_create_enemy(known_types.pick_random(), level))
 	_number_duplicates(enemies)
 	return enemies
 

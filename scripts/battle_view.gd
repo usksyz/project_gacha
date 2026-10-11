@@ -371,13 +371,15 @@ func _update_clock() -> void:
 	var limit: float = battle.quest["seconds"]
 	var text := ""
 	if battle.clock_start < 0:
-		text = "Décompte de %s au premier contact" %_format_time(limit)  # survie : le décompte attend
+		text = "%s au premier contact" % _format_time(limit)  # survie : le décompte attend
 	elif battle.quest["lasting"]:
 		text = "Encore %s" % _format_time(limit - battle.clock_time())
 	else:
 		text = "%s / %s" % [_format_time(battle.clock_time()), _format_time(limit)]
 	if battle.quest["walls"] > 0:
 		text += "   Remparts %d" % battle.walls
+	if battle.quest.get("waves", 0) > 0:  # survie par vagues
+		text += "   Vague %d/%d" % [battle.current_wave() + 1, battle.quest["waves"]]
 	clock_label.text = text
 
 
