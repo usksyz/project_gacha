@@ -17,6 +17,12 @@ extends GamePersonality
 # Plus tard : le temps du lobby ira 3 fois plus vite que le temps réel, et les héros iront
 # d'eux-mêmes au terrain d'entraînement.
 
+## Croissance (voir heroes.gd, « Croissance selon ce que le héros a fait ») : la stat qu'exerce chaque
+## programme, et l'activité comptée par séance (un combat compte environ 10 à 30 coups portés et reçus).
+const TRAINING_STATS := {"Maîtrise de l'épée": "str", "Utilisation du bouclier": "vit"}
+const TRAINING_ACTIVITY_PER_SESSION := 3
+
+
 ## Le terrain d'entraînement vient de se construire tout seul (assez d'armes tirées) : on l'annonce.
 func _announce_training_ground() -> void:
 	facility_completed.emit("Construction terminée", [
@@ -85,6 +91,9 @@ func update_training() -> void:
 		var points: int = maxi(1, roundi(sessions * (TRAINING_POINTS_BASE + hero["growth"]) * efficiency))
 		training_news.append_array(add_skill_progress(hero, hero["training"], points,
 			skill_progress_needed(hero["training"])))
+		# Chaque séance oriente aussi la croissance de ses stats (voir heroes.gd) : l'épée exerce la Force,
+		# le bouclier la Santé. (L'entraînement ne donne ni stats ni niveaux : seulement au prochain niveau.)
+		add_activity(hero, {TRAINING_STATS.get(hero["training"], "str"): sessions * TRAINING_ACTIVITY_PER_SESSION})
 		if efficiency < 1.0:
 			training_news.append_array(notice_bad_heroes())
 		changed = true

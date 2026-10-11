@@ -140,6 +140,10 @@ const SPELL_MANA_COST := 20
 const HEAL_MANA_COST := 12
 const MANA_BOLT_POWER := 0.3
 
+## Quelle stat un coup porté exerce (croissance, voir « acts ») : coup au contact → Force,
+## flèche → Dextérité, sort ou trait de magie → Intelligence.
+const ACT_STAT := {"hit": "str", "arrow": "dex", "spell": "int", "bolt": "int"}
+
 ## Esquive par niveau de Mouvement souple, et réduction des dégâts par niveau de Calme.
 const DODGE_PER_LEVEL := 0.03
 const CALM_PER_LEVEL := 0.04
@@ -469,6 +473,9 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"person": is_hero,         # un héros (l'adversaire d'un duel aussi) : sa migraine est gardée à la fin
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
+		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
+		# coups portés (Force), esquives et tirs (Dextérité), coups encaissés (Santé), sorts et soins (Intelligence).
+		"acts": {"str": 0, "dex": 0, "vit": 0, "int": 0},
 		"base_name": source.get("base_name", source["name"]),  # nom sans lettre (Gobelin, pas Gobelin A)
 		# Élément de la magie d'un mage (un mage sans élément noté fait du feu).
 		"element": source.get("element", "Feu" if fighter_class == "Mage" else ""),
@@ -926,6 +933,13 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 ## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.
 func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool, kind: String) -> void:
 	var amount := _damage(attacker, target, power, critical, kind)
+	# Activité (croissance) : l'esquive exerce la Dextérité ; le coup porté, la stat de l'attaque ;
+	# le coup encaissé, la Santé.
+	if amount < 0:
+		target["acts"]["dex"] += 1
+	else:
+		attacker["acts"][ACT_STAT.get(kind, "str")] += 1
+		target["acts"]["vit"] += 1
 	var text := "esquive !" if amount < 0 else "-%d" % amount
 	_effect(kind, attacker, target, text, critical and amount >= 0)
 	if target["hp"] <= 0 and target["killer"] == "":
@@ -1014,6 +1028,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 	amount = mini(amount, target["max_hp"] - target["hp"])
 	target["hp"] += amount
 	healer["contribution"] += amount
+	healer["acts"]["int"] += 1  # la magie exerce l'Intelligence
 	_effect("heal", healer, target, "+%d" % amount, false)
 
 
@@ -1631,6 +1646,7 @@ func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
 	if share <= 0:
 		return amount
 	guardian["hp"] -= share
+	guardian["acts"]["vit"] += 1  # encaisser exerce la Santé
 	_effect("hit", guardian, guardian, "-%d" % share, false)
 	if not guardian.get("covered", {}).has(ward["id"]):
 		guardian["covered"] = guardian.get("covered", {})

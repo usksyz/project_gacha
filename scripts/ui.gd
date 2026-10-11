@@ -227,7 +227,9 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 	lines.append("+%d expérience pour chaque survivant" % report["xp"])
 	for level_up in report["level_ups"]:
 		var hero: Dictionary = level_up["hero"]
-		lines.append("%s passe au niveau %d !" % [hero["name"], hero["level"]])
+		# Le détail de la croissance (selon ce qu'il a fait) : « Force +2, Santé +1, Intelligence -1 ».
+		var growth := GameData.growth_text(level_up.get("growth", {}))
+		lines.append("%s passe au niveau %d !%s" % [hero["name"], hero["level"], " (%s)" % growth if growth != "" else ""])
 	if report["mvp"] != "":
 		lines.append("MVP : %s" % report["mvp"])
 	var title := "Défaite"

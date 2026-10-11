@@ -387,6 +387,16 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 ## Avancement (phases du cahier des charges)
 - Phase 1 (héros et combat) : fiche à 4 stats, classe Novice, niveaux/XP, plafond par étoile,
   croissance cachée et talents cachés des 1 étoile, combat auto, mort définitive avec cause : fait.
+  Croissance selon l'activité (feuille de route v2, phase 0 ; `heroes.gd`, `_level_up`) : le total de points
+  par niveau reste la valeur de croissance, réparti (au plus fort reste) selon ce que le héros a fait depuis
+  son dernier niveau (`hero["growth_log"]`, remis à zéro à chaque montée ; `add_activity`) : coups portés →
+  Force, esquives et tirs → Dextérité, coups encaissés → Santé, sorts et soins → Intelligence (combat :
+  `fighter["acts"]`, `Battle.ACT_STAT`, ajoutés par `finish_tower_battle` ; terrain d'entraînement :
+  `TRAINING_STATS`, `TRAINING_ACTIVITY_PER_SESSION` 3 par séance ; l'« étude » viendra avec la bibliothèque).
+  Une stat sous `STAT_DECAY_SHARE` (10 %) de l'activité peut perdre 1 point (`STAT_DECAY_CHANCE` 30 %, une par
+  niveau, jamais sous 1) au profit de la plus utilisée. Sans activité (mode dev, ancienne sauvegarde) :
+  l'ancienne répartition au hasard. Détail dans la fenêtre de fin de combat (« X passe au niveau 4 ! (Force +2,
+  Santé +1) », `GameData.last_growth`, `growth_text`) et dans le résultat de la synthèse.
   Saignement/hémorragie, éveil des compétences en situation critique, premières compétences
   (Résistance à la douleur, Mouvement souple, Calme, Berserk ; Calme et Berserk incompatibles sauf
   pour Han) : fait, chiffres provisoires dans `battle.gd` et `GameData.SKILLS`.

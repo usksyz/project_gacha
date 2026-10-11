@@ -396,40 +396,126 @@ func is_max_level(hero: Dictionary) -> bool:
 
 
 ## Donne de l'expérience à un héros. Renvoie le nombre de niveaux gagnés.
+## Ce que les niveaux ont changé aux stats est dans last_growth (voir _level_up).
 func gain_xp(hero: Dictionary, amount: int) -> int:
 	var levels := 0
+	last_growth = {}
 	if is_max_level(hero):
+		hero["growth_log"] = {}  # plus de niveaux à gagner : ce qu'il a fait ne compte plus
 		return 0
+	var shares := activity_shares(hero)
 	hero["xp"] += amount
 	while hero["xp"] >= xp_to_next(hero["level"]):
 		hero["xp"] -= xp_to_next(hero["level"])
-		_level_up(hero)
+		_level_up(hero, shares)
 		levels += 1
 		if is_max_level(hero):
 			hero["xp"] = 0
 			break
+	if levels > 0:
+		hero["growth_log"] = {}  # on repart de zéro jusqu'au prochain niveau
 	return levels
 
 
-## Montée de niveau : le héros gagne autant de points que sa valeur de croissance,
-## répartis au hasard (la statistique de sa classe a plus de chances d'en recevoir).
-## Les stats bougent de façon inégale : parfois l'une baisse pendant qu'une autre monte.
-func _level_up(hero: Dictionary) -> void:
+# --- Croissance selon ce que le héros a fait (feuille de route v2 : « à chaque niveau, un total fixe de
+# points, répartis selon ce que fait le héros ; une stat peut baisser ») ---
+# Le total de points par niveau reste sa valeur de croissance (cachée). Depuis son dernier niveau, le héros
+# accumule de l'activité dans hero["growth_log"] ({"str": 12, "dex": 3, ...}) : coups portés → Force ;
+# esquives et tirs → Dextérité ; coups encaissés → Santé ; magie (sorts, soins) ou étude → Intelligence.
+# (Combat de la Tour : battle.gd, fighter["acts"] ; terrain d'entraînement : training.gd. L'étude viendra
+# avec la bibliothèque.) Sans aucune activité (niveaux du mode dev...), l'ancienne répartition au hasard.
+# Chiffres provisoires.
+
+## Une stat qui a reçu moins de cette part de l'activité est « peu utilisée » : elle peut perdre 1 point
+## (STAT_DECAY_CHANCE par niveau), donné à la stat la plus utilisée. Une seule par niveau, jamais sous 1.
+const STAT_DECAY_SHARE := 0.1
+const STAT_DECAY_CHANCE := 0.3
+
+## (Pas enregistré) Ce qu'a changé le dernier gain_xp : {"str": 2, "int": -1, ...}, pour la fenêtre de niveau.
+var last_growth := {}
+
+
+## Ajoute de l'activité à un héros (« counts » : {"str": 3, "vit": 1, ...}). Ne sauvegarde pas.
+func add_activity(hero: Dictionary, counts: Dictionary) -> void:
+	if not hero.has("growth_log"):
+		hero["growth_log"] = {}  # anciennes sauvegardes
+	for stat in counts:
+		if counts[stat] > 0:
+			hero["growth_log"][stat] = hero["growth_log"].get(stat, 0) + counts[stat]
+
+
+## La part de chaque stat dans l'activité du héros depuis son dernier niveau ({} s'il n'a rien fait).
+func activity_shares(hero: Dictionary) -> Dictionary:
+	var activity: Dictionary = hero.get("growth_log", {})
+	var total := 0
+	for stat in STAT_NAMES:
+		total += activity.get(stat, 0)
+	if total <= 0:
+		return {}
+	var shares := {}
+	for stat in STAT_NAMES:
+		shares[stat] = float(activity.get(stat, 0)) / total
+	return shares
+
+
+## « Force +2, Santé +1, Intelligence -1 » (ou "" si rien n'a changé).
+func growth_text(changes: Dictionary) -> String:
+	var parts := []
+	for stat in STAT_NAMES:
+		var gap: int = changes.get(stat, 0)
+		if gap != 0:
+			parts.append("%s %s%d" % [STAT_NAMES[stat], "+" if gap > 0 else "-", absi(gap)])
+	return ", ".join(parts)
+
+
+## Montée de niveau : le héros gagne autant de points que sa valeur de croissance, répartis selon son
+## activité (« shares », voir activity_shares : au plus fort reste) ; une stat peu utilisée peut perdre 1 point.
+## Sans activité : au hasard (la statistique de sa classe a plus de chances), et parfois l'une baisse
+## pendant qu'une autre monte. Les changements s'ajoutent à last_growth.
+func _level_up(hero: Dictionary, shares: Dictionary = {}) -> void:
 	hero["level"] += 1
 	var stats: Dictionary = hero["stats"]
-	var choices: Array = STAT_NAMES.keys()
-	var main_stat: String = CLASS_MAIN_STAT[hero["class"]]
-	if main_stat != "":
-		choices.append(main_stat)  # deux fois dans la liste = deux fois plus de chances
-	if hero["class"] == "Mage":
-		choices.append_array(["int", "int"])  # un mage met presque tout dans l'Intelligence
-	for i in hero["growth"]:
-		stats[choices.pick_random()] += 1
-	if randf() < 0.25:
-		var down: String = STAT_NAMES.keys().pick_random()
-		if stats[down] > 1:
-			stats[down] -= 1
+	var before: Dictionary = stats.duplicate()
+	if shares.is_empty():
+		var choices: Array = STAT_NAMES.keys()
+		var main_stat: String = CLASS_MAIN_STAT[hero["class"]]
+		if main_stat != "":
+			choices.append(main_stat)  # deux fois dans la liste = deux fois plus de chances
+		if hero["class"] == "Mage":
+			choices.append_array(["int", "int"])  # un mage met presque tout dans l'Intelligence
+		for i in hero["growth"]:
 			stats[choices.pick_random()] += 1
+		if randf() < 0.25:
+			var down: String = STAT_NAMES.keys().pick_random()
+			if stats[down] > 1:
+				stats[down] -= 1
+				stats[choices.pick_random()] += 1
+	else:
+		# Au plus fort reste : chaque stat reçoit sa part entière, les points restants vont aux plus grands restes.
+		var points: int = hero["growth"]
+		var given := 0
+		var rests := []
+		for stat in STAT_NAMES:
+			var exact: float = shares[stat] * points
+			stats[stat] += floori(exact)
+			given += floori(exact)
+			rests.append([exact - floori(exact), stat])
+		rests.sort_custom(func(a, b): return a[0] > b[0])
+		for i in points - given:
+			stats[rests[i][1]] += 1
+		# Une stat peu utilisée peut perdre un point, au profit de la plus utilisée.
+		var unused := STAT_NAMES.keys().filter(func(stat): return shares[stat] < STAT_DECAY_SHARE and stats[stat] > 1)
+		if not unused.is_empty() and randf() < STAT_DECAY_CHANCE:
+			var top: String = STAT_NAMES.keys()[0]
+			for stat in STAT_NAMES:
+				if shares[stat] > shares[top]:
+					top = stat
+			stats[unused.pick_random()] -= 1
+			stats[top] += 1
+	for stat in STAT_NAMES:
+		var gap: int = stats[stat] - before[stat]
+		if gap != 0:
+			last_growth[stat] = last_growth.get(stat, 0) + gap
 
 
 # ---------------------------------------------------------------------------

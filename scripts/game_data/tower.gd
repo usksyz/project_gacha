@@ -305,7 +305,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		"gems": 0,
 		"xp": 0,
 		"dead": [],       # [{"hero": ..., "cause": ...}]
-		"level_ups": [],  # [{"hero": ..., "levels": ...}]
+		"level_ups": [],  # [{"hero": ..., "levels": ..., "growth": {"str": 2, ...}}]
 		"skills": [],     # compétences apprises ou améliorées pendant le combat (textes)
 		"notices": [],    # annonces spéciales (déblocages...)
 		"items": [],      # objets gagnés, rangés dans l'entrepôt : [{"name", "grade", "count"}]
@@ -368,9 +368,11 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 					fighter["shots"], skill_progress_needed("Maîtrise de l'arc")))
 			report["skills"].append_array(_combat_feats(hero, fighter, battle))
 			report["skills"].append_array(check_evolutions(hero))
+			# Ce qu'il a fait pendant le combat oriente la croissance de ses stats (voir heroes.gd).
+			add_activity(hero, fighter["acts"])
 			var levels := gain_xp(hero, report["xp"])
 			if levels > 0:
-				report["level_ups"].append({"hero": hero, "levels": levels})
+				report["level_ups"].append({"hero": hero, "levels": levels, "growth": last_growth.duplicate()})
 			# Conseil du Système la première fois qu'un héros revient blessé ou ébranlé.
 			if fighter["hp"] < fighter["max_hp"] or fighter["mental"] < mental(hero):
 				if not "blessure" in report["tips"]:

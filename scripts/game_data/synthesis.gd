@@ -193,6 +193,7 @@ func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
 		lines.append("%s (%s) a disparu pour toujours." % [sacrifice["name"], "★".repeat(sacrifice["rarity"])])
 
 	var levels := gain_xp(target, xp) if xp > 0 else 0
+	var growth := growth_text(last_growth) if levels > 0 else ""
 
 	# Compétences apprises : pour chaque sacrifié, presque toujours une des siennes que le receveur n'a pas.
 	var learned := []
@@ -235,7 +236,7 @@ func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
 	if xp == 0:
 		lines.append("%s est déjà au niveau maximum : l'expérience est perdue (pense à la promotion)." % target["name"])
 	else:
-		lines.append("+%d d'expérience : niveau %d." % [xp, target["level"]])
+		lines.append("+%d d'expérience : niveau %d.%s" % [xp, target["level"], " %s." % growth if growth != "" else ""])
 	lines.append_array(details)
 	lines.append(mental_after_synthesis(sacrifices.size()))
 	tidy_arsenal()  # les armes des sacrifiés sont perdues (et la partie est sauvegardée)
