@@ -62,6 +62,10 @@ const TICK := 0.1
 const GRID_W := 18
 const GRID_H := 20
 
+## Terrain de survie : première ligne de la rangée de maisons, et sa profondeur (longueur des ruelles).
+const ALLEY_ROW := 8
+const ALLEY_LENGTH := 3
+
 ## Nombre d'ennemis sur le terrain en même temps, et délai avant l'arrivée d'un renfort.
 const ENEMY_SLOTS := 6
 const REINFORCE_DELAY := 2.0
@@ -164,6 +168,11 @@ var obstacles: Array[Dictionary] = []
 
 ## Remparts de la cité (quête de défense seulement).
 var walls := 0
+
+## Hauteurs du terrain de survie (toits, plateformes : on les escalade, voir is_high), à dessiner.
+var heights: Array[Rect2i] = []
+## Les cases en hauteur : {Vector2i: true}.
+var _high := {}
 
 ## Journal : {"t": moment (secondes), "text": ..., "style": "" ou "bleed", "awaken", "berserk", "reinforce"}.
 var events: Array[Dictionary] = []
@@ -625,13 +634,8 @@ func _build_map() -> void:
 		_add_obstacle(Rect2i(0, GRID_H - 1, GRID_W, 1), "rampart")
 
 	if quest["type"] == "survival":
-		# Des pâtés de maisons séparés par des ruelles.
-		for row in [6, 10]:
-			var x := randi_range(0, 2)
-			while x < GRID_W - 2:
-				var width := randi_range(2, 4)
-				_try_obstacle(Rect2i(x, row + randi_range(0, 1), mini(width, GRID_W - x), 3), "house")
-				x += width + randi_range(2, 3)
+		_build_alleys()
+		return
 	var pieces := randi_range(6, 9)
 	for i in pieces:
 		var horizontal := randf() < 0.5
@@ -640,6 +644,52 @@ func _build_map() -> void:
 			size = Vector2i(randi_range(1, 2), randi_range(1, 2))
 		var cell := Vector2i(randi_range(0, GRID_W - size.x), randi_range(5, GRID_H - 8))
 		_try_obstacle(Rect2i(cell, size), "rock" if size.x == size.y else "wall")
+
+
+## Terrain de survie (voir GameData, tower.gd, SURVIVAL_ALLEYS) : une rangée de maisons d'un bord à l'autre,
+## percée de ruelles larges d'une case ; côté héros, des hauteurs à la sortie de certaines ruelles ;
+## quelques rochers côté ennemis.
+func _build_alleys() -> void:
+	var top := ALLEY_ROW
+	# Les ruelles : réparties sur la largeur, un peu au hasard.
+	var alleys: Array[int] = []
+	var span := float(GRID_W) / GameData.SURVIVAL_ALLEYS
+	for i in GameData.SURVIVAL_ALLEYS:
+		alleys.append(clampi(int(span * (i + 0.5)) + randi_range(-1, 1), 1, GRID_W - 2))
+	# Les maisons entre les ruelles (de 2 à 4 cases de large, pour qu'on les distingue).
+	var x := 0
+	while x < GRID_W:
+		if x in alleys:
+			x += 1
+			continue
+		var width := 1
+		var wanted := randi_range(2, 4)
+		while x + width < GRID_W and not (x + width) in alleys and width < wanted:
+			width += 1
+		_add_obstacle(Rect2i(x, top, width, ALLEY_LENGTH), "house")
+		x += width
+	# Les hauteurs : côté héros, juste à côté de la sortie d'une ruelle (on tient la sortie d'en haut).
+	alleys.shuffle()
+	for alley in alleys.slice(0, GameData.HEIGHT_COUNT):
+		var side := 1 if alley + 3 < GRID_W and (alley < 2 or randf() < 0.5) else -2
+		var rect := Rect2i(alley + side, top + ALLEY_LENGTH, 2, 2)
+		heights.append(rect)
+		for hx in range(rect.position.x, rect.end.x):
+			for hy in range(rect.position.y, rect.end.y):
+				_high[Vector2i(hx, hy)] = true
+	# Quelques rochers côté ennemis, pour que la horde n'arrive pas en ligne droite.
+	for i in randi_range(2, 4):
+		_try_obstacle(Rect2i(Vector2i(randi_range(0, GRID_W - 2), randi_range(3, top - 2)), Vector2i(randi_range(1, 2), 1)), "rock")
+
+
+## Vrai si ce combattant se tient en hauteur (terrain de survie).
+func is_high(unit: Dictionary) -> bool:
+	return _high.has(_cell_of(unit["pos"]))
+
+
+## Le centre de chaque case en hauteur (pour un ordre « monte là-haut »).
+func height_cells() -> Array:
+	return _high.keys().map(func(c): return Vector2(c) + Vector2(0.5, 0.5))
 
 
 ## Ajoute un morceau de décor s'il ne coupe pas la carte en deux ; sinon on l'enlève.
@@ -899,6 +949,17 @@ func _think(unit: Dictionary) -> void:
 	var target := _choose_target(unit, foes, allies)
 	unit["target_id"] = target["id"]
 
+	# Posté sur une hauteur (le Maître l'y a envoyé) : il tient la position, sans descendre courir après
+	# les ennemis ; il frappe ou tire sur ceux qui sont à sa portée (la cible choisie d'abord).
+	if unit["is_hero"] and is_high(unit) and _high.has(_cell_of(unit["post"])):
+		if not _in_reach(unit, target, unit["reach"]):
+			var near := foes.filter(func(foe): return _in_reach(unit, foe, unit["reach"]))
+			target = _nearest(unit, near) if not near.is_empty() else {}
+		if not target.is_empty():
+			unit["target_id"] = target["id"]
+			_try_attack(unit, target, foes)
+		return
+
 	# Un héros tient son poste tant que les ennemis sont loin.
 	if unit["is_hero"] and unit["pos"].distance_to(target["pos"]) > ENGAGE_DISTANCE:
 		if unit["pos"].distance_to(unit["post"]) > 0.3:
@@ -950,6 +1011,8 @@ func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
 ## Assez près (et, pour un tir, sans décor entre les deux) ?
 func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
 	var distance: float = unit["pos"].distance_to(target["pos"])
+	if reach > MELEE_REACH_MAX and is_high(unit):
+		reach += GameData.HEIGHT_REACH_BONUS  # en hauteur, un tireur voit et tire plus loin
 	if distance > reach + 0.05:
 		return false
 	return reach <= MELEE_REACH_MAX or _line_of_sight(unit["pos"], target["pos"])
@@ -1022,6 +1085,9 @@ func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 	var step := _move_speed(unit) * TICK
 	var start: Vector2 = unit["pos"]
 	var path: PackedVector2Array = unit["path"]
+	# Escalader une hauteur (terrain de survie) : bien plus lent que marcher.
+	if not path.is_empty() and _high.has(_cell_of(path[0])) and not is_high(unit):
+		step *= GameData.CLIMB_SPEED_FACTOR
 	while step > 0 and not path.is_empty():
 		var next: Vector2 = path[0]
 		var distance: float = unit["pos"].distance_to(next)
@@ -1157,6 +1223,11 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Migraine (après une rage Berserk) : l'attaquant frappe moins fort.
 	if has_migraine(attacker):
 		power *= GameData.MIGRAINE_DAMAGE_FACTOR
+	# Hauteurs (terrain de survie) : d'en haut, on frappe plus fort et on encaisse moins.
+	var high_attacker := is_high(attacker)
+	var high_target := is_high(target)
+	if high_attacker and not high_target:
+		power *= 1.0 + GameData.HEIGHT_ATTACK_BONUS
 	# Santé mentale basse : l'attaquant frappe moins fort, la cible se défend moins bien (voir _mind).
 	# Un ami ou un frère d'armes tout près : l'inverse (voir _bond).
 	var raw: float = attacker["atk"] * _mind(attacker) * _bond(attacker) * power * randf_range(0.9, 1.1) \
@@ -1165,6 +1236,8 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	if kind == "spell" and attacker["element"] == "Feu":
 		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
 		target["took_fire"] = true
+	if high_target and not high_attacker:
+		raw *= 1.0 - GameData.HEIGHT_DEFENSE_BONUS
 	# Peau de pierre (compétence de promotion) : la cible encaisse mieux.
 	raw *= 1.0 - GameData.skill_level(target["skills"], "Peau de pierre") * GameData.STONE_SKIN_PER_LEVEL
 	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.

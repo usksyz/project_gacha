@@ -47,6 +47,20 @@ const SURVIVAL_WAVES := 5
 const SURVIVAL_WAVE_SECONDS := 40.0
 const SURVIVAL_WAVE_MONSTERS := 3
 
+## Terrain des quêtes de survie (phase 1.2 ; œuvre, ch. 9 et 11) : une rangée de maisons coupe la carte,
+## percée de SURVIVAL_ALLEYS ruelles larges d'une case (peu d'ennemis peuvent attaquer en même temps) ;
+## côté héros, près de la sortie des ruelles, des hauteurs (toits, plateformes) que l'on doit escalader :
+## y monter se fait à CLIMB_SPEED_FACTOR de sa vitesse. Un combattant en hauteur frappe un adversaire en
+## contrebas HEIGHT_ATTACK_BONUS plus fort, en encaisse HEIGHT_DEFENSE_BONUS de moins, et tire
+## HEIGHT_REACH_BONUS case plus loin. Le Maître y envoie un héros par un ordre (toucher la hauteur).
+## Chiffres provisoires.
+const SURVIVAL_ALLEYS := 3
+const HEIGHT_COUNT := 2
+const CLIMB_SPEED_FACTOR := 0.35
+const HEIGHT_ATTACK_BONUS := 0.2
+const HEIGHT_DEFENSE_BONUS := 0.25
+const HEIGHT_REACH_BONUS := 1.0
+
 ## Solidité des remparts d'une quête de défense : chaque coup d'un ennemi arrivé
 ## au pied des remparts leur retire 1 point. À 0, la cité tombe.
 const DEFENSE_WALLS := 75

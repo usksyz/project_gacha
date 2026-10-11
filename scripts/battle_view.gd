@@ -16,6 +16,8 @@ const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
 const ORDER_COLOR := Color("f5d142")
 const GROUND_COLOR := Color("27301f")
+## Hauteurs du terrain de survie (on y grimpe : voir Battle.is_high).
+const HEIGHT_COLOR := Color("6e6648")
 
 ## Couleur du décor, selon son genre.
 const OBSTACLE_COLORS := {
@@ -427,6 +429,8 @@ func _update_hint() -> void:
 	elif selected_id >= 0:
 		hint_label.text = "%s : touche un endroit pour l'y envoyer, un ennemi à attaquer, ou un bouton en bas." \
 			% battle.units[selected_id]["name"]
+		if not battle.heights.is_empty():
+			hint_label.text += " Les hauteurs (cases claires) : on y grimpe lentement, puis on y frappe d'en haut."
 	else:
 		hint_label.text = "Touche un héros pour le guider."
 	_update_berserk_button()
@@ -539,6 +543,15 @@ func _draw_arena() -> void:
 		return  # zone trop petite (écran en train de se fermer) : rien à dessiner
 	var origin := _origin()
 	arena.draw_rect(Rect2(origin, Vector2(Battle.GRID_W, Battle.GRID_H) * cell), GROUND_COLOR)
+
+	# Hauteurs (terrain de survie) : plus claires, bordées, avec des marches pour dire qu'on y grimpe.
+	for rect in battle.heights:
+		var area := Rect2(origin + Vector2(rect.position) * cell, Vector2(rect.size) * cell).grow(-1.5)
+		arena.draw_rect(area, HEIGHT_COLOR)
+		arena.draw_rect(area, HEIGHT_COLOR.lightened(0.4), false, 2.0)
+		for i in range(1, 3):
+			var y := area.position.y + area.size.y * i / 3.0
+			arena.draw_line(Vector2(area.position.x + 4, y), Vector2(area.end.x - 4, y), HEIGHT_COLOR.lightened(0.25), 1.0)
 
 	for obstacle in battle.obstacles:
 		var rect: Rect2i = obstacle["rect"]

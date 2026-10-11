@@ -538,6 +538,15 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   fois), chaque vague annoncée (journal, fenêtre « Vague N »). Écran : « Vague 2/5 » à côté du compte à
   rebours (affiché en permanence, « 3:30 au premier contact » tant qu'il attend) ; annonce de l'étage.
   Quête sans `waves` (ancienne sauvegarde en plein combat) : tous les ennemis en vague 0, comme avant.
+  Terrain de survie (phase 1.2 ; ch. 9 et 11 ; `tower.gd`, section après la survie ; `battle.gd`,
+  `_build_alleys`) : une rangée de maisons d'un bord à l'autre (lignes `ALLEY_ROW` 8 à 10) percée de
+  `SURVIVAL_ALLEYS` (3) ruelles larges d'une case ; côté héros, `HEIGHT_COUNT` (2) hauteurs de 2 x 2 à la
+  sortie d'une ruelle (`Battle.heights`, `is_high`, `height_cells`) ; quelques rochers côté ennemis. Escalader :
+  vitesse x`CLIMB_SPEED_FACTOR` (0,35). En hauteur contre un adversaire en contrebas : +`HEIGHT_ATTACK_BONUS`
+  (20 %) de dégâts, -`HEIGHT_DEFENSE_BONUS` (25 %) de dégâts subis, tireurs +`HEIGHT_REACH_BONUS` (1 case).
+  Le Maître y envoie un héros par un ordre (toucher la hauteur, cases claires) ; un héros dont le poste est
+  en hauteur la tient (il ne descend pas courir après les ennemis, il frappe ce qui est à sa portée). Les
+  héros n'y vont pas d'eux-mêmes.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
