@@ -329,8 +329,10 @@ func _draw_portraits() -> void:
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "PANIQUE", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, Color("e0e0ff"))
 		elif hero["berserk"]:
-			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "BERSERK", HORIZONTAL_ALIGNMENT_CENTER,
-				mind_bar.size.x, 13, Color("ff4040"))
+			# Rage d'éveil : « REFUS DE MOURIR » tant qu'il ne peut pas tomber sous 1 point de vie.
+			var refusing: bool = battle.time < hero.get("refuse_death_until", 0.0)
+			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "REFUS DE MOURIR" if refusing else "BERSERK",
+				HORIZONTAL_ALIGNMENT_CENTER, mind_bar.size.x, 13, Color("ff4040"))
 		elif hero.get("resting", false):
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "REPOS", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, STAMINA_COLOR)

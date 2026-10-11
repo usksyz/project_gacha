@@ -212,6 +212,13 @@ const BERSERK_ALLY_RANGE := 5.0
 ## rage de lui-même (le Maître peut encore l'ordonner).
 const MIGRAINE_SECONDS := 180.0
 const MIGRAINE_DAMAGE_FACTOR := 0.9
+## Rage d'éveil (interprétation du ch. 12 de l'œuvre, demande du porteur du projet) : quand Berserk s'éveille
+## en combat, le héros entre aussitôt en rage. Cette première rage ignore la coupure automatique, et pendant
+## AWAKENING_RAGE_SECONDS il ne peut pas tomber sous 1 point de vie (le refus de mourir : coups, saignement,
+## coût de la rage). Ensuite, les règles normales de Berserk reprennent, et la migraine qui suit cette rage
+## dure AWAKENING_MIGRAINE_FACTOR fois plus longtemps. Chiffres provisoires.
+const AWAKENING_RAGE_SECONDS := 8.0
+const AWAKENING_MIGRAINE_FACTOR := 2.0
 
 ## Surpassement (fusion de Calme et Berserk) : même bascule que Berserk, en plus fort et plus coûteux.
 ## Bonus multipliés par SURPASS_BONUS_MULTIPLIER, plus de saignement ; mais il perd SURPASS_DRAIN_PER_SECOND

@@ -493,6 +493,13 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   `hero["migraine_until"]`, continue après le combat) : dégâts x`MIGRAINE_DAMAGE_FACTOR` (0,9). Surpassement :
   même bascule, bonus x2, plus de saignement, -2 % de vie par seconde (au lieu de 1 %), santé mentale x2,
   migraine x2.
+  Rage d'éveil (phase 1.2, interprétation du ch. 12, demande du porteur du projet ; `heroes.gd`,
+  `AWAKENING_RAGE_SECONDS` ; `battle.gd`, `_awakening_rage`, `_hold_on`) : quand Berserk s'éveille en combat
+  (portes de la mort ou éveil), le héros entre aussitôt en rage (fenêtre « Rage d'éveil : il refuse de
+  mourir ! »). Pendant `AWAKENING_RAGE_SECONDS` (8 s), pas de coupure automatique et il ne peut pas tomber
+  sous 1 point de vie (coups, part d'un Protecteur, saignement, coût de la rage) ; « REFUS DE MOURIR » sous le
+  portrait. Ensuite, règles normales (sous 15 % de vie, il la coupe) ; la migraine de cette première rage dure
+  x`AWAKENING_MIGRAINE_FACTOR` (2, donc 6 min).
   Écran de combat : « BERSERK » / « MIGRAINE » sous le portrait. Fiche : statistiques en Berserk
   « valeur actuelle / valeur de base (+5) » (`berserk_preview`) et migraine restante.
   Résistance aux flammes (feu subi, ou 3 combats avec un mage de feu ; les mages ont un élément

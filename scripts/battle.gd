@@ -550,6 +550,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"berserk_ordered": false,  # rage ordonnée par le Maître : il la garde jusqu'à l'ordre de la couper
 		"berserk_hold_until": 0.0, # le Maître l'a fait couper : pas de reprise d'elle-même avant ce moment
 		"berserk_changes": {},     # ce que la rage a ajouté (atk, def, spd, crit), retiré à la sortie
+		"awakening_rage": false,   # rage d'éveil en cours (Berserk vient de s'éveiller : voir _awakening_rage)
+		"refuse_death_until": 0.0, # rage d'éveil : ne peut pas tomber sous 1 point de vie avant ce moment
 		# Migraine (après la rage) : jusqu'à ce moment du combat ; elle continue après (GameData.migraine_left).
 		"migraine_until": GameData.migraine_left(source) if is_hero else 0.0,
 		"person": is_hero,         # un héros (l'adversaire d'un duel aussi) : sa migraine est gardée à la fin
@@ -1159,6 +1161,7 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	var guardian := _guardian_for(target)
 	if not guardian.is_empty():
 		amount = _cover(guardian, target, amount)
+	amount = _hold_on(target, amount)  # rage d'éveil : il refuse de mourir
 	target["hp"] -= amount
 	attacker["contribution"] += amount
 	if _duel_yields(target):
@@ -1233,7 +1236,7 @@ func _bleed_tick(unit: Dictionary) -> void:
 	# Résistance à la douleur (les blessures guérissent plus vite) et Indomptable : 80 % au plus.
 	var resist := minf(0.8, GameData.skill_level(unit["skills"], "Résistance à la douleur") * PAIN_RESIST_PER_LEVEL \
 		+ GameData.skill_level(unit["skills"], "Indomptable") * GameData.INDOMITABLE_PER_LEVEL)
-	var amount := mini(maxi(1, roundi(bleed["amount"] * (1.0 - resist))), unit["hp"])
+	var amount := _hold_on(unit, mini(maxi(1, roundi(bleed["amount"] * (1.0 - resist))), unit["hp"]))
 	unit["hp"] -= amount
 	_effect("bleed", unit, unit, "-%d" % amount, false)
 	if _duel_yields(unit):
@@ -1279,6 +1282,7 @@ func _check_critical_state(fighter: Dictionary) -> void:
 			_log("Aux portes de la mort, %s refuse de mourir... Nouvelle compétence : Berserk !" \
 				% _name_with_stars(fighter), "awaken")
 			fighter["skill_news"].append("%s — nouvelle compétence : Berserk" % fighter["name"])
+			_awakening_rage(fighter)
 
 
 ## Éveil des compétences : chaque compétence gagne 1 à 3 niveaux d'un coup,
@@ -1313,6 +1317,26 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 	_log("Éveil des compétences ! %s : %s." % [_name_with_stars(fighter), ", ".join(news)], "awaken")
 	for line in news:
 		fighter["skill_news"].append("%s — %s" % [fighter["name"], line])
+	if "nouvelle compétence : Berserk" in news:
+		_awakening_rage(fighter)
+
+
+## Rage d'éveil (voir GameData, heroes.gd, AWAKENING_RAGE_SECONDS) : Berserk vient de s'éveiller, la rage
+## monte aussitôt ; pendant AWAKENING_RAGE_SECONDS, il refuse de mourir (jamais sous 1 point de vie) et
+## ne coupe pas la rage de lui-même (_berserk_think). Pas en duel (un duel n'éveille rien).
+func _awakening_rage(fighter: Dictionary) -> void:
+	if quest.get("duel", false) or not can_berserk(fighter) or fighter["berserk"]:
+		return
+	fighter["awakening_rage"] = true
+	fighter["refuse_death_until"] = time + GameData.AWAKENING_RAGE_SECONDS
+	_enter_berserk(fighter)
+
+
+## Rage d'éveil : il refuse de mourir. Ce qu'il peut perdre de « amount » sans tomber sous 1 point de vie.
+func _hold_on(unit: Dictionary, amount: int) -> int:
+	if time < unit["refuse_death_until"]:
+		return clampi(amount, 0, unit["hp"] - 1)
+	return amount
 
 
 ## Le combat est-il difficile pour ce héros ? (C'est là qu'il entre en rage de lui-même.)
@@ -1357,6 +1381,8 @@ func _berserk_think(unit: Dictionary) -> void:
 		return
 	if unit["berserk_ordered"] or time - unit["berserk_since"] < GameData.BERSERK_MIN_SECONDS:
 		return
+	if unit["awakening_rage"] and time < unit["refuse_death_until"]:
+		return  # rage d'éveil : pas de coupure automatique pendant le refus de mourir
 	var stop_hp := GameData.SURPASS_STOP_HP if unit.get("surpass", false) else GameData.BERSERK_STOP_HP
 	var worn_out: bool = float(unit["hp"]) / unit["max_hp"] < stop_hp
 	if worn_out or unit["mental"] < GameData.BERSERK_STOP_MENTAL or not _in_danger(unit):
@@ -1392,6 +1418,8 @@ func _enter_berserk(fighter: Dictionary) -> void:
 		fighter["surpass"] = true
 		fighter["bleed"]["ticks"] = 0
 		lines.append("Surpassement : son corps passe en surrégime.")
+	if fighter["awakening_rage"]:
+		lines.append("Rage d'éveil : il refuse de mourir !")
 	_log(" ".join(lines) + " Une pression écrasante envahit le champ de bataille.", "berserk")
 	_alert("Berserk", lines, true)
 
@@ -1408,6 +1436,9 @@ func _exit_berserk(fighter: Dictionary, end := false) -> void:
 	var migraine := GameData.MIGRAINE_SECONDS
 	if fighter.get("surpass", false):
 		migraine *= GameData.SURPASS_MIGRAINE_FACTOR
+	if fighter["awakening_rage"]:  # la première rage, celle de l'éveil, laisse une migraine plus longue
+		migraine *= GameData.AWAKENING_MIGRAINE_FACTOR
+		fighter["awakening_rage"] = false
 	fighter["surpass"] = false
 	fighter["migraine_until"] = maxf(fighter["migraine_until"], time + migraine)
 	var text := "%s est sorti de son état Berserk." % _name_with_stars(fighter)
@@ -1459,7 +1490,7 @@ func _berserk_tick(unit: Dictionary) -> void:
 		return
 	var drain := GameData.SURPASS_DRAIN_PER_SECOND if surpass else GameData.BERSERK_DRAIN_PER_SECOND
 	unit["drain"] = unit.get("drain", 0.0) + unit["max_hp"] * drain * TICK
-	var amount := mini(int(unit["drain"]), unit["hp"])
+	var amount := _hold_on(unit, mini(int(unit["drain"]), unit["hp"]))
 	if amount <= 0:
 		return
 	unit["drain"] -= amount
@@ -1989,7 +2020,7 @@ func _guardian_for(target: Dictionary) -> Dictionary:
 ## Le Protecteur encaisse PROTECT_SHARE du coup destiné à « ward » (il peut tomber à sa place).
 ## Renvoie ce qui reste pour la cible.
 func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
-	var share := mini(roundi(amount * GameData.PROTECT_SHARE), guardian["hp"])
+	var share := _hold_on(guardian, mini(roundi(amount * GameData.PROTECT_SHARE), guardian["hp"]))
 	if share <= 0:
 		return amount
 	guardian["hp"] -= share
