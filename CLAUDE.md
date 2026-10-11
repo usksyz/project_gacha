@@ -433,7 +433,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - Tour : on peut refaire un étage déjà conquis (Donjons > « Refaire un étage ») pour entraîner une
   nouvelle équipe ou l'équipe principale : récompenses baissées à la demande du porteur du projet
   (`REPLAY_XP_RATE` = moitié de l'expérience, `REPLAY_GOLD_RATE` = 20 % de l'or), pas de gemmes,
-  la Tour ne monte pas. `start_tower_battle` reçoit l'étage joué.
+  la Tour ne monte pas. `start_tower_battle` reçoit l'étage joué. Phase 1.2 (cahier, lot A) : après le choix
+  de l'étage, fenêtre « Défier de nouveau ? » avec la récompense réduite, Oui / Non (`_confirm_replay` de
+  `dungeons_screen.gd`). Règle vérifiée : 20 % de l'or, aucun matériau (ni pierre d'attribut), pas de gemmes.
 - Affectations (bouton du hub, `scripts/assignment_panel.gd`) : `POSTS_PER_BUILDING` = 2 postes
   d'assistant par bâtiment construit (`hero["post"]`) ; un poste et l'entraînement s'excluent.
   Un héros parti (Tour ou donjon journalier, `GameData.is_away`) ne s'entraîne pas et ne compte pas à son poste.

@@ -612,13 +612,49 @@ func _open_replay_picker() -> void:
 			text += "\nBoss"
 		var button := UI.make_button(text, func():
 			overlay.queue_free()
-			_open_tower(floor_number), 22)
+			_confirm_replay(floor_number), 22)
 		button.custom_minimum_size.y = 90
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
 	var close := UI.make_button("Fermer", func(): overlay.queue_free(), 24)
 	close.custom_minimum_size.y = 80
 	layout.add_child(close)
+
+
+## Rejouer un étage terminé (phase 1.2) : fenêtre « Défier de nouveau ? » avec la récompense réduite, Oui / Non.
+func _confirm_replay(floor_number: int) -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.85)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var margin := _make_margin()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(margin)
+	var layout := VBoxContainer.new()
+	layout.alignment = BoxContainer.ALIGNMENT_CENTER
+	layout.add_theme_constant_override("separation", 16)
+	margin.add_child(layout)
+	var rewards := GameData.tower_rewards(floor_number)
+	layout.add_child(UI.make_system_window("Étage %d" % floor_number, [
+		"Défier de nouveau ?",
+		"Récompense réduite : %d or (%d %%), %d %% de l'expérience. Pas de gemmes ni de matériaux. La Tour ne monte pas." % [
+			roundi(rewards["gold"] * GameData.REPLAY_GOLD_RATE), roundi(GameData.REPLAY_GOLD_RATE * 100),
+			roundi(GameData.REPLAY_XP_RATE * 100)],
+		"Attention : un héros qui tombe meurt quand même pour toujours."]))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	layout.add_child(buttons)
+	var no := UI.make_button("Non", overlay.queue_free, 26)
+	var yes := UI.make_button("Oui", func():
+		overlay.queue_free()
+		_open_tower(floor_number), 26)
+	for button in [no, yes]:
+		button.custom_minimum_size.y = 90
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(button)
 
 
 ## Prépare un étage (ennemis) et affiche le choix de l'équipe.
