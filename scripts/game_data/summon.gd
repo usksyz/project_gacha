@@ -212,8 +212,7 @@ func _create_secret_hero(hero_name: String) -> Dictionary:
 		hero["element"] = template["element"]
 	elif template["class"] == "Mage":
 		hero["element"] = MAGIC_ELEMENTS.pick_random()
-	hero["immortal"] = true
-	hero["secret"] = true
+	hero["secret"] = true  # (mortel comme les autres : l'immortalité n'existe qu'en mode dev, voir is_immortal)
 	return hero
 
 
@@ -232,7 +231,7 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"training": "",        # compétence travaillée au terrain d'entraînement (vide = au repos)
 		"training_since": 0.0, # moment (temps réel) où la séance en cours a commencé
 		"alive": true,
-		"immortal": false,
+		"immortal": false,     # case « Immortel » du mode dev (voir is_immortal)
 		"secret": false,
 		"favorite": false,     # mis en favori par le Maître (voir FAVORITES_MAX)
 		"mental": MENTAL_MAX,  # santé mentale (voir personality.gd)
@@ -288,7 +287,8 @@ func redeem_code(code: String) -> Dictionary:
 const SECRET_MENU_CODE := "SECRET_HERO"
 
 
-## Vrai si ce héros secret est déjà dans la cité (vivant ou non : il est immortel).
+## Vrai si ce héros secret est déjà venu dans la cité, vivant ou tombé (la mort est définitive :
+## un héros secret tombé ne revient pas par son code).
 func owns_secret_hero(hero_name: String) -> bool:
 	return roster.any(func(hero): return hero.get("secret", false) and hero["name"] == hero_name)
 

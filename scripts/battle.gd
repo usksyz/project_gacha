@@ -423,7 +423,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"is_hero": is_hero,
 		"boss": source.get("boss", false),
 		"hidden_level": not is_hero and quest["hidden_level"],  # niveau affiché « ? »
-		"immortal": source.get("immortal", false),
+		"immortal": is_hero and GameData.is_immortal(source),  # mode dev seulement
 		"source": source,
 		"skills": source.get("skills", []).duplicate(true),
 		"hp": max_hp,

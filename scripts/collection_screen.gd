@@ -244,6 +244,18 @@ func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
 	if not star_row.is_empty():
 		_add_dev_row(content, star_row)
 
+	# Immortel : seulement en mode dev (hors du mode dev, tous les héros sont mortels, héros secrets compris).
+	var immortal := CheckBox.new()
+	immortal.text = "Immortel (mode dev) : à terre au lieu de mourir"
+	immortal.button_pressed = hero.get("immortal", false)
+	immortal.add_theme_font_size_override("font_size", 20)
+	immortal.add_theme_color_override("font_color", Color("ff9a8a"))
+	immortal.custom_minimum_size.y = 56
+	immortal.toggled.connect(func(on: bool):
+		GameData.dev_set_immortal(hero, on)
+		_redraw_detail.call_deferred())
+	content.add_child(immortal)
+
 	# Donner une compétence (toutes celles du jeu), ou la monter d'un niveau si le héros l'a déjà.
 	var give := HBoxContainer.new()
 	give.add_theme_constant_override("separation", 8)
@@ -584,8 +596,8 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 
 	var status_text := "En vie"
 	var status_color := Color("4caf6a")
-	if hero["immortal"]:
-		status_text = "Immortel"
+	if hero["alive"] and GameData.is_immortal(hero):
+		status_text = "Immortel (mode dev)"
 		status_color = Color("f5b82e")
 	elif not hero["alive"]:
 		status_text = "Mort"

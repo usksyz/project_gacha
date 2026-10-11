@@ -106,7 +106,7 @@ func _make_entry(hero: Dictionary) -> Control:
 	var hero_class: String = hero["class"]
 	if hero.has("element"):
 		hero_class += " (magie de %s)" % hero["element"].to_lower()
-	info.add_child(UI.make_label(hero_class + " — immortel", 20))
+	info.add_child(UI.make_label(hero_class, 20))
 	var stats: Dictionary = hero["stats"]
 	for pair in [["str", "int"], ["vit", "dex"]]:
 		var line := UI.make_label("%s %d   %s %d" % [GameData.STAT_NAMES[pair[0]], stats[pair[0]],
@@ -123,7 +123,7 @@ func _make_entry(hero: Dictionary) -> Control:
 
 	var text := "✓ Choisi" if selected else "Choisir"
 	if owned:
-		text = "Déjà dans ta cité"
+		text = "Déjà dans ta cité" if hero["alive"] else "Tombé (la mort est définitive)"
 	var choose := UI.make_button(text, _toggle.bind(hero["name"]), 20)
 	choose.custom_minimum_size.y = 56
 	choose.disabled = owned

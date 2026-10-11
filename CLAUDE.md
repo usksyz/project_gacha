@@ -29,9 +29,16 @@ Noms : les mécaniques peuvent copier Pick Me Up, mais les noms et l'univers res
 Exceptions : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron, la magicienne Yvolka, la voleuse
 Edith...), clins d'œil au manhwa (stats du tableau du cahier quand on les connaît : clé « stats ») ; et les
 trois donjons journaliers (Mine d'Isralta, Forêt Kenout, Plateau Sinmiel, choix du porteur du projet).
-Ils sont immortels et s'obtiennent tous par code secret, Han compris (code « HAN », choix du porteur du
+Ils sont mortels comme les autres (feuille de route v2 ; avant, ils étaient immortels) et s'obtiennent tous
+par code secret, Han compris (code « HAN », choix du porteur du
 projet ; avant, Han était donné au début), dans Paramètres > Codes secrets ou sur la Place publique du hub.
-Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois. Ils sont définis dans `SECRET_HEROES` (`game_data/heroes.gd`).
+Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois, même
+tombé (la mort est définitive). Ils sont définis dans `SECRET_HEROES` (`game_data/heroes.gd`). Ils ne peuvent
+toujours pas être sacrifiés en synthèse.
+Immortalité : seulement en mode dev, case « Immortel (mode dev) » des outils de la fiche (`hero["immortal"]`,
+`dev_set_immortal`) ; `GameData.is_immortal(hero)` = mode dev actif et case cochée (hors du mode dev, la case
+ne fait rien). Sauvegarde version 2 (`SAVE_VERSION`) : au chargement d'une version 1, les héros secrets
+perdent leur immortalité.
 Le code « SECRET_HERO » (`GameData.SECRET_MENU_CODE`, réutilisable) ouvre `SecretHeroMenu` (`scripts/secret_hero_menu.gd`) :
 la fiche de chaque héros secret (stats tirées à l'ouverture : ce sont celles qu'il aura), on en choisit un
 ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchent toujours.
@@ -206,7 +213,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   de combat à 0 → `break_hero` (quitte poste et entraînement) jusqu'à `BROKEN_RECOVERY` (50, `change_mental`) ;
   refuse l'entraînement et les affectations (`accepts_work`, raison dans `last_refusal` ; Paresseux refuse
   `LAZY_REFUSAL_CHANCE` 20 % même sans rupture) ; fenêtre d'avertissement avant la Tour ; s'il retombe à 0 en
-  combat, mort de stress `STRESS_DEATH_CHANCE` (30 %, pas les immortels).
+  combat, mort de stress `STRESS_DEATH_CHANCE` (30 %, pas un immortel du mode dev).
   Liens (section 4 du cahier ; `personality.gd`, section « Liens ») : points par paire de héros dans
   `GameData.bonds` (sauvegardé, clé « 3-7 », plus petit numéro d'abord ; absent = inconnus), paliers
   `BOND_LEVELS` (inconnus, connaissance, ami, frère d'armes) à `BOND_THRESHOLDS` (0, 5, 25, 60). Fin d'un combat

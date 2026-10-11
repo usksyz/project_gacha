@@ -48,7 +48,8 @@ const GROWTH := {1: 2, 2: 3, 3: 5, 4: 6, 5: 8}
 ## Chance qu'un 1 étoile ait un talent caché : une croissance bien plus forte que la normale.
 const HIDDEN_TALENT_CHANCE := 0.15
 
-## Héros secrets (clins d'œil au manhwa). Ils ne suivent pas les règles : ils sont immortels.
+## Héros secrets (clins d'œil au manhwa). Ils sont mortels comme les autres (feuille de route v2 ;
+## avant, ils étaient immortels) : l'immortalité n'existe plus qu'en mode dev (voir is_immortal).
 ## « code » : le code secret à taper (Paramètres > Codes secrets, ou la Place publique) pour l'obtenir.
 ## Tous s'obtiennent par code, Han compris (choix du porteur du projet : avant, Han était donné
 ## dès le début de la partie). Un héros secret qu'on a déjà ne peut pas être obtenu une deuxième fois.
@@ -263,6 +264,12 @@ func _own_skill_level(skills: Array, skill_name: String) -> int:
 		if skill["name"] == skill_name:
 			return skill["level"]
 	return 0
+
+
+## Vrai si ce héros ne peut pas mourir : seulement en mode dev, quand la case « Immortel » de sa fiche
+## est cochée (hero["immortal"]). Hors du mode dev, tout le monde est mortel.
+func is_immortal(hero: Dictionary) -> bool:
+	return Settings.dev_mode and hero.get("immortal", false)
 
 
 ## Vrai pour Han, le héros secret de départ (il a des règles à lui).

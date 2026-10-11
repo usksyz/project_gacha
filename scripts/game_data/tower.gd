@@ -286,7 +286,7 @@ func _combat_feats(hero: Dictionary, fighter: Dictionary, battle: Battle) -> Arr
 
 
 ## Applique le résultat d'un combat de la Tour et renvoie un rapport pour l'écran de fin :
-## - les héros tombés meurent pour toujours (sauf les immortels) ;
+## - les héros tombés meurent pour toujours (sauf un immortel du mode dev) ;
 ## - en cas de victoire : or, gemmes, expérience pour les survivants, étage suivant ;
 ## - en cas de défaite : les survivants gagnent quand même la moitié de l'expérience
 ##   (sinon une équipe bloquée ne pourrait plus jamais progresser) ;

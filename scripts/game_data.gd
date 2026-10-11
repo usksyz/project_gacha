@@ -128,6 +128,12 @@ func dev_remove_skill(hero: Dictionary, skill_name: String) -> void:
 	save_game()
 
 
+## Coche ou décoche la case « Immortel » d'un héros (elle n'agit qu'en mode dev, voir is_immortal).
+func dev_set_immortal(hero: Dictionary, on: bool) -> void:
+	hero["immortal"] = on
+	save_game()
+
+
 ## Ramène un héros mort (sans ses armes, perdues avec lui).
 func dev_revive(hero: Dictionary) -> void:
 	hero["alive"] = true
