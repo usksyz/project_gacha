@@ -1180,19 +1180,24 @@ func _in_danger(unit: Dictionary) -> bool:
 ## Il y entre quand le combat est difficile (_in_danger), sauf en pleine peur ou panique, pendant une
 ## migraine, sous BERSERK_STOP_MENTAL de santé mentale, ou juste après que le Maître la lui a fait couper.
 ## Il en sort quand le danger est passé (après BERSERK_MIN_SECONDS au moins), sous BERSERK_STOP_MENTAL,
-## ou (Surpassement) sous SURPASS_STOP_HP de sa vie. Une rage ordonnée par le Maître n'est coupée que sur ordre.
+## sous BERSERK_STOP_HP de sa vie (SURPASS_STOP_HP en Surpassement). Une rage ordonnée par le Maître n'est
+## coupée que sur ordre. (Plus tard, ces coupures dépendront du caractère : Maîtrise de soi.)
 func _berserk_think(unit: Dictionary) -> void:
 	if not can_berserk(unit) or panicking(unit) or afraid(unit):
 		return
 	if not unit["berserk"]:
+		var surpass_ready := GameData.skill_level(unit["skills"], "Surpassement") > 0 \
+			or GameData.fusion_ready(unit["skills"], "Surpassement")
+		var min_hp := GameData.SURPASS_STOP_HP if surpass_ready else GameData.BERSERK_STOP_HP
 		if time >= unit["berserk_hold_until"] and time >= unit["migraine_until"] \
-				and unit["mental"] >= GameData.BERSERK_STOP_MENTAL and _in_danger(unit):
+				and unit["mental"] >= GameData.BERSERK_STOP_MENTAL \
+				and float(unit["hp"]) / unit["max_hp"] >= min_hp and _in_danger(unit):
 			_enter_berserk(unit)
 		return
 	if unit["berserk_ordered"] or time - unit["berserk_since"] < GameData.BERSERK_MIN_SECONDS:
 		return
-	var worn_out: bool = unit.get("surpass", false) \
-		and float(unit["hp"]) / unit["max_hp"] < GameData.SURPASS_STOP_HP
+	var stop_hp := GameData.SURPASS_STOP_HP if unit.get("surpass", false) else GameData.BERSERK_STOP_HP
+	var worn_out: bool = float(unit["hp"]) / unit["max_hp"] < stop_hp
 	if worn_out or unit["mental"] < GameData.BERSERK_STOP_MENTAL or not _in_danger(unit):
 		_exit_berserk(unit)
 
@@ -1284,21 +1289,24 @@ func _announce_fusion(fighter: Dictionary, text: String) -> void:
 	fighter["skill_news"].append("%s — %s" % [fighter["name"], text])
 
 
-## En rage, chaque pas : la santé mentale baisse (deux fois plus en Surpassement) ; en Surpassement,
-## la vie aussi, jusqu'à la mort s'il ne s'arrête pas.
+## En rage, chaque pas : la compétence coûte de la vie (BERSERK_DRAIN_PER_SECOND, SURPASS_DRAIN_PER_SECOND en
+## Surpassement), jusqu'à la mort s'il ne s'arrête pas, et de la santé mentale (deux fois plus en Surpassement).
 func _berserk_tick(unit: Dictionary) -> void:
 	var surpass: bool = unit.get("surpass", false)
 	_stress(unit, GameData.MENTAL_BERSERK_PER_SECOND * TICK * (GameData.SURPASS_MENTAL_FACTOR if surpass else 1.0))
-	if not surpass or unit["hp"] <= 0:
+	if unit["hp"] <= 0:
 		return
-	unit["drain"] = unit.get("drain", 0.0) + unit["max_hp"] * GameData.SURPASS_DRAIN_PER_SECOND * TICK
+	var drain := GameData.SURPASS_DRAIN_PER_SECOND if surpass else GameData.BERSERK_DRAIN_PER_SECOND
+	unit["drain"] = unit.get("drain", 0.0) + unit["max_hp"] * drain * TICK
 	var amount := mini(int(unit["drain"]), unit["hp"])
 	if amount <= 0:
 		return
 	unit["drain"] -= amount
 	unit["hp"] -= amount
+	if _duel_yields(unit):
+		return  # (un duel s'arrête avant la mort)
 	if unit["hp"] <= 0:
-		_announce_fall(unit, "épuisé par Surpassement")
+		_announce_fall(unit, "épuisé par Surpassement" if surpass else "épuisé par Berserk")
 
 
 ## Après le combat : un héros qui a saigné et tient encore debout peut apprendre

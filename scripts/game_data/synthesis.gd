@@ -160,8 +160,7 @@ func synthesis_problem(target: Dictionary, sacrifice: Dictionary) -> String:
 		return "Un héros ne peut pas se sacrifier pour lui-même."
 	if not target["alive"] or not sacrifice["alive"]:
 		return "Les deux héros doivent être en vie."
-	if sacrifice.get("secret", false):
-		return "Un héros légendaire ne peut pas être sacrifié."
+	# (Les héros secrets se sacrifient comme les autres, choix du porteur du projet : seul un favori est protégé.)
 	if is_favorite(sacrifice):
 		return "Un héros favori ne peut pas être sacrifié (retire-le d'abord des favoris)."
 	if is_away(target) or is_away(sacrifice):

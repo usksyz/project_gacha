@@ -33,8 +33,8 @@ Ils sont mortels comme les autres (feuille de route v2 ; avant, ils étaient imm
 par code secret, Han compris (code « HAN », choix du porteur du
 projet ; avant, Han était donné au début), dans Paramètres > Codes secrets ou sur la Place publique du hub.
 Une partie neuve commence sans héros. Un héros secret déjà possédé ne peut pas être obtenu deux fois, même
-tombé (la mort est définitive). Ils sont définis dans `SECRET_HEROES` (`game_data/heroes.gd`). Ils ne peuvent
-toujours pas être sacrifiés en synthèse.
+tombé (la mort est définitive). Ils sont définis dans `SECRET_HEROES` (`game_data/heroes.gd`). Ils peuvent
+être sacrifiés en synthèse comme les autres (choix du porteur du projet) : seul un favori est protégé.
 Immortalité : seulement en mode dev, case « Immortel (mode dev) » des outils de la fiche (`hero["immortal"]`,
 `dev_set_immortal`) ; `GameData.is_immortal(hero)` = mode dev actif et case cochée (hors du mode dev, la case
 ne fait rien). Sauvegarde version 2 (`SAVE_VERSION`) : au chargement d'une version 1, les héros secrets
@@ -210,6 +210,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Simulation (sans ordres, équipe 3★ + 2★ + 3 x 1★ au niveau de l'étage, 150 combats) : peurs par 1 étoile
   novice ~0,5 par combat comme avant ; 3 étoiles ~0 sauf horde et boss de l'étage 5 (0,4, 0,2 avec 10 combats
   d'expérience) ; victoires étage 1 : 99 % ; étages 2 à 4 : 19-30 % (avant ce changement : 24-34 %).
+  Cette difficulté est gardée (choix du porteur du projet, qui la teste en jeu) : ne pas l'adoucir sans lui.
   Protecteur en combat (`Battle._ward_of`, `_guardian_for`, `_cover`) : un allié à moins de `PROTECT_RANGE`
   (5) cases sous `PROTECT_HP` (30 %) de vie → il va à son côté ; à moins de `PROTECT_GUARD_RANGE` (1,6), il
   encaisse `PROTECT_SHARE` (30 %) de ses coups, quitte à tomber (« tombé en protégeant X »).
@@ -379,7 +380,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   n'a pas encore, au niveau 1 (pas une fusion ; incompatibilités respectées). Fenêtre « Synthèse terminée » :
   « X monte en niveau ! La compétence Y a été apprise ! », puis l'expérience et d'où vient chaque compétence ; Œil de faucon (30 %, archers, mages, soigneurs : portée et précision des
   tirs) ; Analyse froide (1 %). Règles et chiffres provisoires dans `game_data/synthesis.gd`.
-  Les héros secrets ne peuvent pas être sacrifiés. Chaque synthèse fait baisser la santé mentale des héros
+  Les héros secrets peuvent être sacrifiés (seuls les favoris sont protégés). Chaque synthèse fait baisser la santé mentale des héros
   vivants (voir « Personnalité »). Reste :
   glisser-déposer du cahier (on touche les cartes pour l'instant), salle de promotion dans la chambre.
 - Un écran peut définir `on_shown()`, appelée à chaque fois qu'il s'affiche.
@@ -415,18 +416,23 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   compétence active à bascule (`heroes.gd`, section « Berserk » ; `battle.gd`, `_berserk_think`). Le héros
   l'active de lui-même quand le combat est difficile (`_in_danger` : duel, boss ou horde à portée
   d'engagement, allié ou lui-même sous `BERSERK_DANGER_HP` 30 % à moins de 5 cases), sauf en pleine peur ou
-  panique, en migraine, sous `BERSERK_STOP_MENTAL` (25, ajout du projet) ou `BERSERK_ORDER_HOLD` (15 s) après
-  un ordre de la couper ; il la coupe quand le danger est passé (après `BERSERK_MIN_SECONDS`, 5 s), sous 25 de
-  santé mentale, ou en Surpassement sous `SURPASS_STOP_HP` (25 %) de vie. Le Maître l'ordonne : bouton
+  panique, en migraine, sous les seuils de coupure ou `BERSERK_ORDER_HOLD` (15 s) après un ordre de la
+  couper ; il la coupe quand le danger est passé (après `BERSERK_MIN_SECONDS`, 5 s). Coupure automatique
+  (ajout du projet, validé par le porteur du projet) : sous `BERSERK_STOP_MENTAL` (25) de santé mentale, sous
+  `BERSERK_STOP_HP` (15 %) de vie, ou en Surpassement sous `SURPASS_STOP_HP` (25 %) ; plus tard, ces seuils
+  dépendront du caractère (Maîtrise de soi, axe caché de la phase 5). Le Maître l'ordonne : bouton
   « Berserk ! » / « Sortir du Berserk » de `BattleView` quand le héros choisi l'a (`order_berserk`, peut être
   refusé comme tout ordre) ; une rage ordonnée n'est coupée que sur ordre ou à la fin du combat. Effet :
   Force, Santé, Dextérité +`BERSERK_BONUS` (5, +1 par niveau suivant), Intelligence -`BERSERK_INT_MALUS` (10)
   (`berserk_stat_changes` ; l'œuvre dit Force, Endurance, Agilité), traduits en attaque, défense, vitesse,
-  critiques (la vie maximum ne bouge pas) ; santé mentale -`MENTAL_BERSERK_PER_SECOND` (0,4) par seconde.
+  critiques (la vie maximum ne bouge pas) ; coût par seconde : -`BERSERK_DRAIN_PER_SECOND` (1 %) de la vie
+  maximum (dans l'œuvre, la compétence coûte de la vie ; mort possible : « épuisé par Berserk ») et
+  -`MENTAL_BERSERK_PER_SECOND` (0,4) de santé mentale.
   Fenêtres (`Battle.alerts`) « X est entré en mode Berserk ! » et « X est sorti de son état Berserk. » ;
   fin du combat : une ligne dans « Personnalité ». Puis Migraine `MIGRAINE_SECONDS` (3 min de temps réel,
   `hero["migraine_until"]`, continue après le combat) : dégâts x`MIGRAINE_DAMAGE_FACTOR` (0,9). Surpassement :
-  même bascule, bonus x2, plus de saignement, -2 % de vie par seconde, santé mentale x2, migraine x2.
+  même bascule, bonus x2, plus de saignement, -2 % de vie par seconde (au lieu de 1 %), santé mentale x2,
+  migraine x2.
   Écran de combat : « BERSERK » / « MIGRAINE » sous le portrait. Fiche : statistiques en Berserk
   « valeur actuelle / valeur de base (+5) » (`berserk_preview`) et migraine restante.
   Résistance aux flammes (feu subi, ou 3 combats avec un mage de feu ; les mages ont un élément

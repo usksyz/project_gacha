@@ -91,7 +91,7 @@ const SKILLS := {
 	"Résistance à la douleur": "Les blessures guérissent plus vite : saignements réduits de 10 % par niveau.",
 	"Mouvement souple": "Esquive : 3 % de chances par niveau d'éviter complètement un coup.",
 	"Calme": "Garde son sang-froid : sous la moitié de sa vie, subit 4 % de dégâts en moins par niveau.",
-	"Berserk": "Active, à bascule (acquise une fois, aux portes de la mort). En combat, il entre en rage de lui-même quand le combat est difficile (boss, horde, duel, allié en danger), ou sur ton ordre : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant), mais sa santé mentale baisse chaque seconde. Il en sort quand le danger est passé, et à la fin du combat. Après : Migraine 3 minutes (-10 % de dégâts).",
+	"Berserk": "Active, à bascule (acquise une fois, aux portes de la mort). En combat, il entre en rage de lui-même quand le combat est difficile (boss, horde, duel, allié en danger), ou sur ton ordre : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant), mais il perd 1 % de sa vie et de la santé mentale chaque seconde. Il en sort quand le danger est passé, sous 15 % de vie, et à la fin du combat. Après : Migraine 3 minutes (-10 % de dégâts).",
 	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
@@ -197,9 +197,13 @@ const BERSERK_INT_MALUS := 10
 const BERSERK_MIN_SECONDS := 5.0
 ## Le Maître lui a ordonné de la couper : il ne la relance pas de lui-même pendant ce temps.
 const BERSERK_ORDER_HOLD := 15.0
-## (Ajout du projet) Sous cette santé mentale, le héros coupe la rage de lui-même et ne la relance pas
-## (sur ordre du Maître, il la garde quand même).
+## Dans l'œuvre, la compétence coûte de la vie : cette part de la vie maximum par seconde en rage.
+const BERSERK_DRAIN_PER_SECOND := 0.01
+## (Ajout du projet) Sous cette santé mentale, ou sous BERSERK_STOP_HP de sa vie, le héros coupe la rage
+## de lui-même (sur ordre du Maître, il la garde quand même). Plus tard, ces seuils dépendront du
+## caractère (Maîtrise de soi).
 const BERSERK_STOP_MENTAL := 25.0
+const BERSERK_STOP_HP := 0.15
 ## « Allié en danger » : un allié (ou lui-même) sous cette part de sa vie, à moins de BERSERK_ALLY_RANGE cases.
 const BERSERK_DANGER_HP := 0.3
 const BERSERK_ALLY_RANGE := 5.0
@@ -211,7 +215,7 @@ const MIGRAINE_DAMAGE_FACTOR := 0.9
 
 ## Surpassement (fusion de Calme et Berserk) : même bascule que Berserk, en plus fort et plus coûteux.
 ## Bonus multipliés par SURPASS_BONUS_MULTIPLIER, plus de saignement ; mais il perd SURPASS_DRAIN_PER_SECOND
-## de sa vie maximum chaque seconde, SURPASS_MENTAL_FACTOR fois plus de santé mentale, et la migraine dure
+## de sa vie maximum chaque seconde (au lieu de BERSERK_DRAIN_PER_SECOND), SURPASS_MENTAL_FACTOR fois plus de santé mentale, et la migraine dure
 ## SURPASS_MIGRAINE_FACTOR fois plus longtemps. Il le coupe de lui-même sous SURPASS_STOP_HP de sa vie.
 const SURPASS_BONUS_MULTIPLIER := 2
 const SURPASS_DRAIN_PER_SECOND := 0.02
