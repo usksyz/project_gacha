@@ -187,17 +187,29 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
   part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture,
   Querelleur, Mauvais et Protecteur en combat (plus bas) : les huit traits ont leurs effets.
-  Peur (demandes du porteur du projet : « les forts survivent, les faibles meurent » ; pas de message pour la
-  fuite, le joueur observe ; pas tous les 1 étoile, certains se battent contre leur peur) : un héros 1 étoile
-  (pas secret) dans ses `FEAR_FIGHTS` (3) premiers combats peut avoir peur (`can_be_scared`, `fear_chance`) à
-  sa première blessure (30 %), à la chute d'un allié à moins de `FEAR_SIGHT` cases (50 %), à l'arrivée d'un
-  boss (50 %) ; Lâche x2, Courageux /2 ; une fois par combat (`Battle._scare`, -`FEAR_MENTAL_LOSS`). Alors il
-  fuit (`FEAR_FLEE_CHANCE` 45 %, `fear_flee_chance`) `FEAR_SECONDS` (5 s) comme un effondrement (sourd aux
-  ordres), ou il se bat contre sa peur `FEAR_FIGHT_SECONDS` (10 s) : il obéit, attaque et défense
-  x`FEAR_FIGHT_FACTOR` (0,8, dans `Battle._mind`). Tout fuyard (peur ou effondrement) encaisse
-  x`FLEEING_DAMAGE_TAKEN` (2) et les monstres le préfèrent (`PREY_BONUS`). Seuls signes : « PEUR » sous son
-  portrait tant qu'il a peur (`Battle.afraid`) et « X a peur. » dans le journal ; rien n'annonce la fuite ni
-  sa fin ; une ligne dans « Personnalité » en fin de combat.
+  Peur selon la menace (feuille de route v2, phase 0 ; avant : seulement les 1 étoile novices ; demandes
+  antérieures gardées : « les forts survivent, les faibles meurent », pas de message pour la fuite, certains
+  se battent contre leur peur). N'importe quel héros (secrets compris) peut avoir peur, seulement s'il y a
+  une menace (`Battle._fear_threats`) : ennemi `FEAR_STRONGER_LEVELS` (5) niveaux au-dessus ou boss à portée
+  d'engagement, horde (survie, défense), santé mentale sous `FEAR_LOW_MENTAL` (35), ou novice (1 étoile dans
+  ses `FEAR_FIGHTS` 3 premiers combats, `is_fear_novice` : le plus exposé). Moments : vue du premier ennemi à
+  portée (`FEAR_SIGHT_ENEMY_CHANCE` 25 %, la menace « novice » ne compte pas), première blessure (30 %), chute
+  d'un allié à moins de `FEAR_SIGHT` cases (50 %), arrivée d'un boss (50 %). `fear_chance` : chance du moment
+  x `FEAR_RARITY_FACTOR` (1 étoile 1, 3 étoiles 0,45, 5 étoiles 0,2) x 1 / (1 + combats / 5) x (+25 % par
+  menace en plus) ; Lâche x2, Courageux /2. Une fois par combat (`Battle._scare` → `_frighten`,
+  -`FEAR_MENTAL_LOSS`). Effet : toutes les stats x`FEAR_STAT_FACTOR` (0,7 : attaque et défense dans `_mind`,
+  vitesse, cadence, critiques ; `_fear`) pendant `FEAR_MAX_SECONDS` (20 s) au plus. Il fuit d'abord
+  (`FEAR_FLEE_CHANCE` 45 %) `FEAR_SECONDS` (5 s), sourd aux ordres, ou se bat contre sa peur (il obéit).
+  Tout fuyard (peur ou effondrement) encaisse x`FLEEING_DAMAGE_TAKEN` (2) et les monstres le préfèrent
+  (`PREY_BONUS`). Levée (`_fear_tick`) : un allié à moins de `FEAR_LIFT_RANGE` (2,5) cases, ami ou frère
+  d'armes, ou Courageux (trait révélé), pas lui-même effrayé, le rassure `FEAR_LIFT_SECONDS` (3 s) : fuite
+  arrêtée, fenêtre « X n'est plus effrayé. » (`Battle.alerts`) et journal. Retour : une fois la peur passée,
+  un coup grave (qui fait saigner) la ramène à `FEAR_RETURN_CHANCE` (50 %, traits compris). Seuls signes de
+  la peur : « PEUR » sous son portrait (`Battle.afraid`) et « X a peur. » dans le journal ; rien n'annonce
+  la fuite ni la fin naturelle ; une ligne dans « Personnalité » en fin de combat.
+  Simulation (sans ordres, équipe 3★ + 2★ + 3 x 1★ au niveau de l'étage, 150 combats) : peurs par 1 étoile
+  novice ~0,5 par combat comme avant ; 3 étoiles ~0 sauf horde et boss de l'étage 5 (0,4, 0,2 avec 10 combats
+  d'expérience) ; victoires étage 1 : 99 % ; étages 2 à 4 : 19-30 % (avant ce changement : 24-34 %).
   Protecteur en combat (`Battle._ward_of`, `_guardian_for`, `_cover`) : un allié à moins de `PROTECT_RANGE`
   (5) cases sous `PROTECT_HP` (30 %) de vie → il va à son côté ; à moins de `PROTECT_GUARD_RANGE` (1,6), il
   encaisse `PROTECT_SHARE` (30 %) de ses coups, quitte à tomber (« tombé en protégeant X »).

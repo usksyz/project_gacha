@@ -484,10 +484,13 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"panic_target": -1,        # frénésie : la cible du moment (n'importe qui)
 		"panic_retarget": 0.0,     # frénésie : moment où il change de cible
 		"flee_to": Vector2.ZERO,   # fuite : là où il court
-		# Peur (voir GameData.can_be_scared) : un héros d'une étoile novice du combat peut prendre peur et fuir.
-		"fearful": is_hero and not quest.get("duel", false) and GameData.can_be_scared(source),
-		"scared": false,           # a déjà pris peur dans ce combat (une seule fois)
+		# Peur (voir _scare et GameData, personality.gd) : tout héros peut prendre peur face à une menace.
+		"fearful": is_hero and not quest.get("duel", false),
+		"scared": false,           # a déjà pris peur dans ce combat (ensuite, seule une blessure grave la ramène)
 		"fear_until": 0.0,         # a peur jusqu'à ce moment (qu'il fuie ou qu'il se batte contre sa peur)
+		"fear_flee": false,        # sa fuite en cours vient de la peur (pas d'un effondrement)
+		"fear_comfort": 0.0,       # temps passé à côté d'un allié qui le rassure (la peur se lève à FEAR_LIFT_SECONDS)
+		"saw_enemy": false,        # a déjà vu un ennemi à portée (la vue de l'ennemi peut faire peur)
 		"was_hit": false,          # a déjà été blessé dans ce combat (la première blessure fait peur)
 		"mind_news": [],           # traits révélés, ruptures : pour la fenêtre « Personnalité » de fin
 		"bonds": {},               # liens avec les autres héros de l'équipe : {numéro du pion: palier}
@@ -631,6 +634,8 @@ func _step() -> void:
 		unit["mana"] = minf(unit["max_mana"], unit["mana"] + unit["mana_regen"] * TICK)
 		if unit["berserk"] and unit["hp"] > 0:
 			_berserk_tick(unit)
+		if unit["is_hero"] and unit["fearful"] and unit["hp"] > 0:
+			_fear_tick(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_berserk_think(unit)
 		if unit["hp"] > 0:
@@ -702,6 +707,7 @@ func _think(unit: Dictionary) -> void:
 			_panic_think(unit, foes)
 			return
 		unit["panic"] = ""
+		unit["fear_flee"] = false
 		if not afraid(unit) and unit["ruptured"]:  # (la fin d'une fuite de peur n'est pas annoncée)
 			_log("%s reprend ses esprits." % _name_with_stars(unit), "disobey")
 
@@ -803,12 +809,17 @@ func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
 func _attack_time(unit: Dictionary) -> float:
 	# Vivacité (compétence de promotion) : des coups plus rapides.
 	var quick := 1.0 - GameData.skill_level(unit["skills"], "Vivacité") * GameData.QUICKNESS_PER_LEVEL
-	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"]) * unit["weapon_speed"] * quick)
+	return maxf(0.4, BASE_ATTACK_TIME * 15.0 / maxf(5.0, unit["spd"] * _fear(unit)) * unit["weapon_speed"] * quick)
 
 
 func _move_speed(unit: Dictionary) -> float:
-	var speed: float = BASE_SPEED + unit["spd"] * SPEED_PER_DEX
+	var speed: float = BASE_SPEED + unit["spd"] * _fear(unit) * SPEED_PER_DEX
 	return speed * (0.8 if unit["boss"] else 1.0)
+
+
+## La peur : toutes ses stats x FEAR_STAT_FACTOR (attaque et défense dans _mind, vitesse, critiques).
+func _fear(unit: Dictionary) -> float:
+	return GameData.FEAR_STAT_FACTOR if afraid(unit) else 1.0
 
 
 ## Avance vers un point en suivant un chemin qui contourne le décor.
@@ -892,7 +903,7 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 			if attacker["ranged"]:
 				# Un tir (arc). Les archers visent mieux : +25 % de critiques, et leurs critiques font x2.
 				var archer: bool = attacker["class"] == "Archer"
-				var critical: bool = randf() < attacker["crit"] + (0.25 if archer else 0.0)
+				var critical: bool = randf() < attacker["crit"] * _fear(attacker) + (0.25 if archer else 0.0)
 				var power := (2.0 if archer else 1.5) if critical else 1.0
 				_hit(attacker, target, power * attacker["weapon_power"], critical, "arrow")
 				if attacker["is_hero"]:
@@ -907,7 +918,7 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 					"Assassin":
 						pass
 					_:
-						critical = randf() < attacker["crit"]
+						critical = randf() < attacker["crit"] * _fear(attacker)
 						power = 1.5 if critical else 1.0
 				_hit(attacker, target, power * attacker["weapon_power"], critical, "hit")
 
@@ -980,13 +991,17 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 		return amount
 	if target["hp"] > 0:
 		_stress_wound(target, amount)
-		if critical or amount >= target["max_hp"] * BLEED_HIT:
+		var grave: bool = critical or amount >= target["max_hp"] * BLEED_HIT
+		if grave:
 			_start_bleed(attacker, target)
 		_check_critical_state(target)
-		# Sa première blessure : un héros d'une étoile peut prendre peur (voir _scare).
+		# Sa première blessure peut lui faire peur (voir _scare) ; une blessure grave peut ramener une peur passée.
 		if target["is_hero"] and not target["was_hit"]:
 			target["was_hit"] = true
 			_scare(target, GameData.FEAR_FIRST_WOUND_CHANCE, "sa première blessure")
+		elif grave and target["fearful"] and target["scared"] and not afraid(target) and not panicking(target) \
+				and randf() < GameData.fear_return_chance(target["source"]):
+			_frighten(target, "une blessure grave")
 	return amount
 
 
@@ -1341,7 +1356,7 @@ func _announce_fall(fighter: Dictionary, cause: String) -> void:
 				_log("%s voit tomber son %s %s..." % [ally["name"],
 					"frère d'armes" if bond == GameData.BOND_BROTHERS else "ami", fighter["name"]], "bleed")
 			_stress(ally, loss)
-			# Voir mourir quelqu'un tout près : un héros d'une étoile peut prendre peur.
+			# Voir mourir quelqu'un tout près peut faire peur (voir _scare).
 			if ally["pos"].distance_to(fighter["pos"]) <= GameData.FEAR_SIGHT:
 				_scare(ally, GameData.FEAR_ALLY_DEATH_CHANCE, "la mort de %s" % fighter["name"])
 
@@ -1362,14 +1377,11 @@ func _bond(unit: Dictionary) -> float:
 # ---------------------------------------------------------------------------
 
 ## Efficacité selon la santé mentale du moment (1.0 pour les ennemis ; voir GameData.mental_factor).
-## Un héros qui se bat contre sa peur (voir _scare) frappe et se défend moins bien.
+## Un héros qui a peur (voir _scare) frappe et se défend moins bien (FEAR_STAT_FACTOR).
 func _mind(unit: Dictionary) -> float:
 	if not unit["is_hero"]:
 		return 1.0
-	var factor := GameData.mental_factor(unit["mental"])
-	if afraid(unit) and not _fleeing(unit):
-		factor *= GameData.FEAR_FIGHT_FACTOR
-	return factor
+	return GameData.mental_factor(unit["mental"]) * _fear(unit)
 
 
 ## Un héros perd de la santé mentale (moins avec Calme). À 0, c'est la rupture (une fois par combat).
@@ -1438,6 +1450,7 @@ func _rupture(fighter: Dictionary) -> void:
 	if flee and GameData.has_trait(source, "Lâche"):
 		_reveal(fighter, "Lâche")
 	fighter["panic"] = "flee" if flee else "frenzy"
+	fighter["fear_flee"] = false  # (l'effondrement remplace une fuite de peur : un allié ne l'arrête pas)
 	fighter["panic_until"] = time + GameData.PANIC_SECONDS
 	fighter["panic_target"] = -1
 	fighter["order"] = {}
@@ -1473,34 +1486,95 @@ func afraid(unit: Dictionary) -> bool:
 	return time < unit["fear_until"]
 
 
-## Peur (voir GameData.can_be_scared) : un héros d'une étoile, qui ne savait rien de ce qui l'attendait,
-## peut prendre peur devant « what » (sa première blessure, la mort d'un allié, un boss). Soit il s'enfuit
-## vers le bas de la carte (FEAR_SECONDS, sourd aux ordres), soit il se bat contre sa peur (FEAR_FIGHT_SECONDS,
-## moins efficace, voir _mind). Rien n'annonce la fuite : le joueur la voit. Le journal dit seulement
-## qu'il a peur. Une seule fois par combat.
-func _scare(fighter: Dictionary, base_chance: float, what: String) -> void:
+## Les menaces qui pèsent sur ce héros (voir GameData, personality.gd, « Peur ») : un ennemi bien plus fort
+## ou un boss à portée, une horde, une santé mentale basse ; et « novice » (un 1 étoile dans ses premiers
+## combats) si « novice_counts ». Renvoie leur nombre (0 : rien ne peut lui faire peur).
+func _fear_threats(fighter: Dictionary, novice_counts: bool) -> int:
+	var threats := 0
+	var near := _alive(enemies).filter(func(foe): return fighter["pos"].distance_to(foe["pos"]) <= ENGAGE_DISTANCE)
+	if near.any(func(foe): return foe["boss"] or foe["level"] >= fighter["level"] + GameData.FEAR_STRONGER_LEVELS):
+		threats += 1
+	if not near.is_empty() and (quest["type"] == "survival" or quest["walls"] > 0):
+		threats += 1  # une horde
+	if fighter["mental"] < GameData.FEAR_LOW_MENTAL:
+		threats += 1
+	if novice_counts and GameData.is_fear_novice(fighter["source"]):
+		threats += 1
+	return threats
+
+
+## Peur : un héros peut prendre peur devant « what » (la vue de l'ennemi, sa première blessure, la mort
+## d'un allié, un boss), selon les menaces (_fear_threats) et GameData.fear_chance. Une fois par combat ;
+## ensuite, seule une blessure grave peut la ramener (voir _damage). « novice_counts » : faux pour la vue
+## de l'ennemi (un novice ne s'effraie pas d'avance, seulement face à une vraie menace).
+func _scare(fighter: Dictionary, base_chance: float, what: String, novice_counts := true) -> void:
 	if not fighter["fearful"] or fighter["scared"] or fighter["hp"] <= 0 or panicking(fighter):
 		return
+	var chance := GameData.fear_chance(fighter["source"], base_chance, _fear_threats(fighter, novice_counts))
+	if randf() < chance:
+		_frighten(fighter, what)
+
+
+## Le héros a peur : toutes ses stats baissent (_fear) pendant FEAR_MAX_SECONDS, sauf si un allié la lève
+## (_fear_tick). Soit il s'enfuit d'abord vers le bas de la carte (FEAR_SECONDS, sourd aux ordres), soit il
+## se bat contre sa peur (il obéit). Rien n'annonce la fuite : le joueur la voit. Le journal dit seulement
+## qu'il a peur.
+func _frighten(fighter: Dictionary, what: String) -> void:
 	var source: Dictionary = fighter["source"]
-	if randf() >= GameData.fear_chance(source, base_chance):
-		return
 	fighter["scared"] = true
+	fighter["fear_comfort"] = 0.0
 	_log("%s a peur." % _name_with_stars(fighter), "disobey")
 	fighter["mind_news"].append("%s a eu peur au combat (%s)." % [fighter["name"], what])
 	_stress(fighter, GameData.FEAR_MENTAL_LOSS)
 	if fighter["hp"] <= 0 or panicking(fighter):
 		return  # (le stress a pu provoquer une rupture)
+	fighter["fear_until"] = time + GameData.FEAR_MAX_SECONDS
 	if randf() < GameData.fear_flee_chance(source):
 		if GameData.has_trait(source, "Lâche"):
 			_reveal(fighter, "Lâche")
-		fighter["fear_until"] = time + GameData.FEAR_SECONDS
+		fighter["fear_flee"] = true
 		fighter["panic"] = "flee"
-		fighter["panic_until"] = fighter["fear_until"]
+		fighter["panic_until"] = time + GameData.FEAR_SECONDS
 		fighter["order"] = {}
 		fighter["path"] = PackedVector2Array()
 		fighter["flee_to"] = _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
-	else:
-		fighter["fear_until"] = time + GameData.FEAR_FIGHT_SECONDS
+
+
+## Chaque pas, pour un héros qui peut avoir peur : la vue du premier ennemi à portée peut l'effrayer ;
+## s'il a peur, un allié tout près (FEAR_LIFT_RANGE) qui est son ami, son frère d'armes, ou Courageux,
+## le rassure : au bout de FEAR_LIFT_SECONDS, la peur se lève (fuite comprise).
+func _fear_tick(unit: Dictionary) -> void:
+	if not unit["saw_enemy"] and _alive(enemies).any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= ENGAGE_DISTANCE):
+		unit["saw_enemy"] = true
+		_scare(unit, GameData.FEAR_SIGHT_ENEMY_CHANCE, "la vue de l'ennemi", false)
+	if not afraid(unit):
+		return
+	var comforter: Dictionary = {}
+	for ally in _alive(heroes):
+		if ally["id"] == unit["id"] or afraid(ally) or panicking(ally) \
+				or unit["pos"].distance_to(ally["pos"]) > GameData.FEAR_LIFT_RANGE:
+			continue
+		if unit["bonds"].get(ally["id"], 0) >= GameData.BOND_FRIEND or GameData.has_trait(ally["source"], "Courageux"):
+			comforter = ally
+			break
+	if comforter.is_empty():
+		unit["fear_comfort"] = 0.0
+		return
+	unit["fear_comfort"] += TICK
+	if unit["fear_comfort"] < GameData.FEAR_LIFT_SECONDS:
+		return
+	unit["fear_until"] = time
+	unit["fear_comfort"] = 0.0
+	if unit["fear_flee"] and unit["panic"] == "flee":
+		unit["panic"] = ""  # il cesse de fuir
+	unit["fear_flee"] = false
+	var friend: bool = unit["bonds"].get(comforter["id"], 0) >= GameData.BOND_FRIEND
+	if not friend:
+		_reveal(comforter, "Courageux")
+	var text := "%s n'est plus effrayé." % _name_with_stars(unit)
+	_log("%s %s %s l'a rassuré." % [text, "Son ami" if friend else "Le courageux", comforter["name"]], "awaken")
+	unit["mind_news"].append("%s n'avait plus peur grâce à %s." % [unit["name"], comforter["name"]])
+	_alert("Peur", [text])
 
 
 ## Ce que fait un héros en panique : il fuit, ou il frappe n'importe qui à sa portée (même un allié).

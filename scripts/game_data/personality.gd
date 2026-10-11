@@ -682,48 +682,79 @@ func panic_flee_chance(hero: Dictionary) -> float:
 	return COWARD_FLEE_CHANCE if has_trait(hero, "Lâche") else PANIC_FLEE_CHANCE
 
 
-## Peur (demandes du porteur du projet) : un héros d'une étoile est une personne ordinaire, que personne
-## n'a prévenue de rien. Dans ses FEAR_FIGHTS premiers combats, il peut prendre peur : à sa première
-## blessure, en voyant tomber un allié proche, à l'arrivée d'un boss. Pas tous : chacun réagit à sa façon.
-## Celui qui a peur s'enfuit (FEAR_FLEE_CHANCE) pendant FEAR_SECONDS secondes, sourd aux ordres ; dos tourné,
-## il encaisse plus (FLEEING_DAMAGE_TAKEN) et les ennemis le prennent pour cible. Sinon, il se bat contre sa
-## peur pendant FEAR_FIGHT_SECONDS : il obéit, mais frappe et se défend moins bien (FEAR_FIGHT_FACTOR).
-## Aucun message ne dit qu'il fuit : le joueur l'observe ; l'écran montre seulement qu'il a peur
-## (« PEUR » sur son portrait, voir battle.gd, Battle._scare). Une seule fois par combat. Lâche : deux fois
-## plus de chances d'avoir peur et de fuir ; Courageux : deux fois moins. Les héros secrets n'ont pas peur.
-## Chiffres provisoires.
+## Peur (feuille de route v2 : « -30 % de toutes les stats ; touche les novices, mais aussi des héros forts
+## face à une menace écrasante ; levée par un allié ; peut revenir après une blessure grave »).
+## Elle dépend de la menace, plus des étoiles. Menaces (battle.gd, Battle._fear_threats) : un ennemi bien
+## plus fort (FEAR_STRONGER_LEVELS niveaux de plus) ou un boss à portée, une horde (survie, défense de la
+## cité), une santé mentale basse (FEAR_LOW_MENTAL) ; et, pour un 1 étoile dans ses FEAR_FIGHTS premiers
+## combats, tout est écrasant (il reste le plus exposé). Sans menace, pas de peur.
+## Moments où elle peut le prendre : la vue de l'ennemi (FEAR_SIGHT_ENEMY_CHANCE, sans compter la menace
+## « novice »), sa première blessure, la chute d'un allié à moins de FEAR_SIGHT cases, l'arrivée d'un boss.
+## Chance = chance du moment x étoiles (FEAR_RARITY_FACTOR) x expérience (1 / (1 + combats / FEAR_EXPERIENCE_FIGHTS))
+## x menaces (+FEAR_THREAT_STEP par menace au-delà de la première) ; Lâche x2, Courageux /2 (fear_chance).
+## Effet : toutes les stats x FEAR_STAT_FACTOR (attaque, défense, vitesse, critiques), FEAR_MAX_SECONDS au plus.
+## Il fuit d'abord (FEAR_FLEE_CHANCE) pendant FEAR_SECONDS, sourd aux ordres ; dos tourné, il encaisse plus
+## (FLEEING_DAMAGE_TAKEN) et les ennemis le prennent pour cible ; sinon il se bat contre sa peur (il obéit).
+## Aucun message ne dit qu'il fuit : le joueur l'observe (« PEUR » sur son portrait ; « X a peur. » au journal).
+## Un allié proche (FEAR_LIFT_RANGE cases) qui est son ami (ou frère d'armes), ou Courageux, la lève après
+## FEAR_LIFT_SECONDS à ses côtés : « X n'est plus effrayé. ». Une fois passée, une blessure grave (un coup qui
+## fait saigner) peut la faire revenir (FEAR_RETURN_CHANCE). Chiffres provisoires.
 const FEAR_FIGHTS := 3
+const FEAR_SIGHT_ENEMY_CHANCE := 0.25
 const FEAR_FIRST_WOUND_CHANCE := 0.3
 const FEAR_ALLY_DEATH_CHANCE := 0.5
 const FEAR_BOSS_CHANCE := 0.5
 ## Distance (en cases) à laquelle la chute d'un allié fait peur.
 const FEAR_SIGHT := 6.0
+const FEAR_STRONGER_LEVELS := 5
+const FEAR_LOW_MENTAL := 35.0
+const FEAR_THREAT_STEP := 0.25
+const FEAR_RARITY_FACTOR := {1: 1.0, 2: 0.7, 3: 0.45, 4: 0.3, 5: 0.2}
+const FEAR_EXPERIENCE_FIGHTS := 5.0
+const FEAR_STAT_FACTOR := 0.7
+const FEAR_MAX_SECONDS := 20.0
 const FEAR_FLEE_CHANCE := 0.45
 const FEAR_SECONDS := 5.0
-const FEAR_FIGHT_SECONDS := 10.0
-const FEAR_FIGHT_FACTOR := 0.8
+const FEAR_LIFT_RANGE := 2.5
+const FEAR_LIFT_SECONDS := 3.0
+const FEAR_RETURN_CHANCE := 0.5
 const FEAR_MENTAL_LOSS := 10.0
 const FLEEING_DAMAGE_TAKEN := 2.0
 
 
-## Ce héros peut-il encore prendre peur (une étoile, novice du combat, pas un héros secret) ?
-func can_be_scared(hero: Dictionary) -> bool:
-	return hero["rarity"] == 1 and not hero.get("secret", false) and not hero.get("immortal", false) \
-		and hero.get("fights", 0) < FEAR_FIGHTS
+## Novice du combat : un héros d'une étoile dans ses FEAR_FIGHTS premiers combats (tout l'écrase).
+func is_fear_novice(hero: Dictionary) -> bool:
+	return hero["rarity"] == 1 and hero.get("fights", 0) < FEAR_FIGHTS
 
 
-## Chance de prendre peur, à partir de la chance de base de ce qui l'effraie (traits compris).
-func fear_chance(hero: Dictionary, base: float) -> float:
+## Les traits : Lâche double, Courageux divise par deux.
+func _fear_traits(hero: Dictionary, chance: float) -> float:
 	if has_trait(hero, "Lâche"):
-		base *= 2.0
+		chance *= 2.0
 	if has_trait(hero, "Courageux"):
-		base *= 0.5
-	return minf(base, 0.95)
+		chance *= 0.5
+	return chance
 
 
-## Chance qu'un héros qui a peur s'enfuie (sinon il se bat contre sa peur).
+## Chance de prendre peur à un moment donné : « base » (la chance du moment), « threats » (le nombre de
+## menaces, voir plus haut ; 0 = pas de peur). Étoiles, expérience et traits comptent.
+func fear_chance(hero: Dictionary, base: float, threats: int) -> float:
+	if threats <= 0:
+		return 0.0
+	var chance: float = base * FEAR_RARITY_FACTOR.get(hero["rarity"], 0.2)
+	chance /= 1.0 + hero.get("fights", 0) / FEAR_EXPERIENCE_FIGHTS
+	chance *= 1.0 + FEAR_THREAT_STEP * (threats - 1)
+	return minf(_fear_traits(hero, chance), 0.95)
+
+
+## Chance qu'un héros qui prend peur s'enfuie (sinon il se bat contre sa peur).
 func fear_flee_chance(hero: Dictionary) -> float:
-	return fear_chance(hero, FEAR_FLEE_CHANCE)
+	return minf(_fear_traits(hero, FEAR_FLEE_CHANCE), 0.95)
+
+
+## Chance que la peur revienne après une blessure grave (elle l'avait déjà pris dans ce combat).
+func fear_return_chance(hero: Dictionary) -> float:
+	return minf(_fear_traits(hero, FEAR_RETURN_CHANCE), 0.95)
 
 
 ## Texte court de l'état d'esprit (fiche du héros).
