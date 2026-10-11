@@ -568,6 +568,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"agony_cause": "",         # ce qui l'a mis à terre (cause de la mort s'il n'est pas sauvé)
 		"rescue": 0.0,             # temps passé avec un allié à son côté (stabilisé à AGONY_RESCUE_SECONDS)
 		"stabilized": false,       # sauvé de l'agonie : hors du combat, avec un peu de vie
+		"care": 0.0,               # soin d'urgence : temps passé avec un aidant à son côté pendant une hémorragie
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
@@ -733,6 +734,9 @@ func _step() -> void:
 		if hero["agony"]:
 			_agony_tick(hero)
 	_assign_helpers()
+	for hero in heroes:
+		if _needs_help(hero) and not hero["agony"]:
+			_care_tick(hero)
 	var order := _alive(units)
 	order.shuffle()
 	for unit in order:
@@ -1603,16 +1607,20 @@ func _assign_helpers() -> void:
 	for helper_id in _helpers:
 		var helper: Dictionary = units[helper_id]
 		var patient: Dictionary = units[_helpers[helper_id]]
-		if patient["agony"] and helper["hp"] > 0 and helper["present"] and not panicking(helper) and helper["order"].is_empty():
+		if _needs_help(patient) and helper["hp"] > 0 and helper["present"] and not panicking(helper) and helper["order"].is_empty():
 			kept[helper_id] = patient["id"]
 	_helpers = kept
-	for patient in heroes:
-		if not patient["agony"] or _helpers.values().has(patient["id"]):
+	# Les héros à l'agonie d'abord, puis ceux qui font une hémorragie (soin d'urgence).
+	var patients := heroes.filter(func(h): return h["agony"])
+	patients.append_array(heroes.filter(func(h): return not h["agony"] and _needs_help(h)))
+	for patient in patients:
+		if _helpers.values().has(patient["id"]):
 			continue
 		var best: Dictionary = {}
-		var best_distance := GameData.AGONY_HELP_RANGE
+		var best_distance := GameData.AGONY_HELP_RANGE if patient["agony"] else GameData.CARE_HELP_RANGE
 		for ally in _alive(heroes):
-			if _helpers.has(ally["id"]) or panicking(ally) or not ally["order"].is_empty() or _in_contact(ally):
+			if ally["id"] == patient["id"] or _helpers.has(ally["id"]) or panicking(ally) \
+					or not ally["order"].is_empty() or _in_contact(ally):
 				continue
 			var distance: float = ally["pos"].distance_to(patient["pos"])
 			if distance < best_distance:
@@ -1620,6 +1628,34 @@ func _assign_helpers() -> void:
 				best = ally
 		if not best.is_empty():
 			_helpers[best["id"]] = patient["id"]
+
+
+## A-t-il besoin d'un allié à son côté ? À l'agonie, ou en hémorragie (debout et sur le terrain).
+func _needs_help(hero: Dictionary) -> bool:
+	if hero["agony"]:
+		return true
+	return hero["hp"] > 0 and hero["present"] and hero["bleed"]["ticks"] > 0 and hero["bleed"]["heavy"]
+
+
+## Soin d'urgence, chaque pas, pour un héros en hémorragie : son aidant (voir _assign_helpers) à son côté
+## pendant CARE_SECONDS arrête le saignement ; s'il s'éloigne, tout est à refaire.
+func _care_tick(hero: Dictionary) -> void:
+	var carer: Dictionary = {}
+	for helper_id in _helpers:
+		if _helpers[helper_id] == hero["id"] and units[helper_id]["pos"].distance_to(hero["pos"]) <= GameData.AGONY_ALLY_RANGE:
+			carer = units[helper_id]
+	if carer.is_empty():
+		hero["care"] = 0.0
+		return
+	hero["care"] += TICK
+	if hero["care"] < GameData.CARE_SECONDS:
+		return
+	hero["care"] = 0.0
+	hero["bleed"]["ticks"] = 0
+	hero["bleed"]["heavy"] = false
+	var text := "%s a arrêté le saignement de %s." % [carer["name"], hero["name"]]
+	_log(text, "awaken")
+	_alert("Soin d'urgence", [text])
 
 
 ## Au contact d'un ennemi (à moins de STAMINA_CONTACT_RANGE cases) ?

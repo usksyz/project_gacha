@@ -132,6 +132,14 @@ const AGONY_RESCUE_SECONDS := 2.0
 const AGONY_STABILIZED_HP := 0.1
 const POTIONS_PER_MISSION := 3
 
+# --- Soin d'urgence (cahier, lot A : ch. 10) ---
+# Un héros fait une hémorragie (battle.gd, saignement aggravé) : l'allié libre le plus proche (à moins de
+# CARE_HELP_RANGE cases, pas au contact d'un ennemi) le rejoint et cesse de combattre ; s'il reste à son
+# côté (AGONY_ALLY_RANGE) pendant CARE_SECONDS, le saignement s'arrête : « X a arrêté le saignement de Y ».
+# (Un héros à l'agonie passe avant.)
+const CARE_SECONDS := 3.0
+const CARE_HELP_RANGE := 6.0
+
 
 ## Potions de soin qu'une équipe emporte dans la Tour (celles de l'entrepôt, POTIONS_PER_MISSION au plus).
 func mission_potions() -> int:

@@ -351,6 +351,15 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Simulation (équipe neuve « brute ») : morts à l'étage 1 de 1,5 à 0,1 par combat ; étages 2 à 4 de 4,4-4,8 à
   2,5-3 ; victoires à peu près inchangées (étage 1 : 98 %, étages 2 à 4 : 14-23 %). « Préparée » : morts de
   1-2 à 0,4-0,9 aux étages 2 à 4, victoires 90-98 %.
+  Soin d'urgence : un héros en hémorragie (`_needs_help`) reçoit, après les héros à l'agonie, l'allié libre
+  le plus proche (moins de `CARE_HELP_RANGE` 6 cases, même règle que l'agonie, `_assign_helpers`) ; l'aidant
+  cesse de combattre et le suit (`_help`) ; à son côté pendant `CARE_SECONDS` (3 s, `_care_tick`),
+  l'hémorragie s'arrête : journal et fenêtre « X a arrêté le saignement de Y. ».
+  Simulation des quatre points (200 combats par étage, sans ordres, étages 1 à 5) — avant → après :
+  équipe neuve (« brute ») victoires 99 / 22 / 9 / 11 / 0 % → 96 / 23 / 13 / 9 / 0 %, morts par combat
+  1,45 / 4,39 / 4,81 / 4,75 / 5 → 0,19 / 2,6 / 2,97 / 3,1 / 3,9 ; « préparée » (2 niveaux de plus, épée et
+  bouclier ou arc D) victoires 100 / 100 / 97 / 96 / 6 % → 100 / 96 / 89 / 90 / 7 %, morts 0 / 1 / 1,8 / 1,6 /
+  4,9 → 0 / 0,4 / 0,7 / 0,9 / 2,9. L'agonie divise les morts par deux environ (étage 1 : presque plus de morts).
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
