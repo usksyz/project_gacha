@@ -374,8 +374,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   attendre le terrain d'entraînement) : on choisit le héros à renforcer, puis 1 à `SYNTHESIS_MAX_SACRIFICES`
   (5) héros à sacrifier, de n'importe quel rang (recherche `HeroFilter`) ; fenêtre rouge de confirmation.
   Les sacrifiés meurent pour toujours (cause gardée, armes perdues). Le héros renforcé gagne l'expérience de
-  chaque sacrifié et au moins un niveau (cahier : « monte de niveau ») ; 20 % par sacrifié de récupérer une
-  de ses compétences au niveau 1 ; Œil de faucon (30 %, archers, mages, soigneurs : portée et précision des
+  chaque sacrifié et toujours au moins un niveau (cahier : « monte de niveau ») ; pour chaque sacrifié,
+  `SYNTHESIS_SKILL_CHANCE` (80 %, feuille de route v2 ; avant 20 %) d'apprendre une de ses compétences qu'il
+  n'a pas encore, au niveau 1 (pas une fusion ; incompatibilités respectées). Fenêtre « Synthèse terminée » :
+  « X monte en niveau ! La compétence Y a été apprise ! », puis l'expérience et d'où vient chaque compétence ; Œil de faucon (30 %, archers, mages, soigneurs : portée et précision des
   tirs) ; Analyse froide (1 %). Règles et chiffres provisoires dans `game_data/synthesis.gd`.
   Les héros secrets ne peuvent pas être sacrifiés. Chaque synthèse fait baisser la santé mentale des héros
   vivants (voir « Personnalité »). Reste :

@@ -105,9 +105,11 @@ func _apply_promotion(hero: Dictionary) -> Array[String]:
 # On sacrifie un ou plusieurs héros (de n'importe quel rang) pour en renforcer un autre (cahier :
 # « on fusionne 2 héros ou plus : un seul survit »). Les sacrifiés disparaissent pour toujours (comme
 # une mort, leurs armes sont perdues avec eux). Le héros renforcé :
-# - gagne de l'expérience, et au moins un niveau (cahier : « le héros renforcé monte de niveau »),
+# - gagne de l'expérience, et toujours au moins un niveau (cahier : « le héros renforcé monte de niveau »),
 #   sauf s'il est déjà au niveau maximum ;
-# - pour chaque sacrifié, a des chances de récupérer une de ses compétences, au niveau 1 (compétence héritée) ;
+# - pour chaque sacrifié, apprend presque toujours (SYNTHESIS_SKILL_CHANCE) une de ses compétences qu'il n'a
+#   pas encore, au niveau 1 (feuille de route v2 : « le receveur gagne un niveau et une compétence ») ;
+# - fenêtre : « X monte en niveau ! La compétence Y a été apprise ! » ;
 # - s'il se bat de loin, a des chances de gagner Œil de faucon (cahier : Jenna l'obtient en synthèse) ;
 # - très rarement, gagne Analyse froide.
 # (Le cahier parle aussi d'une perte de moral : elle viendra avec le moral, en phase 5.)
@@ -118,8 +120,9 @@ const SYNTHESIS_MAX_SACRIFICES := 5
 ## Expérience gagnée par sacrifié : une base, plus (niveau x étoiles du sacrifié) x ce nombre.
 const SYNTHESIS_XP_BASE := 20
 const SYNTHESIS_XP_PER_LEVEL_STAR := 10
-## Chance de récupérer une compétence de chaque sacrifié (au niveau 1), et chance d'Analyse froide.
-const INHERIT_CHANCE := 0.2
+## Chance d'apprendre une compétence de chaque sacrifié (au niveau 1, une qu'il n'a pas encore ; avant : 20 %),
+## et chance d'Analyse froide.
+const SYNTHESIS_SKILL_CHANCE := 0.8
 const COLD_ANALYSIS_CHANCE := 0.01
 ## Analyse froide : précision et coups critiques en plus, par niveau (0.1 = 10 %).
 ## La précision réduit les chances d'esquive de la cible.
@@ -189,16 +192,13 @@ func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
 		_remove_from_teams(sacrifice["id"])
 		lines.append("%s (%s) a disparu pour toujours." % [sacrifice["name"], "★".repeat(sacrifice["rarity"])])
 
-	if xp == 0:
-		lines.append("%s est déjà au niveau maximum : l'expérience est perdue (pense à la promotion)." % target["name"])
-	else:
-		var levels := gain_xp(target, xp)
-		lines.append("%s gagne %d d'expérience%s." % [target["name"], xp,
-			" et passe au niveau %d" % target["level"] if levels > 0 else ""])
+	var levels := gain_xp(target, xp) if xp > 0 else 0
 
-	# Compétence héritée : pour chaque sacrifié, une chance de récupérer une de ses compétences.
+	# Compétences apprises : pour chaque sacrifié, presque toujours une des siennes que le receveur n'a pas.
+	var learned := []
+	var details := []
 	for sacrifice in sacrifices:
-		if randf() >= INHERIT_CHANCE:
+		if randf() >= SYNTHESIS_SKILL_CHANCE:
 			continue
 		var candidates := []
 		for skill in sacrifice["skills"]:
@@ -207,22 +207,36 @@ func synthesize(target: Dictionary, sacrifices: Array) -> Array[String]:
 		if not candidates.is_empty():
 			var inherited: String = candidates.pick_random()
 			target["skills"].append(new_skill(inherited))
-			lines.append("Compétence héritée de %s : %s (niveau 1) !" % [sacrifice["name"], inherited])
+			learned.append(inherited)
+			details.append("%s lui vient de %s (niveau 1)." % [inherited, sacrifice["name"]])
 	# Œil de faucon : pour ceux qui se battent de loin ; un niveau de plus s'ils l'ont déjà.
 	if can_get_hawk_eye(target) and randf() < HAWK_EYE_CHANCE:
 		var level := _own_skill_level(target["skills"], "Œil de faucon")
 		if level == 0:
 			target["skills"].append(new_skill("Œil de faucon"))
-			lines.append("Nouvelle compétence : Œil de faucon !")
+			learned.append("Œil de faucon")
 		else:
 			for skill in target["skills"]:
 				if skill["name"] == "Œil de faucon":
 					skill["level"] += 1
-			lines.append("Œil de faucon passe au niveau %d !" % (level + 1))
+			details.append("Œil de faucon passe au niveau %d !" % (level + 1))
 	# Analyse froide : très rare, juste après une synthèse.
 	if randf() < COLD_ANALYSIS_CHANCE and can_learn_skill(target, target["skills"], "Analyse froide"):
 		target["skills"].append(new_skill("Analyse froide"))
-		lines.append("Compétence rare : Analyse froide !")
+		learned.append("Analyse froide")
+		details.append("Analyse froide est une compétence rare.")
+
+	# La fenêtre : « X monte en niveau ! La compétence Y a été apprise ! », puis le détail.
+	var headline := "%s monte en niveau !" % target["name"] if levels > 0 else ""
+	for skill_name in learned:
+		headline += " La compétence %s a été apprise !" % skill_name
+	if headline != "":
+		lines.append(headline.strip_edges())
+	if xp == 0:
+		lines.append("%s est déjà au niveau maximum : l'expérience est perdue (pense à la promotion)." % target["name"])
+	else:
+		lines.append("+%d d'expérience : niveau %d." % [xp, target["level"]])
+	lines.append_array(details)
 	lines.append(mental_after_synthesis(sacrifices.size()))
 	tidy_arsenal()  # les armes des sacrifiés sont perdues (et la partie est sauvegardée)
 	advance_tutorial("synthese")  # (tutoriel) la synthèse était la dernière étape

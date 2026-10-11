@@ -4,7 +4,7 @@ extends Control
 ## 1. On choisit le héros à renforcer ; 2. on choisit un ou plusieurs héros à sacrifier
 ## (jusqu'à GameData.SYNTHESIS_MAX_SACRIFICES) ; 3. une fenêtre rouge prévient que les sacrifiés
 ## disparaîtront pour toujours (Oui / Non) ; 4. le résultat : expérience (au moins un niveau),
-## et parfois une compétence héritée, Œil de faucon ou Analyse froide.
+## presque toujours une compétence de chaque sacrifié, parfois Œil de faucon ou Analyse froide.
 ## Une recherche et des filtres (HeroFilter) aident à trouver les héros parmi des centaines.
 ## Les règles sont dans GameData (section « Synthèse de héros »).
 
@@ -137,7 +137,8 @@ func _gains_text() -> String:
 		parts.append("%s est au niveau maximum : l'expérience sera perdue (pense à la promotion)." % target["name"])
 	else:
 		parts.append("%s gagnera %d d'expérience (au moins un niveau)." % [target["name"], xp])
-	parts.append("%d %% de chances de récupérer une compétence de chaque sacrifié." % roundi(GameData.INHERIT_CHANCE * 100))
+	parts.append("%d %% de chances d'apprendre une compétence de chaque sacrifié (une qu'il n'a pas encore)." \
+		% roundi(GameData.SYNTHESIS_SKILL_CHANCE * 100))
 	if GameData.can_get_hawk_eye(target):
 		parts.append("%d %% de chances d'Œil de faucon." % roundi(GameData.HAWK_EYE_CHANCE * 100))
 	parts.append("%s %% d'Analyse froide." % String.num(GameData.COLD_ANALYSIS_CHANCE * 100).replace(".", ","))
