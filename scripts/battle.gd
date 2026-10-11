@@ -209,6 +209,10 @@ var _free_since := {}
 var _boss_seen := false
 ## Survie : dernière vague annoncée (voir current_wave).
 var _wave_announced := 0
+## Formations (voir _update_formations) : l'équipe couvre-t-elle les trois portées ? Le mur de boucliers
+## a-t-il déjà été annoncé ?
+var ranges_covered := false
+var _wall_announced := false
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
@@ -786,6 +790,7 @@ func _line_of_sight(from: Vector2, to: Vector2) -> bool:
 # ---------------------------------------------------------------------------
 
 func _step() -> void:
+	_update_formations()
 	_call_reinforcements()
 	_check_boss_arrival()
 	for hero in heroes:
@@ -1008,9 +1013,89 @@ func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
 	return result
 
 
+## Portée d'un combattant, pour les formations (voir GameData, tower.gd, RANGE_COVER_BONUS) :
+## "longue" (arc, magie), "moyenne" (lance, fouet) ou "courte" (épée, dague, sans arme).
+func range_band(unit: Dictionary) -> String:
+	if unit["ranged"] or unit["class"] in ["Mage", "Soigneur"]:
+		return "longue"
+	if unit["weapon"] in GameData.WEAPON_TYPES:
+		return GameData.WEAPON_TYPES[unit["weapon"]]["band"]
+	return "courte"
+
+
+## Chaque pas : l'équipe couvre-t-elle les trois portées (héros debout sur le terrain) ? Annonce aussi, une
+## fois, le premier mur de boucliers. (Rien en duel.)
+func _update_formations() -> void:
+	if quest.get("duel", false):
+		return
+	var bands := {}
+	for hero in _alive(heroes):
+		bands[range_band(hero)] = true
+	var covered := bands.size() >= 3
+	if covered != ranges_covered:
+		ranges_covered = covered
+		if covered:
+			_log("L'équipe couvre les trois portées (courte, moyenne, longue) : +%d %% en attaque et en défense." \
+				% roundi(GameData.RANGE_COVER_BONUS * 100), "awaken")
+		else:
+			_log("L'équipe ne couvre plus les trois portées.", "disobey")
+	if not _wall_announced:
+		for hero in _alive(heroes):
+			var wall := _wall_allies(hero)
+			if not wall.is_empty():
+				_wall_announced = true
+				var names := [hero["name"]] + wall.map(func(ally): return ally["name"])
+				_log("Mur de boucliers : %s serrent les rangs." % " et ".join(names), "awaken")
+				_alert("Mur de boucliers", ["%s serrent les rangs : leur défense monte." % " et ".join(names)])
+				break
+
+
+## Mur de boucliers : les porteurs de bouclier côte à côte avec celui-ci (même ligne, à moins de
+## SHIELD_WALL_RANGE cases), SHIELD_WALL_MAX_ALLIES au plus. Vide s'il n'a pas de bouclier.
+func _wall_allies(unit: Dictionary) -> Array:
+	if not unit["shield"] or not unit["is_hero"] or quest.get("duel", false):
+		return []
+	var wall := []
+	for ally in _alive(heroes):
+		if ally["id"] == unit["id"] or not ally["shield"]:
+			continue
+		var offset: Vector2 = ally["pos"] - unit["pos"]
+		if offset.length() <= GameData.SHIELD_WALL_RANGE and absf(offset.y) <= 0.8:
+			wall.append(ally)
+			if wall.size() >= GameData.SHIELD_WALL_MAX_ALLIES:
+				break
+	return wall
+
+
+## Un lancier est-il juste derrière un porteur de bouclier, face à « target » (le bouclier plus près d'elle) ?
+func _behind_shield(unit: Dictionary, target: Dictionary) -> bool:
+	if not unit["is_hero"]:
+		return false
+	var distance: float = unit["pos"].distance_to(target["pos"])
+	for ally in _alive(heroes):
+		if ally["id"] != unit["id"] and ally["shield"] \
+				and ally["pos"].distance_to(unit["pos"]) <= GameData.SPEAR_WALL_RANGE \
+				and ally["pos"].distance_to(target["pos"]) < distance - 0.4:
+			return true
+	return false
+
+
+## Formations : ce que l'attaque d'un héros gagne (trois portées couvertes).
+func _formation_attack(unit: Dictionary) -> float:
+	return 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
+
+
+## Formations : ce que la défense d'un héros gagne (trois portées couvertes, mur de boucliers).
+func _formation_defense(unit: Dictionary) -> float:
+	var factor := _formation_attack(unit)
+	return factor * (1.0 + _wall_allies(unit).size() * GameData.SHIELD_WALL_DEFENSE_PER_ALLY)
+
+
 ## Assez près (et, pour un tir, sans décor entre les deux) ?
 func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
 	var distance: float = unit["pos"].distance_to(target["pos"])
+	if unit["weapon"] == "Lance" and _behind_shield(unit, target):
+		reach += GameData.SPEAR_WALL_REACH  # par-dessus le mur de boucliers
 	if reach > MELEE_REACH_MAX and is_high(unit):
 		reach += GameData.HEIGHT_REACH_BONUS  # en hauteur, un tireur voit et tire plus loin
 	if distance > reach + 0.05:
@@ -1230,8 +1315,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 		power *= 1.0 + GameData.HEIGHT_ATTACK_BONUS
 	# Santé mentale basse : l'attaquant frappe moins fort, la cible se défend moins bien (voir _mind).
 	# Un ami ou un frère d'armes tout près : l'inverse (voir _bond).
-	var raw: float = attacker["atk"] * _mind(attacker) * _bond(attacker) * power * randf_range(0.9, 1.1) \
-		- target["def"] * _mind(target) * _bond(target) * 0.5
+	# Formations (trois portées, mur de boucliers) : voir _formation_attack et _formation_defense.
+	var raw: float = attacker["atk"] * _mind(attacker) * _bond(attacker) * _formation_attack(attacker) * power \
+		* randf_range(0.9, 1.1) - target["def"] * _mind(target) * _bond(target) * _formation_defense(target) * 0.5
 	# Sort de feu : Résistance aux flammes de la cible (80 % au plus).
 	if kind == "spell" and attacker["element"] == "Feu":
 		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)

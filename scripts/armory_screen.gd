@@ -290,7 +290,8 @@ func _open_picker(hero: Dictionary, slot: String) -> void:
 		if count >= MAX_ROWS:
 			list.add_child(UI.make_label("… et d'autres, moins bonnes.", 18))
 			break
-		var text := "%s — %s" % [GameData.weapon_name(weapon), GameData.WEAPON_TYPES[weapon["type"]]["info"]]
+		var kind: Dictionary = GameData.WEAPON_TYPES[weapon["type"]]
+		var text := "%s — portée %s. %s" % [GameData.weapon_name(weapon), kind["band"], kind["info"]]
 		var button := UI.make_button(text, func():
 			GameData.equip(hero, weapon)
 			picker.visible = false

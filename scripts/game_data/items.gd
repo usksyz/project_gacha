@@ -34,19 +34,22 @@ const SHIELD_DEF_PER_GRADE := 1
 ## « reach » : portée en cases (1 = contact, 5.5 = tir) ; « power » : dégâts de chaque coup ;
 ## « speed » : durée entre deux coups (0.7 = 30 % plus rapide) ; « crit » : chance de critique en plus.
 ## « skill » : la compétence d'arme qui renforce cette arme.
+## « band » : la portée de l'arme pour les formations (phase 1.2, ch. 5 : trois portées) : "courte",
+## "moyenne" ou "longue" (la magie est longue aussi ; voir Battle.range_band). Le fouet, que le cahier ne
+## classe pas, frappe d'un peu plus loin que la lance : moyenne.
 const WEAPON_TYPES := {
 	"Épée": {"reach": 1.0, "power": 1.0, "speed": 1.0, "crit": 0.0, "skill": "Maîtrise de l'épée",
-		"info": "Équilibrée."},
+		"band": "courte", "info": "Équilibrée."},
 	"Lance": {"reach": 1.8, "power": 1.0, "speed": 1.15, "crit": 0.0, "skill": "Maîtrise de la lance",
-		"info": "Frappe de plus loin, un peu plus lente."},
+		"band": "moyenne", "info": "Frappe de plus loin, un peu plus lente. Derrière un bouclier, frappe sans être au contact."},
 	"Dague": {"reach": 1.0, "power": 0.75, "speed": 0.7, "crit": 0.1, "skill": "Maîtrise de la dague",
-		"info": "Coups rapides et plus souvent critiques, mais moins forts."},
+		"band": "courte", "info": "Coups rapides et plus souvent critiques, mais moins forts."},
 	"Fouet": {"reach": 2.2, "power": 0.8, "speed": 1.0, "crit": 0.0, "skill": "Maîtrise du fouet",
-		"info": "Longue portée, coups plus faibles."},
+		"band": "moyenne", "info": "Longue portée, coups plus faibles."},
 	"Arc": {"reach": 5.5, "power": 1.0, "speed": 1.0, "crit": 0.0, "skill": "Maîtrise de l'arc",
-		"info": "Tire de loin (il faut voir la cible). Se tient à deux mains : pas de bouclier."},
+		"band": "longue", "info": "Tire de loin (il faut voir la cible). Se tient à deux mains : pas de bouclier."},
 	"Bouclier": {"reach": 0.0, "power": 0.0, "speed": 1.0, "crit": 0.0, "skill": "Utilisation du bouclier",
-		"info": "Se porte en plus de l'arme : ajoute de la défense."},
+		"band": "courte", "info": "Se porte en plus de l'arme : ajoute de la défense. Côte à côte, les boucliers font un mur."},
 }
 
 ## Armes de départ, quand un héros n'a rien reçu de l'arsenal.

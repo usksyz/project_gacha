@@ -141,6 +141,23 @@ const ROTATION_DAMAGE_TAKEN := 1.5
 const LEADER_TIRED_STAMINA := 0.2
 const LEADER_COOLDOWN := 8.0
 
+# --- Portées et formations (phase 1.2 ; cahier, lot A ; œuvre : ch. 5, trois portées ; ch. 9, formation des
+# novices) ---
+# Chaque héros a une portée (Battle.range_band) : courte (épée, dague, bouclier, sans arme), moyenne (lance,
+# fouet), longue (arc, magie). Une équipe dont les héros debout couvrent les trois portées gagne
+# RANGE_COVER_BONUS en attaque et en défense. Mur de boucliers : un porteur de bouclier qui a un autre porteur
+# de bouclier côte à côte (à moins de SHIELD_WALL_RANGE cases, sur la même ligne) gagne
+# SHIELD_WALL_DEFENSE_PER_ALLY de défense par voisin (SHIELD_WALL_MAX_ALLIES au plus). Un lancier juste
+# derrière un porteur de bouclier (à moins de SPEAR_WALL_RANGE cases de lui, le bouclier plus près de
+# l'ennemi) frappe SPEAR_WALL_REACH case plus loin : par-dessus le mur, sans être au contact.
+# Chiffres provisoires.
+const RANGE_COVER_BONUS := 0.1
+const SHIELD_WALL_RANGE := 1.5
+const SHIELD_WALL_DEFENSE_PER_ALLY := 0.15
+const SHIELD_WALL_MAX_ALLIES := 2
+const SPEAR_WALL_RANGE := 1.6
+const SPEAR_WALL_REACH := 0.6
+
 # --- Agonie (cahier, lot A : fin du ch. 10) ---
 # À 0 point de vie, un héros ne meurt pas tout de suite : il tombe à l'agonie AGONY_SECONDS secondes
 # (fenêtre rouge « X est dans un état critique, sa vie est en danger ! »). L'allié libre le plus proche

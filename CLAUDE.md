@@ -373,6 +373,18 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   1,45 / 4,39 / 4,81 / 4,75 / 5 → 0,19 / 2,6 / 2,97 / 3,1 / 3,9 ; « préparée » (2 niveaux de plus, épée et
   bouclier ou arc D) victoires 100 / 100 / 97 / 96 / 6 % → 100 / 96 / 89 / 90 / 7 %, morts 0 / 1 / 1,8 / 1,6 /
   4,9 → 0 / 0,4 / 0,7 / 0,9 / 2,9. L'agonie divise les morts par deux environ (étage 1 : presque plus de morts).
+- Phase 1.2 de la feuille de route v2 (cahier, « Améliorations combat... », lot A ; chiffres dans `tower.gd`,
+  section « Combat », sauf mention). Rage d'éveil : voir Berserk ; survie par vagues et terrain : voir « Tour ».
+  Portées et formations (ch. 5 et 9) : chaque arme a une portée (`WEAPON_TYPES[...]["band"]`, affichée à
+  l'armurerie) : courte (épée, dague, bouclier, sans arme), moyenne (lance ; le fouet aussi, ajout du projet),
+  longue (arc, et la magie des mages et soigneurs) ; `Battle.range_band`. Les héros debout couvrent les trois
+  portées : +`RANGE_COVER_BONUS` (10 %) en attaque et en défense (`ranges_covered`, `_update_formations`,
+  annoncé dans le journal). Mur de boucliers : un porteur de bouclier avec un autre côte à côte (à moins de
+  `SHIELD_WALL_RANGE` 1,5 case, même ligne) gagne +`SHIELD_WALL_DEFENSE_PER_ALLY` (15 %) de défense par
+  voisin, 2 au plus (`_wall_allies`, `_formation_defense` ; fenêtre « Mur de boucliers » la première fois).
+  Lancier juste derrière un bouclier (à moins de `SPEAR_WALL_RANGE` 1,6 case de lui, le bouclier plus près de
+  l'ennemi) : portée +`SPEAR_WALL_REACH` (0,6, donc 2,4 cases), il frappe sans être au contact
+  (`_behind_shield`, dans `_in_reach`) et son endurance remonte (hors du contact).
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
