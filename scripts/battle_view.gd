@@ -232,7 +232,7 @@ func _advance() -> void:
 	while next_alert < battle.alerts.size():
 		_show_alert(battle.alerts[next_alert])
 		next_alert += 1
-	if selected_id >= 0 and battle.units[selected_id]["hp"] <= 0:
+	if selected_id >= 0 and (battle.units[selected_id]["hp"] <= 0 or not battle.units[selected_id]["present"]):
 		selected_id = -1  # le héros choisi est tombé
 		_update_hint()
 	_update_berserk_button()  # (le héros peut entrer en rage ou en sortir de lui-même)
@@ -272,7 +272,7 @@ func _draw_portraits() -> void:
 		var hero: Dictionary = shown[i]
 		var box := Rect2(Vector2(i * width, 0), Vector2(width, PORTRAIT_HEIGHT)).grow(-3)
 		var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
-		var fallen: bool = hero["hp"] <= 0
+		var fallen: bool = hero["hp"] <= 0 or not hero["present"]
 		portraits.draw_rect(box, Color("262a3b") if not fallen else Color("1b1d2a"))
 		var border := color
 		if _is_duel():
@@ -287,6 +287,15 @@ func _draw_portraits() -> void:
 		var text_color := Color.WHITE if not fallen else Color(1, 1, 1, 0.4)
 		portraits.draw_string(font, box.position + Vector2(6, 22), hero["name"], HORIZONTAL_ALIGNMENT_LEFT,
 			box.size.x - 12, 16, text_color)
+		if hero.get("agony", false):
+			# À l'agonie : les secondes qui restent pour le sauver.
+			portraits.draw_string(font, box.position + Vector2(6, 48), "AGONIE %d s" % ceili(hero["agony_until"] - battle.time),
+				HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 12, 15, Color("ff4040"))
+			continue
+		if hero.get("stabilized", false) and not hero["present"]:
+			portraits.draw_string(font, box.position + Vector2(6, 48), "à l'abri", HORIZONTAL_ALIGNMENT_LEFT,
+				box.size.x - 12, 15, Color("6fe08a"))
+			continue
 		if fallen:
 			portraits.draw_string(font, box.position + Vector2(6, 48), "à terre" if hero["immortal"] else "tombé",
 				HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 12, 15, Color(1, 0.5, 0.5, 0.7))
@@ -344,7 +353,7 @@ func _on_portraits_input(event: InputEvent) -> void:
 	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
 		return
 	var index := int(click.position.x / (portraits.size.x / GameData.TEAM_SIZE))
-	if index < 0 or index >= battle.heroes.size() or battle.heroes[index]["hp"] <= 0:
+	if index < 0 or index >= battle.heroes.size() or battle.heroes[index]["hp"] <= 0 or not battle.heroes[index]["present"]:
 		return
 	var hero_id: int = battle.heroes[index]["id"]
 	selected_id = -1 if selected_id == hero_id else hero_id
@@ -564,6 +573,14 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var radius := cell * (0.5 if unit["boss"] else 0.36)
 	if unit["hp"] <= 0:
+		# Un héros à l'agonie : un cercle rouge qui bat, et les secondes qui lui restent.
+		if unit.get("agony", false):
+			var pulse := 0.5 + 0.5 * sin(battle.time * 8.0)
+			arena.draw_circle(center, radius, Color(0.6, 0.1, 0.1, 0.5 + 0.4 * pulse))
+			arena.draw_arc(center, radius + 3, 0, TAU, 24, Color(1, 0.25, 0.25), 2.0)
+			arena.draw_string(font, center + Vector2(-radius * 2, radius * 0.4), str(ceili(unit["agony_until"] - battle.time)),
+				HORIZONTAL_ALIGNMENT_CENTER, radius * 4, int(radius * 1.2), Color.WHITE)
+			return
 		# Un ennemi vaincu disparaît ; un héros tombé reste, grisé.
 		if unit["is_hero"]:
 			arena.draw_circle(center, radius, Color(0.3, 0.3, 0.3, 0.6))

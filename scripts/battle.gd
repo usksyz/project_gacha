@@ -186,7 +186,14 @@ var finished := false
 var time := 0.0
 var duration := 0.0
 
+## Potions de soin emportées par l'équipe (GameData.mission_potions) et bues pendant le combat
+## (GameData.finish_tower_battle les retire de l'entrepôt). Voir « Agonie ».
+var potions := 0
+var potions_used := 0
+
 var _grid := AStarGrid2D.new()
+## Qui va aider qui (agonie, soin d'urgence) : {numéro de l'aidant: numéro du blessé}, recalculé à chaque pas.
+var _helpers := {}
 ## Moment où chaque place d'ennemi s'est libérée (pour faire venir un renfort après un délai).
 var _free_since := {}
 ## Vrai une fois que les héros ont vu un boss arriver (le stress du boss ne compte qu'une fois).
@@ -196,6 +203,8 @@ var _boss_seen := false
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
 	quest = floor_quest
 	walls = quest["walls"]
+	if not quest.get("duel", false):
+		potions = GameData.mission_potions()
 	if quest.get("wait_contact", false):
 		clock_start = -1.0
 	for hero in team:
@@ -553,6 +562,12 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"resting": false,
 		"swap_until": 0.0,
 		"lead_ready": 0.0,         # Meneur : prochain moment où il peut faire tourner la première ligne
+		# Agonie (voir _announce_fall) : à 0 point de vie, un héros agonise jusqu'à « agony_until ».
+		"agony": false,
+		"agony_until": 0.0,
+		"agony_cause": "",         # ce qui l'a mis à terre (cause de la mort s'il n'est pas sauvé)
+		"rescue": 0.0,             # temps passé avec un allié à son côté (stabilisé à AGONY_RESCUE_SECONDS)
+		"stabilized": false,       # sauvé de l'agonie : hors du combat, avec un peu de vie
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		# Ce qu'il a fait (croissance de ses stats au prochain niveau, voir GameData.add_activity) :
@@ -714,6 +729,10 @@ func _line_of_sight(from: Vector2, to: Vector2) -> bool:
 func _step() -> void:
 	_call_reinforcements()
 	_check_boss_arrival()
+	for hero in heroes:
+		if hero["agony"]:
+			_agony_tick(hero)
+	_assign_helpers()
 	var order := _alive(units)
 	order.shuffle()
 	for unit in order:
@@ -806,6 +825,10 @@ func _think(unit: Dictionary) -> void:
 
 	# Un ordre du joueur passe avant tout.
 	if unit["is_hero"] and _follow_order(unit, foes):
+		return
+
+	# Un allié à l'agonie (ou en hémorragie) à secourir : il y va (voir _assign_helpers).
+	if unit["is_hero"] and _help(unit):
 		return
 
 	# Au repos à l'arrière (rotation) : il ne combat que si un ennemi vient au contact.
@@ -1446,6 +1469,21 @@ func _berserk_tick(unit: Dictionary) -> void:
 ## (ou améliorer) Résistance à la douleur. Un héros debout, épée et bouclier en main,
 ## dont les deux maîtrises sont au maximum, les fusionne en « Épée et bouclier ».
 func _after_fight() -> void:
+	# Encore à l'agonie quand le combat s'arrête : sauvé si un allié debout peut le rejoindre et rester à son
+	# côté avant la fin de ses AGONY_SECONDS ; sinon il meurt.
+	for hero in heroes:
+		if not hero["agony"]:
+			continue
+		var left: float = hero["agony_until"] - time - (GameData.AGONY_RESCUE_SECONDS - hero["rescue"])
+		var rescuer: Dictionary = {}
+		for ally in _alive(heroes):
+			if ally["pos"].distance_to(hero["pos"]) / _move_speed(ally) <= left:
+				rescuer = ally
+				break
+		if rescuer.is_empty():
+			_die(hero, hero["agony_cause"])
+		else:
+			_stabilize(hero, rescuer["name"])
 	# La rage s'arrête avec le combat ; la migraine (en cours ou qui commence) continue après, en temps réel.
 	var now := Time.get_unix_time_from_system()
 	for unit in units:
@@ -1488,11 +1526,123 @@ func _after_fight() -> void:
 # Chutes, cibles, journal
 # ---------------------------------------------------------------------------
 
-func _announce_fall(fighter: Dictionary, cause: String) -> void:
+## Un combattant tombe à 0 point de vie. Un ennemi est vaincu ; un héros tombe à l'agonie (voir
+## GameData, tower.gd, « Agonie ») ; « instant » : il meurt sur le coup (mort de stress).
+func _announce_fall(fighter: Dictionary, cause: String, instant := false) -> void:
+	if fighter["killer"] != "" or fighter["agony"]:
+		return  # déjà tombé
 	if not fighter["is_hero"]:
 		fighter["killer"] = cause
 		_log("%s est vaincu." % fighter["name"])
-	elif fighter["immortal"]:
+	elif instant:
+		_die(fighter, cause)
+	else:
+		_start_agony(fighter, cause)
+
+
+## Le héros tombe à l'agonie : il ne bouge plus, ses alliés ont AGONY_SECONDS pour le sauver (_agony_tick).
+## S'il reste une potion de soin à l'équipe, elle le stabilise tout de suite.
+func _start_agony(fighter: Dictionary, cause: String) -> void:
+	fighter["hp"] = 0
+	fighter["agony"] = true
+	fighter["agony_until"] = time + GameData.AGONY_SECONDS
+	fighter["agony_cause"] = cause
+	fighter["rescue"] = 0.0
+	fighter["panic"] = ""
+	fighter["order"] = {}
+	fighter["bleed"]["ticks"] = 0
+	if fighter["berserk"]:
+		_exit_berserk(fighter)
+	var who := _name_with_stars(fighter)
+	_log("%s s'effondre ! Il est dans un état critique." % who, "bleed")
+	_alert("État critique", ["%s est dans un état critique, sa vie est en danger !" % who], true)
+	if potions > 0:
+		potions -= 1
+		potions_used += 1
+		_stabilize(fighter, "une potion de soin")
+
+
+## Chaque pas, pour un héros à l'agonie : un allié à son côté le stabilise au bout de AGONY_RESCUE_SECONDS
+## (il doit y rester) ; passé AGONY_SECONDS, il meurt (un immortel du mode dev reste à terre).
+func _agony_tick(fighter: Dictionary) -> void:
+	var helper: Dictionary = {}
+	for ally in _alive(heroes):
+		if ally["pos"].distance_to(fighter["pos"]) <= GameData.AGONY_ALLY_RANGE:
+			helper = ally
+			break
+	if helper.is_empty():
+		fighter["rescue"] = 0.0
+	else:
+		fighter["rescue"] += TICK
+		if fighter["rescue"] >= GameData.AGONY_RESCUE_SECONDS:
+			_stabilize(fighter, helper["name"])
+			return
+	if time >= fighter["agony_until"]:
+		_die(fighter, fighter["agony_cause"])
+
+
+## Sauvé de l'agonie (« by » : l'allié ou la potion) : il sort du combat avec AGONY_STABILIZED_HP de sa vie.
+func _stabilize(fighter: Dictionary, by: String) -> void:
+	fighter["agony"] = false
+	fighter["stabilized"] = true
+	fighter["present"] = false  # mis à l'abri : il ne combat plus
+	fighter["hp"] = maxi(1, roundi(fighter["max_hp"] * GameData.AGONY_STABILIZED_HP))
+	var text := "%s est stabilisé grâce à %s." % [_name_with_stars(fighter), by]
+	_log(text + " Il est mis à l'abri.", "awaken")
+	_alert("Stabilisé", [text, "Il sort du combat, sa vie n'est plus en danger."])
+	fighter["mind_news"].append("%s a frôlé la mort : stabilisé grâce à %s." % [fighter["name"], by])
+
+
+## Qui va secourir qui : pour chaque héros à l'agonie, l'allié libre le plus proche (à moins de
+## AGONY_HELP_RANGE cases : debout, ni en panique, ni en fuite, ni sous un ordre du Maître, ni lui-même au
+## contact d'un ennemi) court à son côté. Un aidant ne s'occupe que d'un blessé à la fois ; une fois en
+## route, il continue même si un ennemi le rattrape (le Maître peut l'envoyer ailleurs par un ordre).
+func _assign_helpers() -> void:
+	# Ceux qui sont déjà en route continuent (s'ils le peuvent encore).
+	var kept := {}
+	for helper_id in _helpers:
+		var helper: Dictionary = units[helper_id]
+		var patient: Dictionary = units[_helpers[helper_id]]
+		if patient["agony"] and helper["hp"] > 0 and helper["present"] and not panicking(helper) and helper["order"].is_empty():
+			kept[helper_id] = patient["id"]
+	_helpers = kept
+	for patient in heroes:
+		if not patient["agony"] or _helpers.values().has(patient["id"]):
+			continue
+		var best: Dictionary = {}
+		var best_distance := GameData.AGONY_HELP_RANGE
+		for ally in _alive(heroes):
+			if _helpers.has(ally["id"]) or panicking(ally) or not ally["order"].is_empty() or _in_contact(ally):
+				continue
+			var distance: float = ally["pos"].distance_to(patient["pos"])
+			if distance < best_distance:
+				best_distance = distance
+				best = ally
+		if not best.is_empty():
+			_helpers[best["id"]] = patient["id"]
+
+
+## Au contact d'un ennemi (à moins de STAMINA_CONTACT_RANGE cases) ?
+func _in_contact(unit: Dictionary) -> bool:
+	var foes := _alive(enemies if unit["is_hero"] else heroes)
+	return foes.any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= GameData.STAMINA_CONTACT_RANGE)
+
+
+## Un aidant (voir _assign_helpers) va au côté de son blessé et y reste. Renvoie vrai s'il est occupé à ça.
+func _help(unit: Dictionary) -> bool:
+	if not _helpers.has(unit["id"]):
+		return false
+	var patient: Dictionary = units[_helpers[unit["id"]]]
+	if unit["pos"].distance_to(patient["pos"]) > GameData.AGONY_ALLY_RANGE * 0.7:
+		_move_towards(unit, patient["pos"])
+	return true
+
+
+## La mort d'un héros (agonie sans secours, mort de stress) ; un immortel du mode dev reste à terre.
+func _die(fighter: Dictionary, cause: String) -> void:
+	fighter["agony"] = false
+	fighter["hp"] = 0
+	if fighter["immortal"]:
 		fighter["killer"] = cause  # noté seulement pour ne pas l'annoncer deux fois
 		_log("%s est à terre, mais se relèvera." % fighter["name"])
 	else:
@@ -1581,7 +1731,7 @@ func _rupture(fighter: Dictionary) -> void:
 		fighter["hp"] = 0
 		fighter["bleed"]["ticks"] = 0
 		_effect("refuse", fighter, fighter, "...", false)
-		_announce_fall(fighter, "mort de stress, l'esprit brisé")
+		_announce_fall(fighter, "mort de stress, l'esprit brisé", true)
 		_alert("Rupture : mort de stress", [
 			"%s était déjà en rupture. Sa santé mentale est retombée à 0." % who,
 			"Son esprit n'a pas tenu : il meurt de stress.",

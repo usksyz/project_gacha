@@ -114,6 +114,29 @@ const ROTATION_DAMAGE_TAKEN := 1.5
 const LEADER_TIRED_STAMINA := 0.2
 const LEADER_COOLDOWN := 8.0
 
+# --- Agonie (cahier, lot A : fin du ch. 10) ---
+# À 0 point de vie, un héros ne meurt pas tout de suite : il tombe à l'agonie AGONY_SECONDS secondes
+# (fenêtre rouge « X est dans un état critique, sa vie est en danger ! »). L'allié libre le plus proche
+# (à moins de AGONY_HELP_RANGE cases) court à son côté ; s'il y reste AGONY_RESCUE_SECONDS (à moins de
+# AGONY_ALLY_RANGE cases), ou si l'équipe a une potion de soin, il est stabilisé : il sort du combat avec
+# AGONY_STABILIZED_HP de sa vie. Sinon, il meurt (mort définitive). Quand le combat s'arrête, un héros encore
+# à l'agonie est sauvé si un allié debout peut le rejoindre et rester à son côté avant la fin de ses
+# AGONY_SECONDS ; sinon il meurt. Seul un allié libre (pas au contact d'un ennemi) part le secourir.
+# Les potions : l'équipe en
+# emporte jusqu'à POTIONS_PER_MISSION de l'entrepôt (POTION, items.gd) et rend celles qu'elle n'a pas bues.
+# Un immortel du mode dev passe aussi par l'agonie, mais reste « à terre » au lieu de mourir.
+const AGONY_SECONDS := 10.0
+const AGONY_HELP_RANGE := 8.0
+const AGONY_ALLY_RANGE := 1.5
+const AGONY_RESCUE_SECONDS := 2.0
+const AGONY_STABILIZED_HP := 0.1
+const POTIONS_PER_MISSION := 3
+
+
+## Potions de soin qu'une équipe emporte dans la Tour (celles de l'entrepôt, POTIONS_PER_MISSION au plus).
+func mission_potions() -> int:
+	return mini(material_count(POTION), POTIONS_PER_MISSION)
+
 
 ## Transforme les 4 statistiques (d'un héros ou d'un ennemi) en valeurs de combat :
 ## points de vie, attaque, défense, vitesse, chance de coup critique, mana.
@@ -438,6 +461,11 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if not "synthese" in buildings:
 				buildings.append("synthese")
 			advance_tutorial("etage")  # sa fenêtre vient après l'animation de construction dans la cité (hub_screen.gd)
+	# Les potions de soin bues pendant le combat (agonie) sont retirées de l'entrepôt.
+	if battle.potions_used > 0:
+		_take_material(POTION, battle.potions_used)
+		report["potions"] = "Potions de soin utilisées : %d (il en reste %d dans l'entrepôt)." \
+			% [battle.potions_used, material_count(POTION)]
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	return report
 

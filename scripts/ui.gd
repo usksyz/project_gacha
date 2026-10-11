@@ -230,6 +230,8 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		# Le détail de la croissance (selon ce qu'il a fait) : « Force +2, Santé +1, Intelligence -1 ».
 		var growth := GameData.growth_text(level_up.get("growth", {}))
 		lines.append("%s passe au niveau %d !%s" % [hero["name"], hero["level"], " (%s)" % growth if growth != "" else ""])
+	if report.get("potions", "") != "":
+		lines.append(report["potions"])  # (agonie : potions de soin bues)
 	if report["mvp"] != "":
 		lines.append("MVP : %s" % report["mvp"])
 	var title := "Défaite"
@@ -240,7 +242,7 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 
 
 ## Icônes provisoires des objets (en attendant de vraies images) ; sinon, l'initiale du nom.
-const ITEM_ICONS := {"Minerai de fer": "Fe", "Charbon": "Ch", "Cristal brut": "Cr", "Pierre d'attribut": "◆",
+const ITEM_ICONS := {"Minerai de fer": "Fe", "Charbon": "Ch", "Cristal brut": "Cr", "Pierre d'attribut": "◆", "Potion de soin": "Po",
 	"Bois": "Bo", "Peau de bête": "Pe", "Herbe médicinale": "He", "Pierre de taille": "Pi", "Plume": "Pl", "Lin": "Li"}
 
 

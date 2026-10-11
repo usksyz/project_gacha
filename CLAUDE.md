@@ -335,6 +335,22 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   x`ROTATION_DAMAGE_TAKEN` (1,5). Trait Meneur (`TRAITS`, tiré à l'invocation comme les autres) : `_lead`
   fait tourner un allié au contact sous `LEADER_TIRED_STAMINA` (20 %) s'il y a un remplaçant, au plus toutes
   les `LEADER_COOLDOWN` (8) s ; fenêtre « X fait tourner la première ligne. » ; le trait se révèle.
+  Agonie : à 0 point de vie, un héros ne meurt pas tout de suite (`_announce_fall` → `_start_agony`) : il
+  agonise `AGONY_SECONDS` (10 s), fenêtre rouge « X est dans un état critique, sa vie est en danger ! » ;
+  pion rouge qui bat avec les secondes restantes, « AGONIE 7 s » sur le portrait. `_assign_helpers` envoie
+  l'allié libre le plus proche (moins de `AGONY_HELP_RANGE` 8 cases, pas au contact d'un ennemi, sans ordre
+  du Maître, pas en panique ; une fois en route il continue) ; un allié à moins de `AGONY_ALLY_RANGE` (1,5)
+  pendant `AGONY_RESCUE_SECONDS` (2 s) le stabilise (`_agony_tick`, `_stabilize`) : il sort du combat
+  (`present` faux, « à l'abri ») avec `AGONY_STABILIZED_HP` (10 %) de vie ; fenêtre « Stabilisé ». Potion de
+  soin (`POTION`, matériau de l'entrepôt, grade F ; pas encore fabriquée, mode dev > Matériaux) : l'équipe en
+  emporte `POTIONS_PER_MISSION` (3) au plus (`mission_potions`), bue tout de suite par un héros qui tombe à
+  l'agonie ; les potions bues sont retirées de l'entrepôt (`finish_tower_battle`, ligne dans le résultat).
+  Sinon, à la fin des 10 s, mort définitive (`_die` : stress des alliés, peur). Fin du combat (`_after_fight`) :
+  sauvé si un allié debout peut le rejoindre avant la fin de son agonie, sinon il meurt. Mort de stress :
+  sans agonie (`instant`). Immortel du mode dev : même agonie, puis « à terre » au lieu de mourir.
+  Simulation (équipe neuve « brute ») : morts à l'étage 1 de 1,5 à 0,1 par combat ; étages 2 à 4 de 4,4-4,8 à
+  2,5-3 ; victoires à peu près inchangées (étage 1 : 98 %, étages 2 à 4 : 14-23 %). « Préparée » : morts de
+  1-2 à 0,4-0,9 aux étages 2 à 4, victoires 90-98 %.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

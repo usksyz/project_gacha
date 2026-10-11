@@ -259,6 +259,9 @@ func gear_stats(hero: Dictionary) -> Dictionary:
 # journalier, de la Tour, et les pierres d'attribut qui servent à la promotion.
 
 const PROMOTION_STONE := "Pierre d'attribut"
+## Potion de soin (rangée dans l'entrepôt, grade F) : stabilise un héros à l'agonie (voir tower.gd, « Agonie »).
+## Pas encore fabriquée : elle viendra de l'alchimie (Plante de vie du plateau) ; mode dev pour l'instant.
+const POTION := "Potion de soin"
 
 
 func add_material(material: String, grade: String, count: int) -> void:
