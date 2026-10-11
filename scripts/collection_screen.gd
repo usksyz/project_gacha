@@ -540,10 +540,12 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 		description.modulate = Color(1, 1, 1, 0.6)
 		content.add_child(description)
 
-	# Mode Berserk : ce que la rage change (valeur de base → en Berserk, et l'écart en + ou en −).
+	# Mode Berserk (compétence à bascule) : ses statistiques en rage, « valeur actuelle / valeur de base (+5) ».
 	var berserk := GameData.berserk_preview(hero)
 	if not berserk.is_empty():
-		content.add_child(UI.make_label("Mode Berserk (sous 30 % de vie) :", 20))
+		var berserk_title := UI.make_label("Mode Berserk (il l'active de lui-même quand le combat est difficile, ou sur ton ordre) :", 20)
+		berserk_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(berserk_title)
 		var grid := GridContainer.new()
 		grid.columns = 2
 		grid.add_theme_constant_override("h_separation", 24)
@@ -553,10 +555,18 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 			name_label.modulate = Color(1, 1, 1, 0.7)
 			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			grid.add_child(name_label)
-			var gap: int = row[2] - row[1]
-			var value := UI.make_label("%d / %d (%s%d)" % [row[2], row[1], "+" if gap >= 0 else "−", absi(gap)], 19)
+			var gap: int = row[1] - row[2]
+			var value := UI.make_label("%d / %d (%s%d)" % [row[1], row[2], "+" if gap >= 0 else "-", absi(gap)], 19)
 			value.add_theme_color_override("font_color", Color("e05252") if gap < 0 else Color("f5b82e"))
 			grid.add_child(value)
+	# Migraine (après une rage) : elle continue après le combat.
+	var migraine := GameData.migraine_left(hero)
+	if hero["alive"] and migraine > 0.0:
+		var migraine_label := UI.make_label("Migraine : encore %d min (-%d %% de dégâts en combat)" \
+			% [ceili(migraine / 60.0), roundi((1.0 - GameData.MIGRAINE_DAMAGE_FACTOR) * 100)], 20)
+		migraine_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		migraine_label.add_theme_color_override("font_color", Color("c9a2ff"))
+		content.add_child(migraine_label)
 
 	# Progrès en cours (terrain d'entraînement, tirs à l'arc...) : « Maîtrise de l'épée : 40 / 100 ».
 	var progress: Dictionary = hero.get("skill_progress", {})

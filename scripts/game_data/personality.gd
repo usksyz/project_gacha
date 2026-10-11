@@ -23,7 +23,7 @@ const MENTAL_LOSS_BLEEDING := 4.0      # se met à saigner (la première fois du
 const MENTAL_LOSS_BOSS := 8.0          # un boss arrive sur le terrain
 const MENTAL_LOSS_WARNINGS := 6.0      # quête à triple avertissement (défense de la cité), au début
 const MENTAL_LOSS_ALLY_DEATH := 10.0   # un allié tombe
-const MENTAL_LOSS_BERSERK := 8.0       # entre en Berserk : la rage use l'esprit
+const MENTAL_BERSERK_PER_SECOND := 0.4 # chaque seconde en Berserk : la rage use l'esprit (x2 en Surpassement)
 ## Perte à la fin du combat.
 const MENTAL_LOSS_DEFEAT := 10.0       # défaite (ou fuite)
 ## Gain d'une victoire (après les pertes du combat).

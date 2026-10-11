@@ -165,7 +165,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Santé mentale `hero["mental"]` (0 à `MENTAL_MAX` 100, départ 100, nombre à virgule). En combat de la Tour,
   battle.gd la suit en direct (`fighter["mental"]`, `Battle._stress`) : blessures (`MENTAL_LOSS_WOUNDS` pour
   une vie entière perdue, à chaque coup), premier saignement, arrivée d'un boss, quête à avertissements (au
-  début), allié tombé, Berserk ; à la fin (`mental_after_battle`), défaite et victoire. Baisse aussi pour tous
+  début), allié tombé, Berserk (chaque seconde en rage) ; à la fin (`mental_after_battle`), défaite et victoire. Baisse aussi pour tous
   les vivants à chaque synthèse (`MENTAL_LOSS_SYNTHESIS` par sacrifié) ; remonte à la cité par heure de temps
   réel (repos `MENTAL_REST_PER_HOUR`, travail = poste ou entraînement `MENTAL_WORK_PER_HOUR`, rien si parti :
   `update_mental()`, appelée toutes les 5 s et avant chaque sauvegarde, `mental_updated_at` sauvegardé).
@@ -373,17 +373,34 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   terrain d'entraînement, Maîtrise de l'arc par l'usage : fait.
   Fusions (`GameData.SKILL_FUSIONS`) : deux compétences au niveau `FUSION_LEVEL` (10, choix du porteur du
   projet ; le cahier disait 5) + un déclencheur en combat. Surpassement = Calme + Berserk, quand Berserk se
-  déclenche (Han seulement) ; Épée et bouclier = les deux maîtrises, en finissant un combat de la Tour debout
+  s'active (Han seulement) ; Épée et bouclier = les deux maîtrises, en finissant un combat de la Tour debout
   épée et bouclier en main. La compétence fusionnée remplace les deux et garde leurs effets (`skill_level`).
   Han apprend Berserk plus facilement (choix du porteur du projet) : 80 % de chances d'éveil
   (`HAN_AWAKENING_CHANCE`), Berserk dès 25 % de vie et en priorité.
   Les autres héros : chance à part « aux portes de la mort » (`DEATH_DOOR_CHANCE`, 30 %) la première fois
   qu'ils passent sous 15 % de vie dans un combat. (Avant, Berserk n'était tiré qu'à l'éveil, vers 20-25 % de
   vie : presque impossible, aucun héros ne l'avait gardé en 900 essais simulés.)
+  Utilisation de Berserk (feuille de route v2, phase 0 ; avant : rage automatique sous 30 % de vie) :
+  compétence active à bascule (`heroes.gd`, section « Berserk » ; `battle.gd`, `_berserk_think`). Le héros
+  l'active de lui-même quand le combat est difficile (`_in_danger` : duel, boss ou horde à portée
+  d'engagement, allié ou lui-même sous `BERSERK_DANGER_HP` 30 % à moins de 5 cases), sauf en pleine peur ou
+  panique, en migraine, sous `BERSERK_STOP_MENTAL` (25, ajout du projet) ou `BERSERK_ORDER_HOLD` (15 s) après
+  un ordre de la couper ; il la coupe quand le danger est passé (après `BERSERK_MIN_SECONDS`, 5 s), sous 25 de
+  santé mentale, ou en Surpassement sous `SURPASS_STOP_HP` (25 %) de vie. Le Maître l'ordonne : bouton
+  « Berserk ! » / « Sortir du Berserk » de `BattleView` quand le héros choisi l'a (`order_berserk`, peut être
+  refusé comme tout ordre) ; une rage ordonnée n'est coupée que sur ordre ou à la fin du combat. Effet :
+  Force, Santé, Dextérité +`BERSERK_BONUS` (5, +1 par niveau suivant), Intelligence -`BERSERK_INT_MALUS` (10)
+  (`berserk_stat_changes` ; l'œuvre dit Force, Endurance, Agilité), traduits en attaque, défense, vitesse,
+  critiques (la vie maximum ne bouge pas) ; santé mentale -`MENTAL_BERSERK_PER_SECOND` (0,4) par seconde.
+  Fenêtres (`Battle.alerts`) « X est entré en mode Berserk ! » et « X est sorti de son état Berserk. » ;
+  fin du combat : une ligne dans « Personnalité ». Puis Migraine `MIGRAINE_SECONDS` (3 min de temps réel,
+  `hero["migraine_until"]`, continue après le combat) : dégâts x`MIGRAINE_DAMAGE_FACTOR` (0,9). Surpassement :
+  même bascule, bonus x2, plus de saignement, -2 % de vie par seconde, santé mentale x2, migraine x2.
+  Écran de combat : « BERSERK » / « MIGRAINE » sous le portrait. Fiche : statistiques en Berserk
+  « valeur actuelle / valeur de base (+5) » (`berserk_preview`) et migraine restante.
   Résistance aux flammes (feu subi, ou 3 combats avec un mage de feu ; les mages ont un élément
   `hero["element"]`), Indomptable (éveil en saignant), Tueur de gobelins (coup fatal au boss de l'étage 5,
-  ou 50 gobelins), Esprit combatif (évolution de Résistance à la douleur au niveau 10, `SKILL_EVOLUTIONS`),
-  Berserk affiché sur la fiche (`berserk_preview`) : fait.
+  ou 50 gobelins), Esprit combatif (évolution de Résistance à la douleur au niveau 10, `SKILL_EVOLUTIONS`) : fait.
   Mana (mages et soigneurs, héros et ennemis) : réserve = Intelligence x `MANA_PER_INT`, recharge
   `MANA_REGEN_PER_INT` par seconde ; sort de zone et soin coûtent du mana, à sec le mage lance un petit
   trait gratuit et le soigneur ne soigne plus (compte surtout dans les longs combats). Écran de combat :

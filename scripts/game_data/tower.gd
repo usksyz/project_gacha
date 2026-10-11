@@ -406,25 +406,12 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	return report
 
 
-## Ce que change le mode Berserk sur les valeurs de combat d'un héros (pour sa fiche) :
-## [[nom, valeur de base, valeur en Berserk], ...], ou [] s'il n'a pas Berserk.
-## Mêmes calculs que battle.gd (_enter_berserk) : bonus de 4 + niveau, doublé avec Surpassement.
+## Les statistiques d'un héros en Berserk, pour sa fiche : [[nom, valeur en Berserk, valeur de base], ...]
+## (« Force 16 / 11 (+5) »), ou [] s'il n'a pas Berserk. Mêmes chiffres que battle.gd (_enter_berserk).
 func berserk_preview(hero: Dictionary) -> Array:
-	var level := skill_level(hero["skills"], "Berserk")
-	if level == 0:
-		return []
-	var bonus := 4 + level
-	if skill_level(hero["skills"], "Surpassement") > 0:
-		bonus *= SURPASS_BONUS_MULTIPLIER
-	var base := combat_stats(hero)
-	var gear := gear_stats(hero)
-	var atk: int = base["atk"] + gear.get("atk", 0)
-	var def: int = base["def"] + gear.get("def", 0)
-	var crit: float = base["crit"] + gear.get("crit", 0.0)
-	var magic: bool = hero["class"] in ["Mage", "Soigneur"]
-	return [
-		["Attaque", atk, maxi(1, atk - 10) if magic else atk + bonus],
-		["Défense", def, def + roundi(bonus / 2.0)],
-		["Vitesse", base["spd"], base["spd"] + bonus],
-		["Critiques (%)", roundi(crit * 100), roundi((crit + bonus / 200.0) * 100)],
-	]
+	var changes := berserk_stat_changes(hero["skills"])
+	var rows := []
+	for stat in changes:
+		var base: int = hero["stats"][stat]
+		rows.append([STAT_NAMES[stat], maxi(1, base + changes[stat]), base])
+	return rows

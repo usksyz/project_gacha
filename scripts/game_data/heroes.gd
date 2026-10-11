@@ -90,7 +90,7 @@ const SKILLS := {
 	"Résistance à la douleur": "Les blessures guérissent plus vite : saignements réduits de 10 % par niveau.",
 	"Mouvement souple": "Esquive : 3 % de chances par niveau d'éviter complètement un coup.",
 	"Calme": "Garde son sang-froid : sous la moitié de sa vie, subit 4 % de dégâts en moins par niveau.",
-	"Berserk": "Aux portes de la mort (moins de 30 % de vie), entre en rage : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant).",
+	"Berserk": "Active, à bascule (acquise une fois, aux portes de la mort). En combat, il entre en rage de lui-même quand le combat est difficile (boss, horde, duel, allié en danger), ou sur ton ordre : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant), mais sa santé mentale baisse chaque seconde. Il en sort quand le danger est passé, et à la fin du combat. Après : Migraine 3 minutes (-10 % de dégâts).",
 	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
@@ -105,7 +105,7 @@ const SKILLS := {
 	"Coup précis": "Compétence de promotion : +5 % de coups critiques par niveau.",
 	"Peau de pierre": "Compétence de promotion : 4 % de dégâts subis en moins par niveau.",
 	"Vivacité": "Compétence de promotion : coups 5 % plus rapides par niveau.",
-	"Surpassement": "Fusion de Calme et Berserk (unique). Garde leurs effets ; quand Berserk se déclenche, ses bonus sont doublés et le héros ne saigne plus, mais il perd 2 % de sa vie chaque seconde, jusqu'à la mort.",
+	"Surpassement": "Fusion de Calme et Berserk (unique). Garde leurs effets ; en Berserk, bonus doublés et plus de saignement, mais il perd 2 % de sa vie et deux fois plus de santé mentale chaque seconde, et la migraine dure deux fois plus longtemps. Il en sort de lui-même sous 25 % de vie.",
 	"Épée et bouclier": "Fusion de Maîtrise de l'épée et Utilisation du bouclier. Garde leurs effets, et +2 % de dégâts à l'épée par niveau.",
 	"Forge": "Artisan : à la forge, une pièce du puzzle est placée d'office, et plus de malus « Pas d'artisan ». S'apprend en travaillant comme assistant de la forge.",
 }
@@ -154,7 +154,7 @@ const FUSION_LEVEL := 10
 ## (voir battle.gd) ; « rank » : le rang affiché de la compétence fusionnée.
 const SKILL_FUSIONS := {
 	"Surpassement": {"parts": ["Calme", "Berserk"], "trigger": "berserk", "rank": "B+, unique",
-		"when": "Berserk se déclenche en combat"},
+		"when": "Berserk s'active en combat"},
 	"Épée et bouclier": {"parts": ["Maîtrise de l'épée", "Utilisation du bouclier"], "trigger": "sword_shield",
 		"rank": "Intermédiaire", "when": "finir un combat de la Tour debout, épée et bouclier en main"},
 }
@@ -181,10 +181,59 @@ const FIGHTING_SPIRIT_PER_LEVEL := 0.05
 ## Éléments de la magie : chaque mage en maîtrise un (le feu pour les ennemis sorciers).
 const MAGIC_ELEMENTS := ["Feu", "Vent", "Froid"]
 
-## Surpassement : quand Berserk se déclenche, ses bonus sont multipliés par ceci, le héros ne peut
-## plus saigner, mais il perd cette part de sa vie maximum chaque seconde (jusqu'à la mort).
+# --- Berserk : compétence active à bascule (feuille de route v2, section 2) ---
+# Acquisition (une seule fois) : par éveil, aux portes de la mort (battle.gd, DEATH_DOOR_CHANCE).
+# Utilisation : en combat, le héros l'active de lui-même quand le combat est difficile (boss, horde,
+# duel, allié en danger), ou sur ordre du Maître (bouton « Berserk » de l'écran de combat) ; il la
+# désactive quand le danger est passé, et elle s'arrête à la fin du combat. Ensuite : Migraine.
+# Les noms de l'œuvre (Force, Endurance, Agilité) sont ceux du jeu : Force, Santé, Dextérité.
+
+## Bonus en Berserk : Force, Santé et Dextérité +BERSERK_BONUS au niveau 1 (+1 par niveau suivant),
+## Intelligence -BERSERK_INT_MALUS.
+const BERSERK_BONUS := 5
+const BERSERK_INT_MALUS := 10
+## Le héros garde la rage au moins ce temps (secondes de combat) avant de la couper de lui-même.
+const BERSERK_MIN_SECONDS := 5.0
+## Le Maître lui a ordonné de la couper : il ne la relance pas de lui-même pendant ce temps.
+const BERSERK_ORDER_HOLD := 15.0
+## (Ajout du projet) Sous cette santé mentale, le héros coupe la rage de lui-même et ne la relance pas
+## (sur ordre du Maître, il la garde quand même).
+const BERSERK_STOP_MENTAL := 25.0
+## « Allié en danger » : un allié (ou lui-même) sous cette part de sa vie, à moins de BERSERK_ALLY_RANGE cases.
+const BERSERK_DANGER_HP := 0.3
+const BERSERK_ALLY_RANGE := 5.0
+## Migraine après la rage : durée en secondes (temps réel, elle continue après le combat), et dégâts
+## multipliés par ceci tant qu'elle dure (0,9 = -10 %). Pendant la migraine, le héros ne relance pas la
+## rage de lui-même (le Maître peut encore l'ordonner).
+const MIGRAINE_SECONDS := 180.0
+const MIGRAINE_DAMAGE_FACTOR := 0.9
+
+## Surpassement (fusion de Calme et Berserk) : même bascule que Berserk, en plus fort et plus coûteux.
+## Bonus multipliés par SURPASS_BONUS_MULTIPLIER, plus de saignement ; mais il perd SURPASS_DRAIN_PER_SECOND
+## de sa vie maximum chaque seconde, SURPASS_MENTAL_FACTOR fois plus de santé mentale, et la migraine dure
+## SURPASS_MIGRAINE_FACTOR fois plus longtemps. Il le coupe de lui-même sous SURPASS_STOP_HP de sa vie.
 const SURPASS_BONUS_MULTIPLIER := 2
 const SURPASS_DRAIN_PER_SECOND := 0.02
+const SURPASS_MENTAL_FACTOR := 2.0
+const SURPASS_MIGRAINE_FACTOR := 2.0
+const SURPASS_STOP_HP := 0.25
+
+
+## Ce que Berserk change aux statistiques (selon ses compétences) : {"str": +5, "vit": +5, "dex": +5,
+## "int": -10}, bonus doublés avec Surpassement ; {} sans Berserk.
+func berserk_stat_changes(skills: Array) -> Dictionary:
+	var level := skill_level(skills, "Berserk")
+	if level == 0:
+		return {}
+	var bonus := BERSERK_BONUS + level - 1
+	if skill_level(skills, "Surpassement") > 0:
+		bonus *= SURPASS_BONUS_MULTIPLIER
+	return {"str": bonus, "vit": bonus, "dex": bonus, "int": -BERSERK_INT_MALUS}
+
+
+## Secondes de migraine qu'il reste à ce héros (0 s'il n'en a pas).
+func migraine_left(hero: Dictionary) -> float:
+	return maxf(0.0, hero.get("migraine_until", 0.0) - Time.get_unix_time_from_system())
 ## Épée et bouclier : dégâts en plus à l'épée, par niveau de la compétence fusionnée.
 const SWORD_SHIELD_BONUS_PER_LEVEL := 0.02
 

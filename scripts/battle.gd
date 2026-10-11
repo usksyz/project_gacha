@@ -126,8 +126,8 @@ const BERSERK_LEARN_HP := 0.15
 ## un héros a cette chance d'apprendre Berserk, avec une forte envie de vivre.
 ## (L'éveil, lui, se tente plus tôt, à CRITICAL_HP : il n'aurait presque jamais donné Berserk.)
 const DEATH_DOOR_CHANCE := 0.3
-## Un héros qui possède Berserk entre en rage sous cette part de sa vie.
-const BERSERK_HP := 0.3
+## (Berserk, une fois appris, est une compétence active à bascule : voir _berserk_think et
+## GameData, heroes.gd, section « Berserk ».)
 ## Han apprend Berserk plus facilement : ses chances d'éveil sont plus hautes, Berserk lui vient
 ## dès la situation critique (pas seulement aux portes de la mort), et passe avant les autres compétences.
 const HAN_AWAKENING_CHANCE := 0.8
@@ -307,6 +307,25 @@ func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 	hero["path"] = PackedVector2Array()
 
 
+## Ordonne à un héros qui possède Berserk d'entrer en rage (« on » vrai) ou d'en sortir.
+## En rage sur ordre, il la garde jusqu'à l'ordre contraire ; coupée sur ordre, il ne la relance pas
+## de lui-même pendant BERSERK_ORDER_HOLD secondes. Comme tout ordre, il peut être refusé (_obeys).
+func order_berserk(hero: Dictionary, on: bool) -> void:
+	if quest.get("duel", false) or not can_berserk(hero) or hero["berserk"] == on or not _obeys(hero):
+		return
+	if on:
+		_enter_berserk(hero)
+		hero["berserk_ordered"] = true
+	else:
+		_exit_berserk(hero)
+		hero["berserk_hold_until"] = time + GameData.BERSERK_ORDER_HOLD
+
+
+## Vrai si ce combattant possède Berserk (ou Surpassement) et peut s'en servir.
+func can_berserk(unit: Dictionary) -> bool:
+	return unit["person"] and unit["hp"] > 0 and GameData.skill_level(unit["skills"], "Berserk") > 0
+
+
 ## Le héros obéit-il à l'ordre ? Avec une santé mentale basse, il peut l'ignorer
 ## (GameData.disobey_chance), puis il boude : il ignore tous les ordres pendant DISOBEY_SULK secondes.
 ## Loyal réduit le risque ; quand c'est sa loyauté qui le fait obéir, le trait se révèle.
@@ -440,7 +459,14 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"has_bled": false,         # a saigné pendant ce combat (pour Résistance à la douleur)
 		"awakening_tried": false,  # l'éveil n'est tenté qu'une fois par combat
 		"death_door_tried": false, # la chance « aux portes de la mort » aussi
-		"berserk": false,          # en rage (compétence Berserk)
+		"berserk": false,          # en rage (compétence Berserk, active à bascule : voir _berserk_think)
+		"berserk_since": 0.0,      # moment où la rage a commencé
+		"berserk_ordered": false,  # rage ordonnée par le Maître : il la garde jusqu'à l'ordre de la couper
+		"berserk_hold_until": 0.0, # le Maître l'a fait couper : pas de reprise d'elle-même avant ce moment
+		"berserk_changes": {},     # ce que la rage a ajouté (atk, def, spd, crit), retiré à la sortie
+		# Migraine (après la rage) : jusqu'à ce moment du combat ; elle continue après (GameData.migraine_left).
+		"migraine_until": GameData.migraine_left(source) if is_hero else 0.0,
+		"person": is_hero,         # un héros (l'adversaire d'un duel aussi) : sa migraine est gardée à la fin
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		"base_name": source.get("base_name", source["name"]),  # nom sans lettre (Gobelin, pas Gobelin A)
@@ -603,8 +629,10 @@ func _step() -> void:
 			continue  # tombé plus tôt pendant ce pas
 		_bleed_tick(unit)
 		unit["mana"] = minf(unit["max_mana"], unit["mana"] + unit["mana_regen"] * TICK)
-		if unit.get("surpass", false) and unit["hp"] > 0:
-			_surpass_tick(unit)
+		if unit["berserk"] and unit["hp"] > 0:
+			_berserk_tick(unit)
+		if unit["person"] and unit["hp"] > 0:
+			_berserk_think(unit)
 		if unit["hp"] > 0:
 			unit["cooldown"] -= TICK
 			_think(unit)
@@ -919,6 +947,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Esprit combatif : sous la moitié de sa vie, l'attaquant frappe plus fort.
 	if attacker["hp"] * 2 < attacker["max_hp"]:
 		power *= 1.0 + GameData.skill_level(attacker["skills"], "Esprit combatif") * GameData.FIGHTING_SPIRIT_PER_LEVEL
+	# Migraine (après une rage Berserk) : l'attaquant frappe moins fort.
+	if has_migraine(attacker):
+		power *= GameData.MIGRAINE_DAMAGE_FACTOR
 	# Santé mentale basse : l'attaquant frappe moins fort, la cible se défend moins bien (voir _mind).
 	# Un ami ou un frère d'armes tout près : l'inverse (voir _bond).
 	var raw: float = attacker["atk"] * _mind(attacker) * _bond(attacker) * power * randf_range(0.9, 1.1) \
@@ -1048,6 +1079,8 @@ func _check_critical_state(fighter: Dictionary) -> void:
 		var chance := HAN_AWAKENING_CHANCE if GameData.is_han(fighter["source"]) else AWAKENING_CHANCE
 		if randf() < chance:
 			_awaken(fighter, ratio)
+	# Acquisition de Berserk (une seule fois) : aux portes de la mort, avec la rage de vivre.
+	# (Son utilisation, ensuite, est à part : voir _berserk_think.)
 	if ratio <= BERSERK_LEARN_HP and not fighter["death_door_tried"]:
 		fighter["death_door_tried"] = true
 		if randf() < DEATH_DOOR_CHANCE and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Berserk"):
@@ -1055,8 +1088,6 @@ func _check_critical_state(fighter: Dictionary) -> void:
 			_log("Aux portes de la mort, %s refuse de mourir... Nouvelle compétence : Berserk !" \
 				% _name_with_stars(fighter), "awaken")
 			fighter["skill_news"].append("%s — nouvelle compétence : Berserk" % fighter["name"])
-	if ratio <= BERSERK_HP and not fighter["berserk"] and GameData.skill_level(fighter["skills"], "Berserk") > 0:
-		_enter_berserk(fighter)
 
 
 ## Éveil des compétences : chaque compétence gagne 1 à 3 niveaux d'un coup,
@@ -1093,30 +1124,109 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 		fighter["skill_news"].append("%s — %s" % [fighter["name"], line])
 
 
-## Berserk : la rage renforce le héros (Force, Santé, Dextérité) mais lui fait perdre ses moyens (Intelligence).
+## Le combat est-il difficile pour ce héros ? (C'est là qu'il entre en rage de lui-même.)
+## Un duel, un boss sur le terrain, une horde (survie, défense de la cité), ou un allié en danger
+## tout près (lui-même compris) : sous BERSERK_DANGER_HP de sa vie, à moins de BERSERK_ALLY_RANGE cases.
+func _in_danger(unit: Dictionary) -> bool:
+	if quest.get("duel", false):
+		return true
+	# (Boss et horde : seulement quand ils arrivent à portée d'engagement, pas de l'autre bout de la carte.)
+	var foes := _alive(enemies if unit["is_hero"] else heroes) \
+		.filter(func(foe): return unit["pos"].distance_to(foe["pos"]) <= ENGAGE_DISTANCE)
+	if foes.any(func(foe): return foe["boss"]):
+		return true
+	if not foes.is_empty() and (quest["type"] == "survival" or quest["walls"] > 0):
+		return true
+	if _alive(enemies if unit["is_hero"] else heroes).is_empty():
+		return false
+	for ally in _alive(heroes if unit["is_hero"] else enemies):
+		if float(ally["hp"]) / ally["max_hp"] < GameData.BERSERK_DANGER_HP \
+				and unit["pos"].distance_to(ally["pos"]) <= GameData.BERSERK_ALLY_RANGE:
+			return true
+	return false
+
+
+## Berserk, compétence active à bascule : le héros décide lui-même d'entrer en rage ou d'en sortir.
+## Il y entre quand le combat est difficile (_in_danger), sauf en pleine peur ou panique, pendant une
+## migraine, sous BERSERK_STOP_MENTAL de santé mentale, ou juste après que le Maître la lui a fait couper.
+## Il en sort quand le danger est passé (après BERSERK_MIN_SECONDS au moins), sous BERSERK_STOP_MENTAL,
+## ou (Surpassement) sous SURPASS_STOP_HP de sa vie. Une rage ordonnée par le Maître n'est coupée que sur ordre.
+func _berserk_think(unit: Dictionary) -> void:
+	if not can_berserk(unit) or panicking(unit) or afraid(unit):
+		return
+	if not unit["berserk"]:
+		if time >= unit["berserk_hold_until"] and time >= unit["migraine_until"] \
+				and unit["mental"] >= GameData.BERSERK_STOP_MENTAL and _in_danger(unit):
+			_enter_berserk(unit)
+		return
+	if unit["berserk_ordered"] or time - unit["berserk_since"] < GameData.BERSERK_MIN_SECONDS:
+		return
+	var worn_out: bool = unit.get("surpass", false) \
+		and float(unit["hp"]) / unit["max_hp"] < GameData.SURPASS_STOP_HP
+	if worn_out or unit["mental"] < GameData.BERSERK_STOP_MENTAL or not _in_danger(unit):
+		_exit_berserk(unit)
+
+
+## Entre en rage : Force, Santé, Dextérité +5 et Intelligence -10 (voir GameData.berserk_stat_changes),
+## traduits en valeurs de combat comme GameData.combat_stats (Force ou Intelligence : attaque ;
+## Santé : défense, la vie maximum ne change pas ; Dextérité : vitesse et critiques).
 func _enter_berserk(fighter: Dictionary) -> void:
-	fighter["berserk"] = true
 	# Fusion : Calme et Berserk au niveau maximum fusionnent en Surpassement au moment où la rage monte.
 	if GameData.fusion_ready(fighter["skills"], "Surpassement"):
 		_announce_fusion(fighter, GameData.fuse_skills(fighter["skills"], "Surpassement"))
-	var bonus := 4 + GameData.skill_level(fighter["skills"], "Berserk")  # +5 au niveau 1
+	var stats := GameData.berserk_stat_changes(fighter["skills"])
+	var magic: bool = fighter["class"] in ["Mage", "Soigneur"]  # leur attaque vient de l'Intelligence
+	var changes := {
+		"atk": maxi(1 - fighter["atk"], stats["int"]) if magic else stats["str"],
+		"def": roundi(stats["vit"] / 2.0),
+		"spd": stats["dex"],
+		"crit": stats["dex"] / 200.0,
+	}
+	for key in changes:
+		fighter[key] += changes[key]
+	fighter["berserk_changes"] = changes
+	fighter["berserk"] = true
+	fighter["berserk_since"] = time
+	fighter["berserk_ordered"] = false
+	var who := _name_with_stars(fighter)
+	var lines := ["%s est entré en mode Berserk !" % who]
 	if GameData.skill_level(fighter["skills"], "Surpassement") > 0:
 		# Surpassement : le corps passe en surrégime. Bonus doublés, plus de saignement,
-		# mais la vie baisse chaque seconde (voir _surpass_tick).
-		bonus *= GameData.SURPASS_BONUS_MULTIPLIER
+		# mais la vie baisse chaque seconde (voir _berserk_tick).
 		fighter["surpass"] = true
 		fighter["bleed"]["ticks"] = 0
-		_log("%s entre en Surpassement ! Son corps passe en surrégime." % _name_with_stars(fighter), "berserk")
-	if fighter["class"] in ["Mage", "Soigneur"]:
-		fighter["atk"] = maxi(1, fighter["atk"] - 10)  # leur attaque vient de l'Intelligence
+		lines.append("Surpassement : son corps passe en surrégime.")
+	_log(" ".join(lines) + " Une pression écrasante envahit le champ de bataille.", "berserk")
+	_alert("Berserk", lines, true)
+
+
+## Sort de la rage : les bonus disparaissent, et la migraine commence (MIGRAINE_SECONDS, plus longue
+## après un Surpassement). « end » : le combat est fini (pas de fenêtre, une ligne pour la fin du combat).
+func _exit_berserk(fighter: Dictionary, end := false) -> void:
+	var changes: Dictionary = fighter["berserk_changes"]
+	for key in changes:
+		fighter[key] -= changes[key]
+	fighter["berserk_changes"] = {}
+	fighter["berserk"] = false
+	fighter["berserk_ordered"] = false
+	var migraine := GameData.MIGRAINE_SECONDS
+	if fighter.get("surpass", false):
+		migraine *= GameData.SURPASS_MIGRAINE_FACTOR
+	fighter["surpass"] = false
+	fighter["migraine_until"] = maxf(fighter["migraine_until"], time + migraine)
+	var text := "%s est sorti de son état Berserk." % _name_with_stars(fighter)
+	_log(text + " Une migraine le prend.", "berserk")
+	if end:
+		fighter["mind_news"].append("%s est sorti de son état Berserk à la fin du combat : migraine (-%d %% de dégâts, %d min)." \
+			% [fighter["name"], roundi((1.0 - GameData.MIGRAINE_DAMAGE_FACTOR) * 100), roundi(migraine / 60.0)])
 	else:
-		fighter["atk"] += bonus
-	fighter["def"] += roundi(bonus / 2.0)
-	fighter["spd"] += bonus
-	fighter["crit"] += bonus / 200.0
-	_log("%s est entré en mode Berserk ! Une pression écrasante envahit le champ de bataille." \
-		% _name_with_stars(fighter), "berserk")
-	_stress(fighter, GameData.MENTAL_LOSS_BERSERK)  # la rage use l'esprit
+		_alert("Berserk", [text, "Migraine : -%d %% de dégâts pendant %d minutes." \
+			% [roundi((1.0 - GameData.MIGRAINE_DAMAGE_FACTOR) * 100), roundi(migraine / 60.0)]])
+
+
+## En migraine en ce moment (après une rage) ?
+func has_migraine(unit: Dictionary) -> bool:
+	return time < unit["migraine_until"]
 
 
 ## Apprend une compétence au niveau 1, ou la fait monter d'un niveau, et l'annonce.
@@ -1144,8 +1254,13 @@ func _announce_fusion(fighter: Dictionary, text: String) -> void:
 	fighter["skill_news"].append("%s — %s" % [fighter["name"], text])
 
 
-## Surpassement : chaque pas, le héros perd un peu de vie, jusqu'à la mort.
-func _surpass_tick(unit: Dictionary) -> void:
+## En rage, chaque pas : la santé mentale baisse (deux fois plus en Surpassement) ; en Surpassement,
+## la vie aussi, jusqu'à la mort s'il ne s'arrête pas.
+func _berserk_tick(unit: Dictionary) -> void:
+	var surpass: bool = unit.get("surpass", false)
+	_stress(unit, GameData.MENTAL_BERSERK_PER_SECOND * TICK * (GameData.SURPASS_MENTAL_FACTOR if surpass else 1.0))
+	if not surpass or unit["hp"] <= 0:
+		return
 	unit["drain"] = unit.get("drain", 0.0) + unit["max_hp"] * GameData.SURPASS_DRAIN_PER_SECOND * TICK
 	var amount := mini(int(unit["drain"]), unit["hp"])
 	if amount <= 0:
@@ -1160,6 +1275,15 @@ func _surpass_tick(unit: Dictionary) -> void:
 ## (ou améliorer) Résistance à la douleur. Un héros debout, épée et bouclier en main,
 ## dont les deux maîtrises sont au maximum, les fusionne en « Épée et bouclier ».
 func _after_fight() -> void:
+	# La rage s'arrête avec le combat ; la migraine (en cours ou qui commence) continue après, en temps réel.
+	var now := Time.get_unix_time_from_system()
+	for unit in units:
+		if not unit["person"]:
+			continue
+		if unit["berserk"] and unit["hp"] > 0:
+			_exit_berserk(unit, true)
+		if unit["migraine_until"] > time:
+			unit["source"]["migraine_until"] = now + unit["migraine_until"] - time
 	for fighter in heroes:
 		var standing: bool = fighter["hp"] > 0 or fighter["immortal"]
 		if standing and fighter["weapon"] == "Épée" and fighter["shield"] \

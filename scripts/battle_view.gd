@@ -59,6 +59,8 @@ var portraits: Control
 var log_label: RichTextLabel
 var controls: HBoxContainer
 var pause_button: Button
+## Ordre « Berserk » (entrer en rage ou en sortir), visible quand le héros choisi possède Berserk.
+var berserk_button: Button
 
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
@@ -173,7 +175,14 @@ func _build(title: String) -> void:
 	layout.add_child(log_label)
 
 	controls = HBoxContainer.new()
+	controls.add_theme_constant_override("separation", 8)
 	layout.add_child(controls)
+	berserk_button = UI.make_button("", _order_berserk, 22)
+	berserk_button.custom_minimum_size.y = 80
+	berserk_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	berserk_button.add_theme_color_override("font_color", Color("ff6060"))
+	berserk_button.visible = false
+	controls.add_child(berserk_button)
 	pause_button = UI.make_button("Pause", _toggle_pause, 26)
 	pause_button.custom_minimum_size.y = 80
 	pause_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -215,6 +224,7 @@ func _advance() -> void:
 	if selected_id >= 0 and battle.units[selected_id]["hp"] <= 0:
 		selected_id = -1  # le héros choisi est tombé
 		_update_hint()
+	_update_berserk_button()  # (le héros peut entrer en rage ou en sortir de lui-même)
 	_update_clock()
 	arena.queue_redraw()
 	portraits.queue_redraw()
@@ -292,6 +302,12 @@ func _draw_portraits() -> void:
 		elif battle.panicking(hero):
 			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "PANIQUE", HORIZONTAL_ALIGNMENT_CENTER,
 				mind_bar.size.x, 13, Color("e0e0ff"))
+		elif hero["berserk"]:
+			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "BERSERK", HORIZONTAL_ALIGNMENT_CENTER,
+				mind_bar.size.x, 13, Color("ff4040"))
+		elif battle.has_migraine(hero):
+			portraits.draw_string(font, mind_bar.position + Vector2(0, -2), "MIGRAINE", HORIZONTAL_ALIGNMENT_CENTER,
+				mind_bar.size.x, 13, Color("c9a2ff"))
 
 
 func _is_duel() -> bool:
@@ -380,6 +396,33 @@ func _update_hint() -> void:
 			% battle.units[selected_id]["name"]
 	else:
 		hint_label.text = "Touche un héros pour le guider."
+	_update_berserk_button()
+
+
+## Le bouton « Berserk » n'apparaît que pour un héros choisi qui possède Berserk (pas pendant la pause).
+func _update_berserk_button() -> void:
+	if berserk_button == null or not is_instance_valid(berserk_button):
+		return
+	var hero: Dictionary = battle.units[selected_id] if selected_id >= 0 else {}
+	var shown: bool = not paused and not hero.is_empty() and battle.can_berserk(hero)
+	if berserk_button.visible != shown:
+		berserk_button.visible = shown
+	var text := "Sortir du Berserk" if shown and hero["berserk"] else "Berserk !"
+	if berserk_button.text != text:
+		berserk_button.text = text
+
+
+## Ordre du Maître : le héros choisi entre en rage, ou en sort (il peut refuser, voir Battle.order_berserk).
+func _order_berserk() -> void:
+	if selected_id < 0 or paused or battle.finished:
+		return
+	var hero: Dictionary = battle.units[selected_id]
+	battle.order_berserk(hero, not hero["berserk"])
+	Settings.vibrate(30)
+	selected_id = -1
+	_update_hint()
+	arena.queue_redraw()
+	portraits.queue_redraw()
 
 
 func _on_arena_input(event: InputEvent) -> void:
