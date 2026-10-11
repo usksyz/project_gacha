@@ -4,11 +4,26 @@ Jeu mobile (format portrait 720x1280) fait avec **Godot 4** en **GDScript**.
 Inspiré du gacha du manhwa « Pick Me Up » : invocation de héros de 1 à 5 étoiles,
 héros uniques qui peuvent mourir définitivement, Tour à étages, gestion de base.
 
+## Principes
+- Vue du Maître : le joueur est le Maître derrière son téléphone. Il ne voit que les fenêtres système,
+  des notifications filtrées, ce que les héros font et des fiches qui se révèlent peu à peu. Les héros
+  agissent seuls et lui font des suggestions.
+- Fidélité à l'œuvre d'abord ; les ajouts du projet sont signalés comme tels (dans le code et ici).
+- Chaque compétence a deux histoires séparées : comment elle s'acquiert (une seule fois) et comment elle
+  s'utilise (passive, conditionnelle, réflexe, active ponctuelle ou active à bascule). Ne jamais confondre
+  les deux (exemple : Berserk s'acquiert une fois aux portes de la mort, puis s'active et se désactive).
+- Tous les chiffres sont provisoires et rangés dans `scripts/game_data/`.
+- Chaque étape : un commit par point, sauvegarde compatible avec les parties existantes, tests en mode
+  normal (pas seulement en mode dev), CLAUDE.md mis à jour, liste de ce qu'il faut tester.
+
 ## Cahier des charges
 Le cahier des charges est un document Claude Docs que le porteur du projet complète au fil du temps :
 https://claude.ai/artifact/Tq9kGm18rz2nY8Lkyy2nxE (« Jeu inspiré de Pick Me Up — Feuille de route »).
-C'est la référence pour les règles du jeu et l'ordre de développement (6 phases) : relire la section
-concernée avant de coder, et signaler les écarts plutôt que trancher seul.
+La référence est l'onglet « Feuille de route v2 » : sa section 2 liste les règles confirmées par l'œuvre
+(chapitres 1 à 20), sa section 3 l'état du code et les écarts, sa section 4 le plan par phases (0 à 8),
+avec un prompt par étape. Le travail suit ces phases dans l'ordre. Les autres onglets (« Suivi
+entraînement et compétences », « Améliorations combat, classes, personnalité »...) donnent les détails.
+Relire la section concernée avant de coder, et signaler les écarts plutôt que trancher seul.
 
 Noms : les mécaniques peuvent copier Pick Me Up, mais les noms et l'univers restent originaux.
 Exceptions : les héros secrets (Han, Hansen, Zid, Shei, Jenna, Aaron, la magicienne Yvolka, la voleuse
