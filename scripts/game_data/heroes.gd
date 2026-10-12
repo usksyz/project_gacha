@@ -305,6 +305,17 @@ func is_combat_novice(hero: Dictionary) -> bool:
 func is_han(hero: Dictionary) -> bool:
 	return hero.get("secret", false) and hero["name"] == "Han"
 
+
+## Ce qu'on affiche à la place de la classe (cahier, Sommaire : « le métier remplace Novice ») : un Novice
+## montre son métier d'avant l'invocation (Paysan, Mendiant...) ; les autres, leur classe. Dans les règles,
+## sa classe reste « Novice » (changement de classe, armes...). Le métier : PersonalityEngine.metier_name.
+func class_label(hero: Dictionary) -> String:
+	if hero.get("class", "") == "Novice":
+		var metier_name := PersonalityEngine.metier_name(hero)
+		if metier_name != "":
+			return metier_name
+	return hero.get("class", "")
+
 ## Compétences qu'un héros peut apprendre lors d'un éveil en situation critique.
 const AWAKENING_SKILLS := ["Calme", "Mouvement souple", "Berserk"]
 

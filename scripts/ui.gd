@@ -129,7 +129,7 @@ static func make_death_window(hero: Dictionary, memorial := false) -> PanelConta
 	var stars := make_label("★".repeat(hero["rarity"]), 26)
 	stars.add_theme_color_override("font_color", rarity_color)
 	identity.add_child(stars)
-	identity.add_child(make_label("%s — niveau %d" % [hero["class"], hero["level"]], 22))
+	identity.add_child(make_label("%s — niveau %d" % [GameData.class_label(hero), hero["level"]], 22))
 	if memorial:
 		identity.add_child(make_label("Combats dans la Tour : %d" % hero.get("fights", 0), 20))
 	var cause: String = hero.get("death_cause", "")
@@ -393,7 +393,7 @@ static func make_hero_card(hero: Dictionary) -> Button:
 	stars.add_theme_color_override("font_color", color)
 	content.add_child(stars)
 	content.add_child(make_label(hero["name"], 18))
-	var hero_class := make_label(hero["class"], 14)
+	var hero_class := make_label(GameData.class_label(hero), 14)
 	hero_class.modulate = Color(1, 1, 1, 0.7)
 	content.add_child(hero_class)
 	content.add_child(make_label("Niv. %d" % hero["level"], 14))

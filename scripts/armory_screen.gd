@@ -175,7 +175,7 @@ func _make_hero_row(hero: Dictionary) -> Control:
 	box.add_theme_constant_override("separation", 6)
 	panel.add_child(box)
 	box.add_child(UI.make_label("%s (%s) — %s, niv. %d" % [hero["name"], "★".repeat(hero["rarity"]),
-		hero["class"], hero["level"]], 24))
+		GameData.class_label(hero), hero["level"]], 24))
 
 	if GameData.uses_magic(hero):
 		var magic := UI.make_label("Se bat avec la magie : pas d'arme.", 20)

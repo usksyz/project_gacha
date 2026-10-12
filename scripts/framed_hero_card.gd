@@ -78,7 +78,7 @@ func _init(hero_data: Dictionary, width: float, detailed := false) -> void:
 	names.add_theme_constant_override("separation", 0)
 	_place(names, NAME_RECT)
 	names.add_child(_make_label(hero["name"], 26, Color.WHITE))
-	names.add_child(_make_label(hero["class"], 17, Color(1, 1, 1, 0.75)))
+	names.add_child(_make_label(GameData.class_label(hero), 17, Color(1, 1, 1, 0.75)))
 	add_child(names)
 
 	# Encart du bas : le niveau, et les stats sur une grande carte.

@@ -211,7 +211,7 @@ func _make_candidate_row(hero: Dictionary) -> Control:
 	box.add_theme_constant_override("separation", 4)
 	panel.add_child(box)
 	box.add_child(UI.make_label("%s (%s) — %s, niv. %d" % [hero["name"], "★".repeat(hero["rarity"]),
-		hero["class"], hero["level"]], 22))
+		GameData.class_label(hero), hero["level"]], 22))
 	var levels := PackedStringArray()
 	for skill_name in GameData.TRAINING_SKILLS:
 		levels.append("%s niv. %d" % [PROGRAM_LABELS[skill_name], GameData.skill_level(hero["skills"], skill_name)])
@@ -250,7 +250,7 @@ func _make_hero_row(hero: Dictionary) -> Control:
 	panel.add_child(box)
 
 	box.add_child(UI.make_label("%s (%s) — %s, niv. %d" % [hero["name"], "★".repeat(hero["rarity"]),
-		hero["class"], hero["level"]], 24))
+		GameData.class_label(hero), hero["level"]], 24))
 	for skill_name in GameData.TRAINING_SKILLS:
 		var line := UI.make_label(_progress_text(hero, skill_name), 20)
 		line.modulate = Color(1, 1, 1, 0.75)

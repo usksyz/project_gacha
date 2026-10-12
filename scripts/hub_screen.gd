@@ -143,7 +143,7 @@ func _on_hero_pressed(hero: Dictionary) -> void:
 	elif hero.get("post", "") != "" and GameData.BUILDINGS.has(hero["post"]):
 		doing = "travaille comme assistant : %s" % GameData.BUILDINGS[hero["post"]]["name"]
 	info_label.text = "%s (%s, %s, niv. %d) %s." % [hero["name"], "★".repeat(hero["rarity"]),
-		hero["class"], hero["level"], doing]
+		GameData.class_label(hero), hero["level"], doing]
 
 
 ## La cité 3D garde ses animations de construction tant qu'une fenêtre du hub la couvre.

@@ -18,7 +18,8 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ## Numéro du format de sauvegarde : à augmenter si on change ce qui est enregistré,
 ## pour pouvoir adapter les anciennes sauvegardes.
 ## 2 : les héros secrets ne sont plus immortels (feuille de route v2).
-const SAVE_VERSION := 2
+## 3 : personnalité v2 (hero["persona"], voir PersonalityEngine) ; les héros d'avant la reçoivent au chargement.
+const SAVE_VERSION := 3
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -109,6 +110,10 @@ func load_game() -> bool:
 			hero["traits"] = roll_traits()
 		if not hero.has("mental"):
 			hero["mental"] = MENTAL_MAX
+	# Héros d'avant la personnalité v2 : leur profil est tiré maintenant (un par un, chacun comparé à ceux
+	# déjà tirés, comme à l'invocation) ; un profil plus ancien est complété (PersonalityEngine.migrate).
+	for hero in roster:
+		PersonalityEngine.migrate(hero, roster)
 	return not roster.is_empty()
 
 

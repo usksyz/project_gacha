@@ -63,7 +63,7 @@ func _ready() -> void:
 		stars.append(["%d★" % rarity, func():
 			var hero_class := "" if class_menu.selected <= 0 else class_menu.get_item_text(class_menu.selected)
 			var hero := GameData.dev_create_hero(rarity, hero_class)
-			return "%s (%s, %s) rejoint ta cité." % [hero["name"], "★".repeat(rarity), hero["class"]]])
+			return "%s (%s, %s) rejoint ta cité." % [hero["name"], "★".repeat(rarity), GameData.class_label(hero)]])
 	_add_row(content, stars)
 	_add_note(content, "Pour les niveaux, l'expérience, les étoiles, les stats et les compétences d'un héros : sa fiche, dans la Collection.")
 

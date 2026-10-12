@@ -129,7 +129,7 @@ func _open_picker(building_id: String) -> void:
 		if hero.get("post", "") == building_id:
 			continue
 		var text := "%s (%s) — %s, niv. %d — %s" % [hero["name"], "★".repeat(hero["rarity"]),
-			hero["class"], hero["level"], GameData.activity_text(hero)]
+			GameData.class_label(hero), hero["level"], GameData.activity_text(hero)]
 		var button := UI.make_button(text, func():
 			if not GameData.set_post(hero, building_id):
 				if GameData.last_refusal != "":
