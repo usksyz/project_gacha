@@ -18,6 +18,9 @@ func _initialize() -> void:
 	_check_evolution()
 	_check_effects()
 	_check_diversity()
+	_check_old_traits()
+	_check_migration()
+	_check_secret_profiles()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -155,6 +158,113 @@ func _check_effects() -> void:
 	for composite_id in D.COMPOSITES:
 		var value := E.composite(hero, composite_id)
 		_check(value >= -100 and value <= 100 and value % 10 == 0, "composite %s : %d" % [composite_id, value])
+
+
+## L'ancien tirage des traits (avant la sauvegarde version 4), recopié ici pour comparer : 1 trait au hasard,
+## et 40 % de chances d'un deuxième, jamais Courageux avec Lâche.
+func _old_roll_traits() -> Array:
+	var names: Array = D.OLD_TRAITS.keys()
+	var first: String = names.pick_random()
+	var traits := [first]
+	if randf() < 0.4:
+		var others := names.filter(func(n): return n != first and not (n in ["Courageux", "Lâche"] and first in ["Courageux", "Lâche"]))
+		traits.append(others.pick_random())
+	return traits
+
+
+## Section 12 : fréquence de chaque ancien trait, avant (tiré à part) et après (lu sur les paliers).
+func _check_old_traits() -> void:
+	print("Anciens traits : part des héros qui l'ont, avant → après (40 000 héros par rareté)")
+	var n := 40000
+	var before := {}
+	for i in n:
+		for trait_name in _old_roll_traits():
+			before[trait_name] = before.get(trait_name, 0) + 1
+	for rarity in [1, 2, 3, 4, 5]:
+		var after := {}
+		var none := 0
+		var count_total := 0
+		for i in n:
+			var hero := {"persona": E.generate(rarity, "", [], 900000 + i + rarity * 1000003)}
+			var traits := E.old_traits(hero)
+			count_total += traits.size()
+			if traits.is_empty():
+				none += 1
+			for trait_name in traits:
+				after[trait_name] = after.get(trait_name, 0) + 1
+		var parts := []
+		for trait_name in D.OLD_TRAITS:
+			parts.append("%s %.1f → %.1f %%" % [trait_name, 100.0 * before.get(trait_name, 0) / n, 100.0 * after.get(trait_name, 0) / n])
+		print("  %d★ : %s" % [rarity, ", ".join(parts)])
+		print("       traits par héros : 1,4 → %.2f ; sans aucun trait : 0 → %.1f %%" % [float(count_total) / n, 100.0 * none / n])
+	# Les incompatibilités tiennent d'elles-mêmes : Courage ne peut pas être à la fois >= 50 et <= -50.
+	var both := 0
+	for i in 5000:
+		var hero := {"persona": E.generate(3, "", [], 70000 + i)}
+		if E.has_old_trait(hero, "Courageux") and E.has_old_trait(hero, "Lâche"):
+			both += 1
+	_check(both == 0, "jamais Courageux et Lâche à la fois")
+
+
+## Migration (sauvegarde version 4) : chaque ancien trait est gardé, paliers poussés juste au seuil.
+func _check_migration() -> void:
+	print("Migration des anciens traits")
+	var kept := 0
+	var legacy := 0
+	var heroes := 0
+	var moved_axes := 0
+	var moved_tiers := 0
+	for i in 20000:
+		var old := _old_roll_traits()
+		var hero := {"name": "T", "rarity": 1 + i % 5, "persona": E.generate(1 + i % 5, "", [], 400000 + i),
+			"traits": old.map(func(n): return {"name": n, "known": i % 3 == 0})}
+		var before: Dictionary = hero["persona"]["tiers"].duplicate()
+		E.migrate(hero, [])
+		heroes += 1
+		var all_kept := true
+		for trait_name in old:
+			if not E.has_old_trait(hero, trait_name):
+				all_kept = false
+		if all_kept:
+			kept += 1
+		legacy += hero["persona"]["legacy_traits"].size()
+		for axis_id in D.AXIS_ORDER:
+			var gap := absi(int(hero["persona"]["tiers"][axis_id]) - int(before[axis_id]))
+			if gap > 0:
+				moved_axes += 1
+				moved_tiers += gap
+		if i % 3 == 0 and hero["revealed_traits"].size() != old.size():
+			all_kept = false
+		if hero.has("traits"):
+			all_kept = false
+	_check(kept == heroes, "chaque héros garde tous ses anciens traits (%d / %d)" % [kept, heroes])
+	print("  axes poussés par héros : %.2f (de %.1f paliers en moyenne) ; traits gardés hors profil : %.2f %% des héros" \
+		% [float(moved_axes) / heroes, float(moved_tiers) / maxf(1, moved_axes), 100.0 * legacy / heroes])
+	# Protecteur et Querelleur : l'Empathie ne peut pas être >= 50 et <= 20 ; l'un des deux est gardé à part.
+	var hero := {"name": "T", "rarity": 1, "persona": E.generate(1, "", [], 5),
+		"traits": [{"name": "Protecteur", "known": true}, {"name": "Querelleur", "known": false}]}
+	E.migrate(hero, [])
+	_check(E.has_old_trait(hero, "Protecteur") and E.has_old_trait(hero, "Querelleur"), "Protecteur + Querelleur : les deux gardés (%s hors profil)" % [hero["persona"]["legacy_traits"]])
+	_check(hero["revealed_traits"] == ["Protecteur"], "drapeau « révélé » gardé par nom")
+
+
+## Section 11 : les profils des héros secrets.
+func _check_secret_profiles() -> void:
+	print("Héros secrets")
+	for hero_name in D.SECRET_PROFILES:
+		var hero := {"name": hero_name, "secret": true, "rarity": 1, "persona": E.new_persona(hero_name, 1, [], true)}
+		var same := true
+		for axis_id in D.AXIS_ORDER:
+			if E.tier(hero, axis_id) != int(D.SECRET_PROFILES[hero_name]["tiers"].get(axis_id, 0)):
+				same = false
+		_check(same and E.metier(hero) == "", "%s : paliers du cahier, pas de métier" % hero_name)
+		print("    traits %s ; effort %.0f ; accès %d" % [E.old_traits(hero), hero["persona"]["effort"], E.accesses(hero).size()])
+	# Un héros secret déjà possédé (profil tiré, anciens traits) prend son profil à la migration.
+	var han := {"name": "Han", "secret": true, "rarity": 1, "persona": E.generate(1, "", [], 3, true),
+		"traits": [{"name": "Querelleur", "known": true}]}
+	E.migrate(han, [])
+	_check(E.tier(han, "PER") == 9 and han["persona"].get("secret_profile", false), "Han déjà possédé : profil écrit à la main")
+	_check(not E.has_old_trait(han, "Querelleur") and han["revealed_traits"] == ["Querelleur"], "Han : ses anciens traits tirés au hasard ne comptent plus (drapeau gardé)")
 
 
 ## Tirage diversifiant : un lobby de clones ; le nouveau héros doit s'en éloigner plus qu'un tirage simple.
