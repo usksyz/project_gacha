@@ -127,7 +127,8 @@ const AWAKENING_CHANCE := 0.35
 ## Berserk ne s'apprend qu'aux portes de la mort : sous cette part de sa vie.
 const BERSERK_LEARN_HP := 0.15
 ## Aux portes de la mort (la première fois qu'il passe sous BERSERK_LEARN_HP dans un combat),
-## un héros a cette chance d'apprendre Berserk, avec une forte envie de vivre.
+## Han a cette chance d'apprendre Berserk, avec une forte envie de vivre. (Les autres héros : seulement
+## Courageux ou Ambitieux, rarement et une seule fois dans leur vie, voir _berserk_door.)
 ## (L'éveil, lui, se tente plus tôt, à CRITICAL_HP : il n'aurait presque jamais donné Berserk.)
 const DEATH_DOOR_CHANCE := 0.3
 ## (Berserk, une fois appris, est une compétence active à bascule : voir _berserk_think et
@@ -1563,12 +1564,34 @@ func _check_critical_state(fighter: Dictionary) -> void:
 	# (Son utilisation, ensuite, est à part : voir _berserk_think.)
 	if ratio <= BERSERK_LEARN_HP and not fighter["death_door_tried"]:
 		fighter["death_door_tried"] = true
-		if randf() < DEATH_DOOR_CHANCE and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Berserk"):
+		if _berserk_door(fighter) and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Berserk"):
 			fighter["skills"].append(GameData.new_skill("Berserk"))
 			_log("Aux portes de la mort, %s refuse de mourir... Nouvelle compétence : Berserk !" \
 				% _name_with_stars(fighter), "awaken")
 			fighter["skill_news"].append("%s — nouvelle compétence : Berserk" % fighter["name"])
 			_awakening_rage(fighter)
+
+
+## Aux portes de la mort : Berserk s'éveille-t-il ? (Voir GameData, heroes.gd, BERSERK_AWAKEN_CHANCE.)
+## Han : DEATH_DOOR_CHANCE, à chaque combat. Les autres : seulement Courageux ou Ambitieux, une seule fois
+## dans leur vie (la chance est tentée, puis plus jamais), BERSERK_AWAKEN_CHANCE.
+func _berserk_door(fighter: Dictionary) -> bool:
+	var source: Dictionary = fighter["source"]
+	if GameData.is_han(source):
+		return randf() < DEATH_DOOR_CHANCE
+	if GameData.skill_level(fighter["skills"], "Berserk") > 0 or source.get("berserk_door_tried", false):
+		return false
+	var will := ""
+	for trait_name in GameData.BERSERK_AWAKEN_TRAITS:
+		if GameData.has_trait(source, trait_name):
+			will = trait_name
+	if will == "":
+		return false
+	source["berserk_door_tried"] = true  # une seule fois dans sa vie (enregistré avec le héros)
+	if randf() >= GameData.BERSERK_AWAKEN_CHANCE:
+		return false
+	_reveal(fighter, will)  # c'est sa volonté (courage, ambition) qui l'éveille
+	return true
 
 
 ## Éveil des compétences : chaque compétence gagne 1 à 3 niveaux d'un coup,
@@ -1583,8 +1606,8 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 	var han := GameData.is_han(fighter["source"])
 	var candidates := []
 	for skill_name in GameData.AWAKENING_SKILLS:
-		if skill_name == "Berserk" and ratio > BERSERK_LEARN_HP and not han:
-			continue  # Berserk ne vient qu'aux portes de la mort (Han : dès la situation critique)
+		if skill_name == "Berserk" and not han:
+			continue  # hors Han, Berserk ne vient qu'aux portes de la mort, et rarement (_berserk_door)
 		if GameData.can_learn_skill(fighter["source"], fighter["skills"], skill_name):
 			candidates.append(skill_name)
 	# Indomptable : candidate seulement si le héros saigne au moment de la situation critique.

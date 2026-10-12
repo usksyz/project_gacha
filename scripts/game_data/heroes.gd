@@ -189,6 +189,15 @@ const MAGIC_ELEMENTS := ["Feu", "Vent", "Froid"]
 # désactive quand le danger est passé, et elle s'arrête à la fin du combat. Ensuite : Migraine.
 # Les noms de l'œuvre (Force, Endurance, Agilité) sont ceux du jeu : Force, Santé, Dextérité.
 
+## Éveil de Berserk : il doit rester rare (feuille de route v2 ; dans l'œuvre, seul Han l'éveille, par une volonté
+## de vivre exceptionnelle). Hors Han, seul un héros Courageux ou Ambitieux (BERSERK_AWAKEN_TRAITS, trait révélé
+## s'il l'éveille) le peut, aux portes de la mort (battle.gd), avec BERSERK_AWAKEN_CHANCE, et une seule fois dans
+## sa vie : la chance est tentée une fois, puis plus jamais (hero["berserk_door_tried"], enregistré ; absent
+## d'une ancienne sauvegarde = pas encore tentée). Avant : tout héros, 30 % à chaque combat, plus l'éveil. Han
+## garde ses chances (battle.gd, DEATH_DOOR_CHANCE et HAN_AWAKENING_CHANCE). Chiffre provisoire.
+const BERSERK_AWAKEN_TRAITS := ["Courageux", "Ambitieux"]
+const BERSERK_AWAKEN_CHANCE := 0.1
+
 ## Bonus en Berserk : Force, Santé et Dextérité +BERSERK_BONUS au niveau 1 (+1 par niveau suivant),
 ## Intelligence -BERSERK_INT_MALUS.
 const BERSERK_BONUS := 5

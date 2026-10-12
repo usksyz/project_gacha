@@ -501,6 +501,13 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Les autres héros : chance à part « aux portes de la mort » (`DEATH_DOOR_CHANCE`, 30 %) la première fois
   qu'ils passent sous 15 % de vie dans un combat. (Avant, Berserk n'était tiré qu'à l'éveil, vers 20-25 % de
   vie : presque impossible, aucun héros ne l'avait gardé en 900 essais simulés.)
+  Berserk rare (demande du porteur du projet, après la phase 1.2 ; dans l'œuvre, seul Han l'éveille) : la
+  chance des portes de la mort (`DEATH_DOOR_CHANCE`) et l'éveil sont réservés à Han ; les autres héros ne
+  l'éveillent que s'ils sont Courageux ou Ambitieux (`BERSERK_AWAKEN_TRAITS`, `heroes.gd`), avec
+  `BERSERK_AWAKEN_CHANCE` (10 %), une seule fois dans leur vie (la chance est tentée la première fois qu'ils
+  passent sous 15 % de vie, puis plus jamais : `hero["berserk_door_tried"]`, enregistré) ; le trait se révèle
+  (`Battle._berserk_door`). Avant ce changement : environ 0,5 éveil par combat à l'étage 1 pour une équipe
+  neuve (10 % des héros), 1,1 aux étages 2 à 4 (22 % des héros, à chaque combat), 0,35 à 0,6 pour une préparée.
   Utilisation de Berserk (feuille de route v2, phase 0 ; avant : rage automatique sous 30 % de vie) :
   compétence active à bascule (`heroes.gd`, section « Berserk » ; `battle.gd`, `_berserk_think`). Le héros
   l'active de lui-même quand le combat est difficile (`_in_danger` : duel, boss ou horde à portée
