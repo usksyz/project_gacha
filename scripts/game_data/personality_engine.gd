@@ -614,3 +614,26 @@ static func decide(_hero: Dictionary, options: Array, context := {}):
 	if context.has("default"):
 		return context["default"]
 	return options[0] if not options.is_empty() else null
+
+
+## Couche de perception (P3) : ce que le Maître apprend d'un héros (fenêtres, notifications), filtré plus
+## tard selon l'Honnêteté et la confiance. Pour l'instant tout passe : le message revient tel quel.
+static func notify(_hero: Dictionary, message: String, _severity := 0) -> String:
+	return message
+
+
+## Ce que le Maître voit d'un champ de la fiche (« serein » au bord de la rupture, plus tard). Pour
+## l'instant, la vraie valeur.
+static func perceived(_hero: Dictionary, _field: String, value):
+	return value
+
+
+## Le héros peut-il apprendre cette compétence ? (P2 : affinités et conditions de la personnalité.) Pour
+## l'instant, la règle actuelle : GameData.can_learn_skill (il ne l'a pas, pas d'incompatibilité, Han à part).
+## GameData est cherché dans l'arbre de scène, pour que ce fichier reste utilisable sans le jeu (banc de test).
+static func can_learn(hero: Dictionary, skill_name: String, skills = null) -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	var game: Node = tree.root.get_node_or_null("GameData") if tree else null
+	if game == null:
+		return true
+	return game.can_learn_skill(hero, skills if skills != null else hero.get("skills", []), skill_name)
