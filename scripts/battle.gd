@@ -174,6 +174,10 @@ var walls := 0
 var heights: Array[Rect2i] = []
 ## Les cases en hauteur : {Vector2i: true}.
 var _high := {}
+## Terrain de survie : la sortie de chaque ruelle côté héros (de gauche à droite), et si un Meneur a déjà
+## organisé la défense (voir _organize_defense).
+var alley_exits: Array[Vector2] = []
+var _defense_organized := false
 
 ## Journal : {"t": moment (secondes), "text": ..., "style": "" ou "bleed", "awaken", "berserk", "reinforce"}.
 var events: Array[Dictionary] = []
@@ -325,6 +329,7 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 	if _is_blocked(pos):
 		pos = _free_cell_near(_cell_of(pos))
 	hero["resting"] = false  # (un ordre du Maître met fin au repos de la rotation)
+	hero["hold"] = false     # (et au poste donné par un Meneur)
 	hero["order"] = {"kind": "move", "pos": pos}
 	hero["path"] = PackedVector2Array()
 
@@ -334,6 +339,7 @@ func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
 	hero["resting"] = false
+	hero["hold"] = false
 	hero["order"] = {"kind": "attack", "target": enemy["id"]}
 	hero["path"] = PackedVector2Array()
 
@@ -359,15 +365,18 @@ func _rotate(tired: Dictionary) -> Dictionary:
 	var spot: Vector2 = tired["pos"]
 	var relief := _find_relief(tired)
 	var rear := _free_cell_near(_cell_of(Vector2(spot.x, minf(GRID_H - 2.5, spot.y + GameData.ROTATION_REAR_DISTANCE))))
+	var held: bool = tired["hold"]
 	tired["order"] = {"kind": "move", "pos": rear}
 	tired["path"] = PackedVector2Array()
 	tired["resting"] = true
+	tired["hold"] = false
 	tired["swap_until"] = time + GameData.ROTATION_VULNERABLE_SECONDS
 	if relief.is_empty():
 		_log("%s se replie pour reprendre son souffle, mais personne n'est assez frais pour le relever." % tired["name"])
 		return relief
 	relief["order"] = {"kind": "move", "pos": spot}
 	relief["path"] = PackedVector2Array()
+	relief["hold"] = held  # il reprend aussi la consigne de tenir le poste (Meneur)
 	relief["swap_until"] = time + GameData.ROTATION_VULNERABLE_SECONDS
 	_log("%s se replie pour reprendre son souffle ; %s prend son poste." % [tired["name"], relief["name"]])
 	return relief
@@ -407,6 +416,61 @@ func _lead(leader: Dictionary) -> void:
 		_reveal(leader, "Meneur")
 		_alert("Rotation", ["%s fait tourner la première ligne." % _name_with_stars(leader)])
 		return
+
+
+## Survie (terrain à ruelles), au début du combat : un héros Meneur (ni effrayé ni en panique) prend de
+## lui-même les bonnes positions pour l'équipe : les tireurs en hauteur, les porteurs de bouclier à la sortie
+## des ruelles (un par ruelle, les suivants à côté d'un premier : un mur), un lancier juste derrière un
+## bouclier. Fenêtre « X organise la défense », trait révélé. Les héros postés tiennent leur poste (« hold »,
+## voir _think) ; un ordre du Maître passe avant. Sans Meneur, les héros attendent les ordres du Maître.
+func _organize_defense() -> void:
+	var leader: Dictionary = {}
+	for hero in _alive(heroes):
+		if GameData.has_trait(hero["source"], "Meneur") and not panicking(hero) and not afraid(hero):
+			leader = hero
+			break
+	if leader.is_empty():
+		return
+	_defense_organized = true
+	var free_heights := height_cells()
+	var exits: Array = alley_exits.duplicate()
+	var held: Array = []  # sorties déjà tenues par un bouclier
+	var placed := []
+	for hero in _alive(heroes):
+		if not hero["order"].is_empty():
+			continue  # le Maître a déjà donné un ordre : il passe avant
+		var spot = null
+		if hero["ranged"] and not free_heights.is_empty():
+			free_heights.sort_custom(func(a, b): return hero["pos"].distance_to(a) < hero["pos"].distance_to(b))
+			spot = free_heights.pop_front()
+		elif hero["shield"]:
+			if not exits.is_empty():
+				exits.sort_custom(func(a, b): return hero["pos"].distance_to(a) < hero["pos"].distance_to(b))
+				spot = exits.pop_front()
+				held.append(spot)
+			elif not held.is_empty():
+				# Plus de sortie libre : il se met à côté d'un bouclier (mur de boucliers).
+				var beside: Vector2 = held[placed.size() % held.size()] + Vector2(1 if randf() < 0.5 else -1, 0)
+				spot = _free_cell_near(_cell_of(beside))
+		if spot == null:
+			continue
+		hero["order"] = {"kind": "move", "pos": spot}
+		hero["path"] = PackedVector2Array()
+		hero["hold"] = true
+		placed.append(hero)
+	# Un lancier : juste derrière un bouclier posté (il frappe par-dessus le mur).
+	for hero in _alive(heroes):
+		if hero["weapon"] == "Lance" and hero["order"].is_empty() and not held.is_empty():
+			hero["order"] = {"kind": "move", "pos": _free_cell_near(_cell_of(held.pop_back() + Vector2(0, 1)))}
+			hero["path"] = PackedVector2Array()
+			hero["hold"] = true
+			placed.append(hero)
+	if placed.is_empty():
+		return
+	_reveal(leader, "Meneur")
+	var who := _name_with_stars(leader)
+	_log("%s organise la défense : tireurs en hauteur, boucliers à la sortie des ruelles." % who, "awaken")
+	_alert("Défense", ["%s organise la défense." % who])
 
 
 ## Ordonne à un héros qui possède Berserk d'entrer en rage (« on » vrai) ou d'en sortir.
@@ -580,6 +644,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"resting": false,
 		"swap_until": 0.0,
 		"lead_ready": 0.0,         # Meneur : prochain moment où il peut faire tourner la première ligne
+		"hold": false,             # posté par un Meneur (survie) : il tient son poste (voir _organize_defense)
 		# Agonie (voir _announce_fall) : à 0 point de vie, un héros agonise jusqu'à « agony_until ».
 		"agony": false,
 		"agony_until": 0.0,
@@ -684,6 +749,10 @@ func _build_alleys() -> void:
 			width += 1
 		_add_obstacle(Rect2i(x, top, width, ALLEY_LENGTH), "house")
 		x += width
+	# La sortie de chaque ruelle, côté héros (là où un Meneur poste les boucliers, voir _organize_defense).
+	alleys.sort()
+	for alley in alleys:
+		alley_exits.append(Vector2(alley + 0.5, top + ALLEY_LENGTH + 0.5))
 	# Les hauteurs : côté héros, juste à côté de la sortie d'une ruelle (on tient la sortie d'en haut).
 	alleys.shuffle()
 	for alley in alleys.slice(0, GameData.HEIGHT_COUNT):
@@ -803,6 +872,8 @@ func _line_of_sight(from: Vector2, to: Vector2) -> bool:
 
 func _step() -> void:
 	_update_formations()
+	if not _defense_organized and not alley_exits.is_empty():
+		_organize_defense()
 	_call_reinforcements()
 	_check_boss_arrival()
 	for hero in heroes:
@@ -968,9 +1039,13 @@ func _think(unit: Dictionary) -> void:
 	var target := _choose_target(unit, foes, allies)
 	unit["target_id"] = target["id"]
 
-	# Posté sur une hauteur (le Maître l'y a envoyé) : il tient la position, sans descendre courir après
-	# les ennemis ; il frappe ou tire sur ceux qui sont à sa portée (la cible choisie d'abord).
-	if unit["is_hero"] and is_high(unit) and _high.has(_cell_of(unit["post"])):
+	# Posté sur une hauteur (le Maître l'y a envoyé), ou posté par un Meneur (sortie de ruelle, voir
+	# _organize_defense) : il tient la position, sans courir après les ennemis ; il frappe ou tire sur ceux
+	# qui sont à sa portée (la cible choisie d'abord). Poussé hors de son poste, il y revient.
+	if unit["is_hero"] and (unit["hold"] or (is_high(unit) and _high.has(_cell_of(unit["post"])))):
+		if unit["hold"] and unit["pos"].distance_to(unit["post"]) > 0.6 and not _in_reach(unit, target, unit["reach"]):
+			_move_towards(unit, unit["post"])
+			return
 		if not _in_reach(unit, target, unit["reach"]):
 			var near := foes.filter(func(foe): return _in_reach(unit, foe, unit["reach"]))
 			target = _nearest(unit, near) if not near.is_empty() else {}
