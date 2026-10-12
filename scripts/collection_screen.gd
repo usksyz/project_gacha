@@ -175,7 +175,7 @@ func _show_class_choice(hero: Dictionary, options: Array[String]) -> void:
 	var question := "Quelle voie pour %s ?" % hero["name"] if options.size() > 1 \
 		else "%s peut devenir %s." % [hero["name"], options[0]]
 	box.add_child(UI.make_system_window("Changement de classe", [
-		"%s (%s, niveau %d) est prêt à changer de classe." % [hero["name"], hero["class"], hero["level"]],
+		"%s (%s, niveau %d) est prêt à changer de classe." % [hero["name"], GameData.class_label(hero), hero["level"]],
 		question,
 	]))
 	for new_class in options:
@@ -300,6 +300,99 @@ func _add_dev_tools(content: VBoxContainer, hero: Dictionary) -> void:
 			["Max", func(): GameData.dev_set_skill_level(hero, skill_name, GameData.SKILL_MAX_LEVEL)],
 			["Retirer", func(): GameData.dev_remove_skill(hero, skill_name)],
 		])
+
+	_add_personality_tools(content, hero)
+
+
+## Mode dev : la personnalité v2 (cahier, onglets « Personnalité ») : métier, couches, talent, effort, tics,
+## puis les 18 axes en curseurs par paliers de 10, groupés par famille (palier, nom du palier, points
+## d'évolution), les composites, les accès ouverts, les tensions et les scores des comportements.
+## Hors du mode dev, rien de tout cela n'est montré : le Maître ne voit pas de chiffres.
+func _add_personality_tools(content: VBoxContainer, hero: Dictionary) -> void:
+	if not hero.has("persona"):
+		return
+	var persona: Dictionary = hero["persona"]
+	var title := UI.make_label("PERSONNALITÉ (mode dev)", 24)
+	title.add_theme_color_override("font_color", Color("e05252"))
+	content.add_child(title)
+
+	var metier: Dictionary = PersonalityData.METIERS.get(persona["metier"], {})
+	var lines: Array[String] = []
+	lines.append("%s : %s (lien avec le combat %d / 3)" % ["Métier" if hero["rarity"] <= 2 else "Passé",
+		metier.get("name", "?"), metier.get("combat", 0)])
+	var layer_parts: Array[String] = []
+	for layer_id in PersonalityData.LAYERS:
+		var layer: Dictionary = PersonalityData.LAYERS[layer_id]
+		layer_parts.append("%s : %s" % [layer["name"], layer["options"].get(persona["layers"].get(layer_id, ""), {}).get("name", "?")])
+	lines.append(" · ".join(layer_parts))
+	var aptitude_parts: Array[String] = []
+	for domain in PersonalityData.APTITUDE_DOMAINS:
+		aptitude_parts.append("%s %d" % [PersonalityData.APTITUDE_DOMAINS[domain], persona["aptitudes"].get(domain, 0)])
+	lines.append("Talent : croissance %d ; aptitudes %s" % [hero["growth"], ", ".join(aptitude_parts)])
+	lines.append("Effort : %.0f · acharnement x%.2f" % [persona["effort"], PersonalityEngine.acharnement(hero)])
+	lines.append("Tics : %s" % " ; ".join(persona["tics"].map(func(tic_id): return PersonalityEngine.tic_text(tic_id))))
+	for line in lines:
+		var label := UI.make_label(line, 17)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(label)
+
+	# Les 18 curseurs, par famille. « − » et « + » changent le palier ; « évo » ajoute 10 points
+	# d'évolution vers ce pôle (à la vitesse de la famille : le tempérament ne bouge presque pas).
+	for family_id in PersonalityData.FAMILIES:
+		var family_label := UI.make_label(PersonalityData.FAMILIES[family_id]["name"], 20)
+		family_label.add_theme_color_override("font_color", Color("ff9a8a"))
+		content.add_child(family_label)
+		for axis_id in PersonalityData.AXIS_ORDER:
+			if PersonalityData.AXES[axis_id]["family"] != family_id:
+				continue
+			_add_axis_slider(content, hero, axis_id)
+
+	var composite_parts: Array[String] = []
+	for composite_id in PersonalityData.COMPOSITES:
+		composite_parts.append("%s %+d" % [PersonalityData.COMPOSITES[composite_id]["name"], PersonalityEngine.composite(hero, composite_id)])
+	var behaviour_parts: Array[String] = []
+	for behaviour_id in PersonalityData.BEHAVIOURS:
+		behaviour_parts.append("%s %+.0f" % [PersonalityData.BEHAVIOURS[behaviour_id]["name"], PersonalityEngine.score(hero, behaviour_id)])
+	var access_lines: Array = PersonalityEngine.accesses(hero).map(func(access_id): return "• " + PersonalityEngine.access_text(access_id))
+	var tension_names: Array = PersonalityEngine.tensions(hero).map(func(tension_id): return PersonalityData.TENSIONS[tension_id]["name"])
+	for line in ["Composites : " + ", ".join(composite_parts),
+			"Comportements : " + ", ".join(behaviour_parts),
+			"Accès ouverts :\n" + ("\n".join(access_lines) if not access_lines.is_empty() else "aucun"),
+			"Tensions : " + (", ".join(tension_names) if not tension_names.is_empty() else "aucune")]:
+		var label := UI.make_label(line, 17)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(label)
+	_add_dev_row(content, [["Nouveau tirage de la personnalité", func(): GameData.dev_reroll_personality(hero)]])
+
+
+## Une ligne de curseur : « Audace +30 (Penchant) · évo 4 / 10 », puis − / + / évo− / évo+.
+func _add_axis_slider(content: VBoxContainer, hero: Dictionary, axis_id: String) -> void:
+	var value := PersonalityEngine.tier(hero, axis_id)
+	var evo: float = hero["persona"]["evo"].get(axis_id, 0.0)
+	var next := value + (1 if evo >= 0.0 else -1)
+	var cost := PersonalityEngine.evolution_cost(value, next) if absi(next) <= PersonalityData.TIER_MAX else 0.0
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	content.add_child(row)
+	var axis: Dictionary = PersonalityData.AXES[axis_id]
+	var label := UI.make_label("%s / %s : %+d\n%s, %s · évo %.1f / %.0f" % [axis["plus"], axis["minus"], value * 10,
+		PersonalityEngine.tier_name(value), PersonalityEngine.pole_name(axis_id, value), absf(evo), cost], 16)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(label)
+	for entry in [["−", func(): GameData.dev_set_axis_tier(hero, axis_id, value - 1)],
+			["+", func(): GameData.dev_set_axis_tier(hero, axis_id, value + 1)],
+			["évo−", func(): _dev_evolution(hero, axis_id, -10.0)],
+			["évo+", func(): _dev_evolution(hero, axis_id, 10.0)]]:
+		var button := _make_dev_button(entry[0], entry[1])
+		button.size_flags_horizontal = Control.SIZE_FILL
+		button.custom_minimum_size.x = 58 if entry[0].length() == 1 else 64
+		row.add_child(button)
+
+
+func _dev_evolution(hero: Dictionary, axis_id: String, points: float) -> void:
+	_dev_notice_title = "Personnalité"
+	_dev_notice = GameData.dev_add_evolution(hero, axis_id, points)
 
 
 ## Une rangée de boutons du mode dev : [[texte, action], ...]. Après l'action, la fiche est redessinée.
@@ -440,7 +533,7 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 		rarity.add_theme_color_override("font_color", color)
 		content.add_child(rarity)
 		content.add_child(UI.make_label(hero["name"], 52))
-		content.add_child(UI.make_label(hero["class"], 28))
+		content.add_child(UI.make_label(GameData.class_label(hero), 28))
 		var level_text := "Niveau %d / %d" % [hero["level"], GameData.MAX_LEVEL[hero["rarity"]]]
 		content.add_child(UI.make_label(level_text, 26))
 	var xp_text := "Niveau maximum atteint"

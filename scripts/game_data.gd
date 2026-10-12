@@ -221,6 +221,38 @@ func _dev_partner_missing(partner_name: String) -> String:
 	return "Aucun autre héros vivant ne s'appelle « %s »." % partner_name.strip_edges()
 
 
+## Personnalité v2 (fiche du héros, curseurs par famille) : fixe le palier d'un axe (-10 à +10).
+func dev_set_axis_tier(hero: Dictionary, axis_id: String, value: int) -> void:
+	PersonalityEngine.set_tier(hero, axis_id, value)
+	save_game()
+
+
+## Ajoute des points d'évolution à un axe (comme le feront les épreuves) ; renvoie le texte des paliers
+## franchis et des accès ouverts ou fermés.
+func dev_add_evolution(hero: Dictionary, axis_id: String, points: float) -> Array[String]:
+	var lines: Array[String] = []
+	var axis_name: String = PersonalityData.AXES[axis_id]["name"]
+	for crossing in PersonalityEngine.gain_evolution(hero, axis_id, points):
+		lines.append("%s : %d → %d (%s)" % [axis_name, crossing["from"] * 10, crossing["to"] * 10,
+			PersonalityEngine.tier_name(crossing["to"])])
+		for access_id in crossing["opened"]:
+			lines.append("Nouvel accès : %s" % PersonalityEngine.access_text(access_id))
+		for access_id in crossing["closed"]:
+			lines.append("Accès perdu : %s" % PersonalityEngine.access_text(access_id))
+	if lines.is_empty():
+		var evo: float = hero["persona"]["evo"][axis_id]
+		lines.append("%s : %+.1f points d'évolution, pas de nouveau palier." % [axis_name, evo])
+	save_game()
+	return lines
+
+
+## Tire une nouvelle personnalité pour ce héros (comparée aux autres héros vivants).
+func dev_reroll_personality(hero: Dictionary) -> void:
+	var others := roster.filter(func(other): return other["id"] != hero["id"])
+	hero["persona"] = PersonalityEngine.generate(hero["rarity"], "", others, 0, hero.get("secret", false))
+	save_game()
+
+
 ## Met un héros « En rupture », santé mentale à 0 (pour tester la rupture et la mort de stress).
 func dev_break(hero: Dictionary) -> void:
 	hero["mental"] = 0.0

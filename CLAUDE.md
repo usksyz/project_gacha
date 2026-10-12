@@ -267,6 +267,49 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   -20 santé mentale, santé mentale 100, mettre en rupture, « Lien +1 cran » et « Rendre hostile » avec un
   héros cherché par son nom (`dev_raise_bond`, `dev_make_hostile`). Reste : hostilité entre groupes, liens hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon
   journalier, héros en rupture au donjon journalier.
+- Personnalité v2, étape P1a (cahier : Sommaire, « Personnalité : document de référence » sections 1 à 5
+  et 7, sous-onglets « 1. Paliers », « 2. Axes », « 5. Facettes ») : le noyau seulement, AUCUN effet en jeu
+  pour l'instant (la personnalité de « Personnalité » ci-dessus, traits Courageux... compris, reste celle qui
+  agit ; elle sera branchée dessus en P2). Deux classes hors de la pile de GameData : `PersonalityData`
+  (`game_data/personality_data.gd`, données seulement) et `PersonalityEngine` (`personality_engine.gd`,
+  fonctions `static`). Contrat : aucune mécanique ne lit `hero["persona"]` directement, tout passe par le moteur.
+  Données : `AXES` (18 axes, identifiants AUD, CUR, SEN, COL, PER, MAI, EMP, HON, AMB, LOY, FOI, STA, OPT, VIT,
+  CON, DOU, ACU, RYT ; + = premier pôle ; Rythme + = Nocturne), `FAMILIES` (4 familles, vitesse d'évolution
+  x0,1 / x1 / x2 / x1), `TIER_DISTRIBUTION`, `RARITY_TAIL`, `CORRELATIONS`, `RARITY_BIAS`, `BACKGROUND_BIAS`,
+  `TIER_LADDER`, `POLE_ACCESS` (par pôle « AUD+ » / « AUD- » : 5 = exclusive(s) par id, 7 = trait majeur et
+  faiblesse, 9 = signature et compulsion, 10 = éveil ; textes et ids, effets en P2), `SYNERGIES`, `TENSIONS`,
+  `COMPOSITES`, `EVOLUTION_COST`, `BEHAVIOURS` (les 7 comportements de l'onglet Facettes, 18 poids non nuls),
+  `TICS` (2 par pôle), `METIERS` (poids par étoiles : 1★ métiers pauvres, 2 % liés au combat ; 5★ passés liés
+  au combat à 80 % ; artisans experts rares), `LAYERS` (valeur, besoin, peur profonde, attachement, tirés selon
+  les axes), `APTITUDE_DOMAINS` (talent : aptitudes 1 à 5 ; la croissance reste `hero["growth"]`), effort.
+  Profil `hero["persona"]` (enregistré avec le héros, `PROFILE_VERSION` 1) : paliers -10 à +10, points
+  d'évolution, poids personnels (x0,85 à x1,15), tics, couches, aptitudes, effort, métier, accès ouverts, graine.
+  `generate(rarity, background, roster, seed, secret)` : tirage corrélé (loi normale, convertie en paliers sans
+  déformer la répartition), queue de la rareté, biais du passé (x`BACKGROUND_BIAS_SCALE` 0,6), relief (un axe à
+  ±60, trois à ±50), au plus deux à ±90, 8 candidats dont on garde celui qui ressemble le moins aux héros vivants,
+  3 à 6 tics. Appelé par `_new_hero` (`summon.gd`) pour toute invocation et tout code secret (héros secrets :
+  queue `SECRET_TAIL`, pas de plafond, pas de métier ; leurs profils écrits à la main restent à faire).
+  Lecture : `tier`, `axis(hero, id, target)` (-100 à +100 ; le cercle de la cible décalera les paliers en P3,
+  `_circle_shift` neutre), `pole`, `composite` (arrondi à 10), `score` (comportement, -100 à +100),
+  `accesses` (recalculés par `refresh_accesses` à chaque changement de palier), `tensions`, `metier_name`.
+  Évolution : `gain_evolution(hero, axe, points, worked)` (vitesse de la famille, acharnement x1,05 par palier
+  de Persévérance si l'axe est travaillé, coûts `EVOLUTION_COST`, revenir vers zéro 10 ; renvoie les paliers
+  franchis et les accès ouverts ou fermés), `add_effort`, `set_tier`. Effets : `effect_add`, `effect_mul`,
+  `effect_div`, `effect_cross`, `effect_ratio` (bornes facultatives). Pour la suite, neutres : `modifier()`
+  renvoie 1,0, `decide()` l'option par défaut.
+  Métier à la place de « Novice » : `GameData.class_label(hero)` (`heroes.gd`) sur les cartes, la fiche, le hub,
+  l'armurerie, les affectations, l'entraînement ; dans les règles la classe reste « Novice ».
+  Sauvegarde version 3 : au chargement, les héros sans profil en reçoivent un (`PersonalityEngine.migrate`).
+  Mode dev (fiche du héros, « PERSONNALITÉ (mode dev) ») : métier, couches, talent, effort, tics, les 18 curseurs
+  par famille (− / + : palier ; évo− / évo+ : 10 points d'évolution, `dev_set_axis_tier`, `dev_add_evolution`),
+  composites, comportements, accès ouverts, tensions, « Nouveau tirage » (`dev_reroll_personality`).
+  Banc de test : `Godot --headless --path . -s res://tools/test_personality.gd` (tableau de la section 1 des
+  Paliers sur 40 000 héros par rareté à ±10 %, aucun héros plat, exemples Varek / Sorn / Ilda, évolution 60 à
+  100 = 225 points, fonctions d'effet, tirage diversifiant). Écarts signalés : 3★ facteur de queue 1,03 au lieu
+  de 1 (sinon 1 héros sur 9 à ±90, pas 1 sur 8) ; la ligne « Secret (si généré) » ne peut pas être atteinte
+  entière (à 90 : 1 sur 2,4 au lieu de 2) ; Rythme : l'onglet Axes met Aube au pôle haut, sa règle dit + = nuit
+  (gardé : + Nocturne, exclusive Veilleur). Après l'ajout d'un fichier `class_name`, lancer une fois
+  `Godot --headless --path . --import` (cache des classes ; la publication web le fait toute seule).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
