@@ -19,6 +19,7 @@ class_name PersonalityEngine
 ##   "effort" : points d'acharnement (ne font que monter)
 ##   "metier" : identifiant de PersonalityData.METIERS (métier ou passé)
 ##   "accesses" : identifiants des accès ouverts (recalculés à chaque changement de palier)
+##   "legacy_traits" : anciens traits gardés d'une sauvegarde d'avant la version 4 (voir has_old_trait)
 ##   "seed" : graine du tirage (le même graine redonne le même profil, à lobby égal)
 ## Sur le héros lui-même : hero["revealed_traits"], les anciens traits que le Maître a vus (par nom).
 
@@ -70,6 +71,7 @@ static func generate(rarity: int, background: String, roster: Array, seed: int =
 		"effort": D.EFFORT_START,
 		"metier": metier,
 		"accesses": [],
+		"legacy_traits": [],
 		"seed": seed,
 	}
 	for axis_id in D.AXIS_ORDER:
@@ -289,10 +291,17 @@ static func _roll_aptitudes(rarity: int, metier: String, rng: RandomNumberGenera
 ## Donne un profil aux héros qui n'en ont pas (anciennes sauvegardes), et complète un profil d'une
 ## version plus ancienne. Renvoie vrai si le héros a changé.
 static func migrate(hero: Dictionary, roster: Array) -> bool:
+	var changed := false
 	if not hero.has("persona"):
 		hero["persona"] = generate(hero.get("rarity", 1), "", roster, 0, hero.get("secret", false))
-		return true
-	var changed := false
+		changed = true
+	# Version 2 : les anciens traits tirés à part deviennent des lectures de paliers (voir _adopt_old_traits).
+	if hero.has("traits"):
+		_adopt_old_traits(hero)
+		changed = true
+	if not hero.has("revealed_traits"):
+		hero["revealed_traits"] = []
+		changed = true
 	var persona: Dictionary = hero["persona"]
 	for key in ["tiers", "evo", "weights", "layers", "aptitudes"]:
 		if not persona.has(key):
@@ -308,7 +317,8 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 		if not persona["weights"].has(axis_id):
 			persona["weights"][axis_id] = 1.0
 			changed = true
-	for key in [["tics", []], ["effort", D.EFFORT_START], ["metier", roll_metier(hero.get("rarity", 1), null, hero.get("secret", false))], ["seed", 0]]:
+	for key in [["tics", []], ["effort", D.EFFORT_START], ["metier", roll_metier(hero.get("rarity", 1), null, hero.get("secret", false))],
+			["seed", 0], ["legacy_traits", []]]:
 		if not persona.has(key[0]):
 			persona[key[0]] = key[1]
 			changed = true
@@ -545,6 +555,65 @@ static func _old_trait_met(tiers: Dictionary, trait_name: String) -> bool:
 	if rule.has("synergy") and not _meets(tiers, D.SYNERGIES[rule["synergy"]]["needs"]):
 		return false
 	return true
+
+
+## Migration : pousse les paliers juste au seuil d'un ancien trait (le moins de changements possible).
+static func push_old_trait(tiers: Dictionary, trait_name: String) -> void:
+	var rule: Dictionary = D.OLD_TRAITS[trait_name]
+	var needs: Dictionary = rule.get("needs", {}).duplicate()
+	if rule.has("synergy"):
+		needs.merge(D.SYNERGIES[rule["synergy"]]["needs"])
+	for axis_id in needs:
+		var needed: int = needs[axis_id]
+		if needed > 0:
+			tiers[axis_id] = maxi(int(tiers[axis_id]), needed)
+		else:
+			tiers[axis_id] = mini(int(tiers[axis_id]), needed)
+	var at_most: Dictionary = rule.get("at_most", {})
+	for axis_id in at_most:
+		tiers[axis_id] = mini(int(tiers[axis_id]), at_most[axis_id])
+	# Un composite : on pousse d'un palier à la fois l'axe qui y pèse le plus (Audace pour le Courage),
+	# puis les suivants s'il est déjà au bout.
+	var composites: Dictionary = rule.get("composite", {})
+	for composite_id in composites:
+		var needed: int = composites[composite_id]
+		var direction := signi(needed)
+		var weights: Dictionary = D.COMPOSITES[composite_id]["axes"]
+		var order: Array = weights.keys()
+		order.sort_custom(func(a, b): return absf(weights[a]) > absf(weights[b]))
+		for guard in 100:
+			if direction * _composite_tier(tiers, composite_id) >= direction * needed:
+				break
+			var moved := false
+			for axis_id in order:
+				var step := direction * signi(int(signf(weights[axis_id])))
+				if absi(int(tiers[axis_id]) + step) <= D.TIER_MAX:
+					tiers[axis_id] = int(tiers[axis_id]) + step
+					moved = true
+					break
+			if not moved:
+				break
+
+
+## Migration (sauvegarde version 4) : le héros garde ses anciens traits (hero["traits"], tirés à part) :
+## ses paliers sont poussés juste au seuil de chacun ; ceux qu'on ne peut pas avoir ensemble restent dans
+## persona["legacy_traits"]. Les drapeaux « révélé » sont gardés par nom (hero["revealed_traits"]).
+static func _adopt_old_traits(hero: Dictionary) -> void:
+	var revealed: Array = hero.get("revealed_traits", [])
+	var names: Array = []
+	for old in hero.get("traits", []):
+		names.append(old["name"])
+		if old.get("known", false) and not old["name"] in revealed:
+			revealed.append(old["name"])
+	hero["revealed_traits"] = revealed
+	hero.erase("traits")
+	var tiers: Dictionary = hero["persona"]["tiers"]
+	for trait_name in names:
+		if D.OLD_TRAITS.has(trait_name):
+			push_old_trait(tiers, trait_name)
+	var legacy: Array = names.filter(func(trait_name): return D.OLD_TRAITS.has(trait_name) and not _old_trait_met(tiers, trait_name))
+	hero["persona"]["legacy_traits"] = legacy
+	refresh_accesses(hero)
 
 
 # ---------------------------------------------------------------------------

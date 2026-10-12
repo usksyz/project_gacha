@@ -19,7 +19,10 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ## pour pouvoir adapter les anciennes sauvegardes.
 ## 2 : les héros secrets ne sont plus immortels (feuille de route v2).
 ## 3 : personnalité v2 (hero["persona"], voir PersonalityEngine) ; les héros d'avant la reçoivent au chargement.
-const SAVE_VERSION := 3
+## 4 : les anciens traits (hero["traits"]) se lisent sur les paliers : chaque héros garde les siens (paliers
+##     poussés juste au seuil, PersonalityEngine.migrate), les drapeaux « révélé » passent dans
+##     hero["revealed_traits"].
+const SAVE_VERSION := 4
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -104,12 +107,13 @@ func load_game() -> bool:
 	for hero in roster:
 		if version < 2 and hero.get("secret", false):
 			hero["immortal"] = false
-	# Héros d'avant la personnalité : une santé mentale à 100 (leurs traits viennent de leur profil).
+	# Héros d'avant la personnalité : une santé mentale à 100 (leurs traits viennent de leur profil, plus bas).
 	for hero in roster:
 		if not hero.has("mental"):
 			hero["mental"] = MENTAL_MAX
 	# Héros d'avant la personnalité v2 : leur profil est tiré maintenant (un par un, chacun comparé à ceux
-	# déjà tirés, comme à l'invocation) ; un profil plus ancien est complété (PersonalityEngine.migrate).
+	# déjà tirés, comme à l'invocation) ; un profil plus ancien est complété ; ceux d'avant la version 4 gardent
+	# leurs anciens traits (PersonalityEngine.migrate).
 	for hero in roster:
 		PersonalityEngine.migrate(hero, roster)
 	return not roster.is_empty()

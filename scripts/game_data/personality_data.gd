@@ -707,4 +707,5 @@ const OLD_TRAITS := {
 
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
 ## enregistré, avec la migration au chargement (PersonalityEngine.migrate).
-const PROFILE_VERSION := 1
+## 2 : anciens traits lus sur les paliers (« legacy_traits »).
+const PROFILE_VERSION := 2
