@@ -139,7 +139,7 @@ static func make_death_window(hero: Dictionary, memorial := false) -> PanelConta
 	identity.add_child(cause_label)
 
 	# Ce qu'on savait de lui : ses traits révélés, puis ses liens.
-	var known: Array = hero.get("traits", []).filter(func(t): return t["known"]).map(func(t): return t["name"])
+	var known: Array = GameData.hero_traits(hero).filter(func(t): return t["known"]).map(func(t): return t["name"])
 	var traits_label := make_label("Caractère : %s" % (", ".join(known) if not known.is_empty() else "jamais révélé"), 20)
 	traits_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(traits_label)

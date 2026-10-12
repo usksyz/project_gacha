@@ -575,7 +575,7 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 			content.add_child(malus)
 	# Traits de caractère : « ? » tant qu'ils ne se sont pas révélés en jouant.
 	content.add_child(UI.make_label("Caractère : %s" % GameData.traits_text(hero), 22))
-	for t in hero.get("traits", []):
+	for t in GameData.hero_traits(hero):
 		if t["known"]:
 			var trait_info := UI.make_label("%s : %s" % [t["name"], GameData.TRAITS.get(t["name"], "")], 18)
 			trait_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

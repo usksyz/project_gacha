@@ -104,10 +104,8 @@ func load_game() -> bool:
 	for hero in roster:
 		if version < 2 and hero.get("secret", false):
 			hero["immortal"] = false
-	# Héros d'avant la personnalité : ils reçoivent leurs traits (cachés) et une santé mentale à 100.
+	# Héros d'avant la personnalité : une santé mentale à 100 (leurs traits viennent de leur profil).
 	for hero in roster:
-		if not hero.has("traits"):
-			hero["traits"] = roll_traits()
 		if not hero.has("mental"):
 			hero["mental"] = MENTAL_MAX
 	# Héros d'avant la personnalité v2 : leur profil est tiré maintenant (un par un, chacun comparé à ceux

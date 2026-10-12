@@ -684,6 +684,27 @@ const APTITUDE_BASE := {1: 1.5, 2: 2.0, 3: 2.5, 4: 3.0, 5: 3.5}
 const EFFORT_START := 0.0
 
 
+# ---------------------------------------------------------------------------
+# Les anciens traits deviennent des lectures de paliers (« 1. Paliers », section 12)
+# ---------------------------------------------------------------------------
+## Les neuf traits déjà codés (Courageux... Meneur, voir GamePersonality.TRAITS) gardent leurs effets, mais ne
+## sont plus tirés à part : un héros les a quand ses paliers le disent.
+## « composite » : {composite: palier minimal (négatif = au plus ce palier)} ; « needs » : {axe: palier minimal
+## dans le sens du pôle (négatif = pôle bas)}, comme SYNERGIES ; « at_most » : {axe: palier maximal} ;
+## « synergy » : l'accès croisé qu'il faut avoir.
+const OLD_TRAITS := {
+	"Courageux": {"composite": {"courage": 5}},           # Courage >= +50
+	"Lâche": {"composite": {"courage": -5}},              # Courage <= -50
+	"Loyal": {"needs": {"LOY": 5}},                       # Loyauté >= +50
+	"Paresseux": {"needs": {"PER": -5}},                  # Persévérance <= -50 (Abandon)
+	"Querelleur": {"needs": {"COL": 5}, "at_most": {"EMP": 2}},  # Colère >= +50 et Empathie <= +20
+	"Protecteur": {"needs": {"EMP": 5, "AUD": 3}},        # Empathie >= +50 et Audace >= +30
+	"Ambitieux": {"needs": {"AMB": 5}},                   # Ambition >= +50
+	"Mauvais": {"needs": {"EMP": -5, "HON": -3}},         # Égocentrisme >= 50 et Ruse >= 30
+	"Meneur": {"synergy": "meneur"},                      # Ambition 40, Empathie 30, Stabilité 30
+}
+
+
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
 ## enregistré, avec la migration au chargement (PersonalityEngine.migrate).
 const PROFILE_VERSION := 1

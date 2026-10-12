@@ -45,10 +45,11 @@ const MENTAL_MALUS_MAX := 0.3
 # ---------------------------------------------------------------------------
 # Traits de caractère
 # ---------------------------------------------------------------------------
-# Chaque héros a 1 ou 2 traits fixes (hero["traits"] : [{"name", "known"}]), tirés à l'invocation et
-# cachés au début (« ? »). Un trait se révèle la première fois qu'il agit, ou après quelques combats.
-# Pour l'instant, sont branchés : les effets sur le stress (Courageux, Lâche, Protecteur, Ambitieux) et
-# Loyal (désobéissance) ; les autres viendront avec la vie au lobby.
+# Les traits ne sont plus tirés à part (personnalité v2, cahier « 1. Paliers », section 12) : un héros a un
+# trait quand ses paliers le disent (PersonalityData.OLD_TRAITS : Courageux = composite Courage >= +50,
+# Loyal = Loyauté >= +50...), lu par PersonalityEngine.has_old_trait. Ils sont cachés au début (« ? ») ; le
+# Maître les découvre (hero["revealed_traits"], par nom) la première fois qu'un trait agit, ou après
+# quelques combats. Leurs effets n'ont pas changé.
 
 ## Les traits et ce qu'ils font (affiché sur la fiche une fois révélés).
 const TRAITS := {
@@ -62,10 +63,6 @@ const TRAITS := {
 	"Mauvais": "Baisse l'efficacité du lobby (-5 % par héros mauvais) et use ceux qui travaillent avec lui.",
 	"Meneur": "En combat, fait tourner la première ligne : il envoie lui-même à l'arrière un allié épuisé, et un allié frais prend sa place.",
 }
-## Chance d'avoir un deuxième trait (sinon un seul).
-const TRAIT_TWO_CHANCE := 0.4
-## Traits qui ne vont pas ensemble.
-const INCOMPATIBLE_TRAITS := [["Courageux", "Lâche"]]
 ## Un trait encore caché se révèle tous les TRAIT_REVEAL_FIGHTS combats de la Tour finis.
 const TRAIT_REVEAL_FIGHTS := 5
 ## Effets sur le stress : face aux boss (Courageux, Lâche), à la mort d'un allié (Protecteur),
@@ -85,41 +82,34 @@ const MENTAL_LOSS_LEFT_OUT := 3.0
 const MENTAL_LEFT_OUT_FLOOR := 40.0
 
 
-## Tire les traits d'un nouveau héros : 1, ou 2 (TRAIT_TWO_CHANCE), compatibles, tous cachés.
-func roll_traits() -> Array:
-	var names: Array = TRAITS.keys()
-	var first: String = names.pick_random()
-	var traits := [{"name": first, "known": false}]
-	if randf() < TRAIT_TWO_CHANCE:
-		var others := names.filter(func(name): return name != first and _traits_compatible(first, name))
-		traits.append({"name": others.pick_random(), "known": false})
-	return traits
-
-
-func _traits_compatible(a: String, b: String) -> bool:
-	for pair in INCOMPATIBLE_TRAITS:
-		if a in pair and b in pair:
-			return false
-	return true
-
-
+## Le héros a-t-il ce trait ? (Lu sur ses paliers, voir PersonalityEngine.has_old_trait.)
 func has_trait(hero: Dictionary, trait_name: String) -> bool:
-	return hero.get("traits", []).any(func(t): return t["name"] == trait_name)
+	return PersonalityEngine.has_old_trait(hero, trait_name)
 
 
-## Révèle un trait (s'il était caché). Renvoie l'annonce « Trait révélé : ... », ou "" s'il était déjà connu.
+## Ses traits et ce que le Maître en sait : [{"name", "known"}], dans l'ordre de TRAITS.
+func hero_traits(hero: Dictionary) -> Array:
+	var revealed: Array = hero.get("revealed_traits", [])
+	return PersonalityEngine.old_traits(hero).map(func(trait_name): return {"name": trait_name, "known": trait_name in revealed})
+
+
+## Révèle un trait (s'il était caché). Renvoie l'annonce « Trait révélé : ... », ou "" s'il était déjà connu
+## (ou si le héros n'a pas ce trait).
 func reveal_trait(hero: Dictionary, trait_name: String) -> String:
-	for t in hero.get("traits", []):
-		if t["name"] == trait_name and not t["known"]:
-			t["known"] = true
-			return "Trait révélé : %s est %s !" % [hero["name"], trait_name]
-	return ""
+	if not has_trait(hero, trait_name):
+		return ""
+	if not hero.has("revealed_traits"):
+		hero["revealed_traits"] = []
+	if trait_name in hero["revealed_traits"]:
+		return ""
+	hero["revealed_traits"].append(trait_name)
+	return "Trait révélé : %s est %s !" % [hero["name"], trait_name]
 
 
 ## Les traits tels que le joueur les voit : « Courageux, ? » (« ? » = pas encore révélé).
 func traits_text(hero: Dictionary) -> String:
 	var parts := []
-	for t in hero.get("traits", []):
+	for t in hero_traits(hero):
 		parts.append(t["name"] if t["known"] else "?")
 	return ", ".join(parts) if not parts.is_empty() else "?"
 
@@ -785,7 +775,7 @@ func mental_after_battle(hero: Dictionary, fighter: Dictionary, victory: bool, n
 	# Avec le temps, on apprend à connaître un héros : un trait caché se révèle tous les quelques combats.
 	hero["fights"] = hero.get("fights", 0) + 1
 	if hero["fights"] % TRAIT_REVEAL_FIGHTS == 0:
-		var hidden: Array = hero.get("traits", []).filter(func(t): return not t["known"])
+		var hidden: Array = hero_traits(hero).filter(func(t): return not t["known"])
 		if not hidden.is_empty():
 			_trait_acts(hero, hidden.pick_random()["name"], news)
 	if roundi(mental(hero)) == roundi(before):

@@ -20,6 +20,7 @@ class_name PersonalityEngine
 ##   "metier" : identifiant de PersonalityData.METIERS (métier ou passé)
 ##   "accesses" : identifiants des accès ouverts (recalculés à chaque changement de palier)
 ##   "seed" : graine du tirage (le même graine redonne le même profil, à lobby égal)
+## Sur le héros lui-même : hero["revealed_traits"], les anciens traits que le Maître a vus (par nom).
 
 const D := preload("res://scripts/game_data/personality_data.gd")
 
@@ -291,9 +292,8 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 	if not hero.has("persona"):
 		hero["persona"] = generate(hero.get("rarity", 1), "", roster, 0, hero.get("secret", false))
 		return true
-	var persona: Dictionary = hero["persona"]
 	var changed := false
-	# (version 1 : la première ; les suivantes ajouteront ici leurs valeurs par défaut.)
+	var persona: Dictionary = hero["persona"]
 	for key in ["tiers", "evo", "weights", "layers", "aptitudes"]:
 		if not persona.has(key):
 			persona[key] = {}
@@ -308,7 +308,7 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 		if not persona["weights"].has(axis_id):
 			persona["weights"][axis_id] = 1.0
 			changed = true
-	for key in [["tics", []], ["effort", D.EFFORT_START], ["metier", roll_metier(hero.get("rarity", 1))], ["seed", 0]]:
+	for key in [["tics", []], ["effort", D.EFFORT_START], ["metier", roll_metier(hero.get("rarity", 1), null, hero.get("secret", false))], ["seed", 0]]:
 		if not persona.has(key[0]):
 			persona[key[0]] = key[1]
 			changed = true
@@ -373,11 +373,19 @@ static func tier_name(value: int) -> String:
 ## Composite (Courage, Discipline...) : moyenne pondérée des paliers, arrondie au palier, renvoyée de
 ## -100 à +100 comme axis(). Les mécaniques lisent d'abord les composites, un axe seul quand l'effet est précis.
 static func composite(hero: Dictionary, composite_id: String, target = null) -> int:
+	var tiers := {}
+	for axis_id in D.COMPOSITES[composite_id]["axes"]:
+		tiers[axis_id] = effective_tier(hero, axis_id, target)
+	return _composite_tier(tiers, composite_id) * 10
+
+
+## Composite en palier (-10 à +10), calculé sur des paliers donnés.
+static func _composite_tier(tiers: Dictionary, composite_id: String) -> int:
 	var data: Dictionary = D.COMPOSITES[composite_id]
 	var total := 0.0
 	for axis_id in data["axes"]:
-		total += effective_tier(hero, axis_id, target) * float(data["axes"][axis_id])
-	return clampi(roundi(total / float(data["div"])), -D.TIER_MAX, D.TIER_MAX) * 10
+		total += int(tiers.get(axis_id, 0)) * float(data["axes"][axis_id])
+	return clampi(roundi(total / float(data["div"])), -D.TIER_MAX, D.TIER_MAX)
 
 
 ## Score d'un comportement (onglet « Facettes ») de -100 à +100 : somme des 18 contributions
@@ -494,6 +502,49 @@ static func metier(hero: Dictionary) -> String:
 static func metier_name(hero: Dictionary) -> String:
 	var metier_id := metier(hero)
 	return D.METIERS[metier_id]["name"] if D.METIERS.has(metier_id) else ""
+
+
+# ---------------------------------------------------------------------------
+# Les anciens traits, lus sur les paliers (« 1. Paliers », section 12)
+# ---------------------------------------------------------------------------
+# Courageux, Lâche, Loyal... ne sont plus tirés à part : un héros les a quand ses paliers remplissent les
+# conditions de PersonalityData.OLD_TRAITS. Exception : persona["legacy_traits"], les anciens traits qu'un
+# héros d'avant la version 4 de la sauvegarde avait et que son profil ne peut pas donner en même temps
+# qu'un autre (Protecteur et Querelleur, par exemple : l'Empathie ne peut pas être à la fois >= 50 et <= 20).
+
+## Le héros a-t-il cet ancien trait ?
+static func has_old_trait(hero: Dictionary, trait_name: String) -> bool:
+	if not hero.has("persona"):
+		return false
+	if trait_name in hero["persona"].get("legacy_traits", []):
+		return true
+	return _old_trait_met(hero["persona"]["tiers"], trait_name)
+
+
+## Ses anciens traits, dans l'ordre de PersonalityData.OLD_TRAITS.
+static func old_traits(hero: Dictionary) -> Array:
+	return D.OLD_TRAITS.keys().filter(func(trait_name): return has_old_trait(hero, trait_name))
+
+
+static func _old_trait_met(tiers: Dictionary, trait_name: String) -> bool:
+	if not D.OLD_TRAITS.has(trait_name):
+		return false
+	var rule: Dictionary = D.OLD_TRAITS[trait_name]
+	var composites: Dictionary = rule.get("composite", {})
+	for composite_id in composites:
+		var needed: int = composites[composite_id]
+		var value := _composite_tier(tiers, composite_id)
+		if (needed > 0 and value < needed) or (needed < 0 and value > needed):
+			return false
+	if not _meets(tiers, rule.get("needs", {})):
+		return false
+	var at_most: Dictionary = rule.get("at_most", {})
+	for axis_id in at_most:
+		if int(tiers.get(axis_id, 0)) > at_most[axis_id]:
+			return false
+	if rule.has("synergy") and not _meets(tiers, D.SYNERGIES[rule["synergy"]]["needs"]):
+		return false
+	return true
 
 
 # ---------------------------------------------------------------------------
