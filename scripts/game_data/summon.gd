@@ -216,7 +216,7 @@ func _create_secret_hero(hero_name: String) -> Dictionary:
 	return hero
 
 
-## « secret » : héros secret (sa personnalité est tirée avec la queue des héros secrets, voir PersonalityData).
+## « secret » : héros secret (sa personnalité est son profil écrit à la main, voir PersonalityData.SECRET_PROFILES).
 func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, skills: Array, secret := false) -> Dictionary:
 	var hero := {
 		"id": next_hero_id,
@@ -237,9 +237,9 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"favorite": false,     # mis en favori par le Maître (voir FAVORITES_MAX)
 		"mental": MENTAL_MAX,  # santé mentale (voir personality.gd)
 		# Personnalité v2 (18 axes, couches, talent, effort, métier : voir PersonalityEngine). Tirée en la
-		# comparant aux héros déjà là, pour que le nouveau ne leur ressemble pas. Ses traits (Courageux,
-		# Loyal...) se lisent sur ses paliers (has_trait).
-		"persona": PersonalityEngine.generate(rarity, "", roster, 0, secret),
+		# comparant aux héros déjà là, pour que le nouveau ne leur ressemble pas ; un héros secret prend son
+		# profil écrit à la main. Ses traits (Courageux, Loyal...) se lisent sur ses paliers (has_trait).
+		"persona": PersonalityEngine.new_persona(hero_name, rarity, roster, secret),
 		"revealed_traits": [],  # traits que le Maître a découverts (cachés au début)
 	}
 	next_hero_id += 1

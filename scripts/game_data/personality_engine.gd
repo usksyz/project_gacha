@@ -20,6 +20,7 @@ class_name PersonalityEngine
 ##   "metier" : identifiant de PersonalityData.METIERS (métier ou passé)
 ##   "accesses" : identifiants des accès ouverts (recalculés à chaque changement de palier)
 ##   "legacy_traits" : anciens traits gardés d'une sauvegarde d'avant la version 4 (voir has_old_trait)
+##   "secret_profile" : vrai pour un héros secret au profil écrit à la main (avec « layer_notes », « notes »)
 ##   "seed" : graine du tirage (le même graine redonne le même profil, à lobby égal)
 ## Sur le héros lui-même : hero["revealed_traits"], les anciens traits que le Maître a vus (par nom).
 
@@ -292,7 +293,11 @@ static func _roll_aptitudes(rarity: int, metier: String, rng: RandomNumberGenera
 ## version plus ancienne. Renvoie vrai si le héros a changé.
 static func migrate(hero: Dictionary, roster: Array) -> bool:
 	var changed := false
-	if not hero.has("persona"):
+	# Version 2 : un héros secret qui a un profil écrit à la main le prend (même s'il avait un profil tiré).
+	if is_secret_profiled(hero) and not hero.get("persona", {}).get("secret_profile", false):
+		hero["persona"] = secret_persona(hero["name"])
+		changed = true
+	elif not hero.has("persona"):
 		hero["persona"] = generate(hero.get("rarity", 1), "", roster, 0, hero.get("secret", false))
 		changed = true
 	# Version 2 : les anciens traits tirés à part deviennent des lectures de paliers (voir _adopt_old_traits).
@@ -598,6 +603,7 @@ static func push_old_trait(tiers: Dictionary, trait_name: String) -> void:
 ## Migration (sauvegarde version 4) : le héros garde ses anciens traits (hero["traits"], tirés à part) :
 ## ses paliers sont poussés juste au seuil de chacun ; ceux qu'on ne peut pas avoir ensemble restent dans
 ## persona["legacy_traits"]. Les drapeaux « révélé » sont gardés par nom (hero["revealed_traits"]).
+## Un héros secret prend son profil écrit à la main (ses anciens traits tirés au hasard ne comptent pas).
 static func _adopt_old_traits(hero: Dictionary) -> void:
 	var revealed: Array = hero.get("revealed_traits", [])
 	var names: Array = []
@@ -607,6 +613,8 @@ static func _adopt_old_traits(hero: Dictionary) -> void:
 			revealed.append(old["name"])
 	hero["revealed_traits"] = revealed
 	hero.erase("traits")
+	if is_secret_profiled(hero):
+		return  # (son profil est posé par migrate)
 	var tiers: Dictionary = hero["persona"]["tiers"]
 	for trait_name in names:
 		if D.OLD_TRAITS.has(trait_name):
@@ -614,6 +622,61 @@ static func _adopt_old_traits(hero: Dictionary) -> void:
 	var legacy: Array = names.filter(func(trait_name): return D.OLD_TRAITS.has(trait_name) and not _old_trait_met(tiers, trait_name))
 	hero["persona"]["legacy_traits"] = legacy
 	refresh_accesses(hero)
+
+
+# ---------------------------------------------------------------------------
+# Héros secrets : profils écrits à la main (« 1. Paliers », section 11)
+# ---------------------------------------------------------------------------
+
+## Le profil d'un nouveau héros : celui écrit à la main pour un héros secret qui en a un, sinon un tirage.
+static func new_persona(hero_name: String, rarity: int, roster: Array, secret := false) -> Dictionary:
+	if secret and D.SECRET_PROFILES.has(hero_name):
+		return secret_persona(hero_name)
+	return generate(rarity, "", roster, 0, secret)
+
+
+static func is_secret_profiled(hero: Dictionary) -> bool:
+	return hero.get("secret", false) and D.SECRET_PROFILES.has(hero.get("name", ""))
+
+
+## Le profil écrit à la main d'un héros secret : paliers, couches, talent et effort ; pas de métier. Ni la
+## répartition, ni le relief, ni le plafond des absolus. Tics et poids personnels tirés (graine).
+static func secret_persona(hero_name: String, seed: int = 0) -> Dictionary:
+	var profile: Dictionary = D.SECRET_PROFILES[hero_name]
+	if seed == 0:
+		seed = randi() + 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var tiers := {}
+	for axis_id in D.AXIS_ORDER:
+		tiers[axis_id] = clampi(int(profile["tiers"].get(axis_id, 0)), -D.TIER_MAX, D.TIER_MAX)
+	var layers := _roll_layers(tiers, rng)  # (une couche que le cahier ne donne pas : tirée selon les axes)
+	layers.merge(profile.get("layers", {}), true)
+	var aptitudes := {}
+	var talent: int = D.TALENT_LEVELS.get(profile.get("talent", "moyen"), 3)
+	for domain in D.APTITUDE_DOMAINS:
+		aptitudes[domain] = int(profile.get("aptitudes", {}).get(domain, talent))
+	var persona := {
+		"version": D.PROFILE_VERSION,
+		"tiers": tiers,
+		"evo": {},
+		"weights": {},
+		"tics": _roll_tics(tiers, rng),
+		"layers": layers,
+		"layer_notes": profile.get("layer_notes", {}).duplicate(),
+		"notes": profile.get("notes", []).duplicate(),
+		"aptitudes": aptitudes,
+		"effort": float(D.EFFORT_LEVELS.get(profile.get("effort", "moyen"), 30.0)),
+		"metier": "",
+		"accesses": _compute_accesses(tiers),
+		"legacy_traits": [],
+		"secret_profile": true,
+		"seed": seed,
+	}
+	for axis_id in D.AXIS_ORDER:
+		persona["evo"][axis_id] = 0.0
+		persona["weights"][axis_id] = snappedf(rng.randf_range(1.0 - D.PERSONAL_WEIGHT_SPREAD, 1.0 + D.PERSONAL_WEIGHT_SPREAD), 0.01)
+	return persona
 
 
 # ---------------------------------------------------------------------------

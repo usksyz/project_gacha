@@ -705,7 +705,94 @@ const OLD_TRAITS := {
 }
 
 
+# ---------------------------------------------------------------------------
+# Profils des héros secrets (« 1. Paliers », section 11)
+# ---------------------------------------------------------------------------
+# Écrits à la main (convertis de l'ancienne table et complétés d'après l'œuvre) : ils ne suivent ni la
+# répartition, ni la garantie de relief, ni le plafond des absolus. Pas de métier.
+# « tiers » : paliers (valeur / 10). « layers » : la couche la plus proche parmi LAYERS, et « layer_notes » :
+# le texte du cahier (quand aucune option ne le dit exactement, ou quand le cahier ne la donne pas : marqué
+# « interprété »). « talent » : aptitudes (TALENT_LEVELS, et « aptitudes » pour un domaine précis) ; la
+# croissance reste celle de SECRET_HEROES (heroes.gd), inchangée. « effort » : EFFORT_LEVELS.
+# « notes » : ce qui viendra avec d'autres mécaniques (accoutumance, arcs, liens de départ).
+
+## Mots du cahier pour le talent et l'effort → valeurs (provisoires).
+const TALENT_LEVELS := {"très faible": 1, "faible": 2, "moyen": 3, "élevé": 4, "très élevé": 5}
+const EFFORT_LEVELS := {"faible": 10.0, "moyen": 30.0, "élevé": 60.0, "très élevé": 90.0, "maximal": 120.0}
+
+const SECRET_PROFILES := {
+	"Han": {
+		"tiers": {"AUD": 4, "CUR": 4, "SEN": -2, "COL": -4, "PER": 9, "MAI": 8, "EMP": -3, "HON": -2, "AMB": 8,
+			"LOY": -4, "FOI": -7, "STA": 8, "OPT": 2, "VIT": 2, "CON": -2, "DOU": 3, "ACU": 5, "RYT": 0},
+		"layers": {"value": "reussite", "need": "competence", "fear": "deshonneur", "attachment": "evitant"},
+		"layer_notes": {"value": "Ne jamais perdre, survivre", "need": "interprété", "fear": "Perdre le contrôle, la défaite",
+			"attachment": "Évitant (s'ouvre lentement)"},
+		"talent": "élevé", "effort": "très élevé",
+		"notes": ["Accoutumance maximale à la synthèse dès le départ (à brancher avec l'accoutumance)"],
+	},
+	"Jenna": {
+		"tiers": {"AUD": 4, "CUR": 6, "SEN": 6, "COL": -1, "PER": 4, "MAI": 2, "EMP": 4, "HON": 6, "AMB": -3,
+			"LOY": 7, "FOI": 0, "STA": 8, "OPT": 8, "VIT": 6, "CON": 0, "DOU": 0, "ACU": 7, "RYT": -2},
+		"layers": {"value": "obeissance", "need": "appartenance", "fear": "inutile", "attachment": "secure"},
+		"layer_notes": {"value": "Appartenir, suivre la bonne personne", "need": "interprété", "fear": "Devenir inutile"},
+		"talent": "faible", "aptitudes": {"arc": 5, "dague": 5}, "effort": "moyen",
+		"notes": ["Croissance faible (celle de SECRET_HEROES), aptitudes très hautes à l'arc et à la dague"],
+	},
+	"Aaron": {
+		"tiers": {"AUD": -4, "CUR": -2, "SEN": 5, "COL": -2, "PER": 9, "MAI": 5, "EMP": 5, "HON": 8, "AMB": -6,
+			"LOY": 8, "FOI": 2, "STA": -2, "OPT": -1, "VIT": 0, "CON": -2, "DOU": 1, "ACU": 2, "RYT": -3},
+		"layers": {"value": "bienveillance", "need": "appartenance", "fear": "mourir", "attachment": "anxieux"},
+		"layer_notes": {"value": "La famille (rentrer pour sa petite sœur)", "need": "interprété",
+			"fear": "Mourir sans revoir sa sœur"},
+		"talent": "très faible", "effort": "maximal",
+		"notes": ["L'acharné", "Commence Déboussolé (arcs, à venir)"],
+	},
+	"Hansen": {
+		"tiers": {"AUD": 1, "CUR": 1, "SEN": 5, "COL": 0, "PER": 1, "MAI": -2, "EMP": 5, "HON": 3, "AMB": -1,
+			"LOY": 8, "FOI": 0, "STA": -1, "OPT": 6, "VIT": 5, "CON": 2, "DOU": 0, "ACU": 0, "RYT": 0},
+		"layers": {"value": "bienveillance", "need": "appartenance", "fear": "perdre_proche", "attachment": "secure"},
+		"layer_notes": {"value": "La camaraderie", "need": "interprété", "fear": "Perdre ses amis"},
+		"talent": "faible", "effort": "moyen",
+		"notes": ["Ami de Zid dès le départ (lien de départ pas encore fait)"],
+	},
+	"Zid": {
+		"tiers": {"AUD": -1, "CUR": 1, "SEN": 5, "COL": 0, "PER": 1, "MAI": -4, "EMP": 5, "HON": 3, "AMB": -1,
+			"LOY": 8, "FOI": 0, "STA": -3, "OPT": 6, "VIT": 5, "CON": 2, "DOU": -4, "ACU": 0, "RYT": 0},
+		"layers": {"value": "bienveillance", "need": "appartenance", "fear": "perdre_proche", "attachment": "anxieux"},
+		"layer_notes": {"value": "La camaraderie", "need": "interprété", "fear": "Perdre ses amis"},
+		"talent": "faible", "effort": "moyen",
+		"notes": ["Ami de Hansen dès le départ (lien de départ pas encore fait)", "Panique quand il est blessé"],
+	},
+	"Shei": {
+		"tiers": {"AUD": 8, "CUR": 0, "SEN": -1, "COL": -4, "PER": 7, "MAI": 8, "EMP": 4, "HON": 8, "AMB": 1,
+			"LOY": 6, "FOI": 3, "STA": 9, "OPT": 2, "VIT": 2, "CON": 5, "DOU": 4, "ACU": 3, "RYT": -2},
+		"layers": {"value": "obeissance", "need": "competence", "fear": "deshonneur", "attachment": "secure"},
+		"layer_notes": {"value": "Le devoir", "need": "interprété", "fear": "Le déshonneur",
+			"attachment": "Sécure (accepte son sort avec calme)"},
+		"talent": "élevé", "effort": "élevé",
+		"notes": [],
+	},
+	"Yvolka": {
+		"tiers": {"AUD": 3, "CUR": 5, "SEN": 2, "COL": 4, "PER": -5, "MAI": -6, "EMP": -2, "HON": 1, "AMB": 8,
+			"LOY": 0, "FOI": 0, "STA": -3, "OPT": 4, "VIT": 3, "CON": -2, "DOU": -3, "ACU": 1, "RYT": 2},
+		"layers": {"value": "reussite", "need": "reconnaissance", "fear": "inutile", "attachment": "anxieux"},
+		"layer_notes": {"value": "La reconnaissance", "fear": "Être remplacée", "attachment": "Anxieux sous l'orgueil"},
+		"talent": "très élevé", "effort": "faible",
+		"notes": ["La Suffisante"],
+	},
+	"Edith": {
+		"tiers": {"AUD": 5, "CUR": 3, "SEN": -2, "COL": -2, "PER": 6, "MAI": 7, "EMP": 6, "HON": 1, "AMB": 4,
+			"LOY": 3, "FOI": -2, "STA": 3, "OPT": -2, "VIT": 1, "CON": 0, "DOU": 2, "ACU": 6, "RYT": 3},
+		"layers": {"value": "bienveillance", "need": "appartenance", "fear": "perdre_proche", "attachment": "evitant"},
+		"layer_notes": {"value": "Protéger son équipe", "need": "interprété", "fear": "Perdre ceux qu'elle mène",
+			"attachment": "Évitant mais chaleureux"},
+		"talent": "élevé", "effort": "élevé",
+		"notes": ["Meneuse (synergie Meneur)"],
+	},
+}
+
+
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
 ## enregistré, avec la migration au chargement (PersonalityEngine.migrate).
-## 2 : anciens traits lus sur les paliers (« legacy_traits »).
+## 2 : anciens traits lus sur les paliers (« legacy_traits »), profils des héros secrets (« secret_profile »).
 const PROFILE_VERSION := 2

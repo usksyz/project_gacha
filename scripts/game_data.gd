@@ -246,10 +246,11 @@ func dev_add_evolution(hero: Dictionary, axis_id: String, points: float) -> Arra
 	return lines
 
 
-## Tire une nouvelle personnalité pour ce héros (comparée aux autres héros vivants).
+## Tire une nouvelle personnalité pour ce héros (comparée aux autres héros vivants ; un héros secret
+## reprend son profil écrit à la main). Ses anciens traits suivent ses nouveaux paliers.
 func dev_reroll_personality(hero: Dictionary) -> void:
 	var others := roster.filter(func(other): return other["id"] != hero["id"])
-	hero["persona"] = PersonalityEngine.generate(hero["rarity"], "", others, 0, hero.get("secret", false))
+	hero["persona"] = PersonalityEngine.new_persona(hero["name"], hero["rarity"], others, hero.get("secret", false))
 	save_game()
 
 

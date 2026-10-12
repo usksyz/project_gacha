@@ -21,7 +21,7 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ## 3 : personnalité v2 (hero["persona"], voir PersonalityEngine) ; les héros d'avant la reçoivent au chargement.
 ## 4 : les anciens traits (hero["traits"]) se lisent sur les paliers : chaque héros garde les siens (paliers
 ##     poussés juste au seuil, PersonalityEngine.migrate), les drapeaux « révélé » passent dans
-##     hero["revealed_traits"].
+##     hero["revealed_traits"] ; les héros secrets prennent leur profil écrit à la main.
 const SAVE_VERSION := 4
 
 
@@ -113,7 +113,7 @@ func load_game() -> bool:
 			hero["mental"] = MENTAL_MAX
 	# Héros d'avant la personnalité v2 : leur profil est tiré maintenant (un par un, chacun comparé à ceux
 	# déjà tirés, comme à l'invocation) ; un profil plus ancien est complété ; ceux d'avant la version 4 gardent
-	# leurs anciens traits (PersonalityEngine.migrate).
+	# leurs anciens traits, et les héros secrets prennent leur profil écrit à la main (PersonalityEngine.migrate).
 	for hero in roster:
 		PersonalityEngine.migrate(hero, roster)
 	return not roster.is_empty()

@@ -331,6 +331,17 @@ func _add_personality_tools(content: VBoxContainer, hero: Dictionary) -> void:
 	lines.append("Talent : croissance %d ; aptitudes %s" % [hero["growth"], ", ".join(aptitude_parts)])
 	lines.append("Effort : %.0f · acharnement x%.2f" % [persona["effort"], PersonalityEngine.acharnement(hero)])
 	lines.append("Tics : %s" % " ; ".join(persona["tics"].map(func(tic_id): return PersonalityEngine.tic_text(tic_id))))
+	# Anciens traits lus sur les paliers (révélés ou non), et ceux gardés d'une ancienne sauvegarde.
+	var trait_parts: Array = GameData.hero_traits(hero).map(func(t): return t["name"] + ("" if t["known"] else " (caché)"))
+	lines.append("Traits : %s" % (", ".join(trait_parts) if not trait_parts.is_empty() else "aucun"))
+	if not persona.get("legacy_traits", []).is_empty():
+		lines.append("Gardés de l'ancienne version (le profil ne peut pas les donner) : %s" % ", ".join(persona["legacy_traits"]))
+	if persona.get("secret_profile", false):
+		var note_parts: Array = []
+		for layer_id in persona.get("layer_notes", {}):
+			note_parts.append("%s : %s" % [PersonalityData.LAYERS[layer_id]["name"], persona["layer_notes"][layer_id]])
+		note_parts.append_array(persona.get("notes", []))
+		lines.append("Profil écrit à la main. %s" % " ; ".join(note_parts))
 	for line in lines:
 		var label := UI.make_label(line, 17)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
