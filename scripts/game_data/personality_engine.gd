@@ -86,6 +86,8 @@ static func generate(rarity: int, background: String, roster: Array, seed: int =
 	persona["accesses"] = _compute_accesses(best)
 	persona["hierarchy_stance"] = roll_stance(best, rng)
 	persona["debts"] = []
+	persona["subjects"] = _starting_subjects(metier)
+	persona["pending_report"] = []
 	return persona
 
 
@@ -340,6 +342,13 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 		changed = true
 	if not persona.has("debts"):
 		persona["debts"] = []
+		changed = true
+	# Version 3 (P1b) : sujets connus d'après le métier (ou le profil d'un héros secret), rapport vide.
+	if not persona.has("subjects"):
+		persona["subjects"] = _starting_subjects(persona.get("metier", ""), hero.get("name", "") if is_secret_profiled(hero) else "")
+		changed = true
+	if not persona.has("pending_report"):
+		persona["pending_report"] = []
 		changed = true
 	# Version 3 (P1b) : les 8 briques, vides ou neutres ; une brique ajoutée plus tard est complétée.
 	if not persona.has("mind"):
@@ -597,6 +606,206 @@ static func _game() -> Node:
 ## Le jour (nombre de jours depuis 1970, heure de l'appareil) : pour dater sujets, dettes et souvenirs.
 static func today() -> int:
 	return int(Time.get_unix_time_from_system() / 86400.0)
+
+
+# ---------------------------------------------------------------------------
+# Sujets : appréhension et connaissance (document de référence, section 3 bis)
+# ---------------------------------------------------------------------------
+# hero["persona"]["subjects"] = {sujet: {"apprehension" (0 à 100), "knowledge" (0 à 4), "progress",
+#   "last_seen" (jour, 0 = jamais), "extinguished" (peur perdue, qui peut revenir), "settings" (cadres où
+#   une rencontre a réussi : nuit, lieu...), "encounters", "scar", "scar_floor", "hate", "prior" (connu
+#   avant l'invocation)}} ; hero["persona"]["pending_report"] : ce qu'il rapporte, avant de l'écrire à la
+#   bibliothèque. Aucun effet en combat pour l'instant (P2) : rien ne lit encore ces valeurs.
+
+## Appréhension de départ d'un sujet inconnu : son danger, plus la Prudence et le Pessimisme.
+static func start_apprehension(hero: Dictionary, subject: String) -> float:
+	var value := float(D.SUBJECTS.get(subject, {}).get("danger", 50))
+	for axis_id in D.APPREHENSION_PER_TIER:
+		value += D.APPREHENSION_PER_TIER[axis_id] * tier(hero, axis_id)
+	return clampf(value, 0.0, 100.0)
+
+
+static func subjects(hero: Dictionary) -> Dictionary:
+	return hero.get("persona", {}).get("subjects", {})
+
+
+## Les sujets connus avant l'invocation, d'après le métier (ou le profil écrit à la main d'un héros secret).
+static func _starting_subjects(metier_id: String, secret_name := "") -> Dictionary:
+	var source: Dictionary = D.BACKGROUND_SUBJECTS.get(metier_id, {})
+	if secret_name != "" and D.SECRET_PROFILES.has(secret_name):
+		source = D.SECRET_PROFILES[secret_name].get("subjects", {})
+	var result := {}
+	for subject in source:
+		result[subject] = _new_subject_entry(float(source[subject][1]), int(source[subject][0]), true)
+	return result
+
+
+static func _new_subject_entry(apprehension_value: float, knowledge_level := 0, prior := false) -> Dictionary:
+	return {"apprehension": apprehension_value, "knowledge": knowledge_level, "progress": 0.0, "last_seen": 0,
+		"extinguished": 0.0, "settings": [], "encounters": 0, "scar": false, "scar_floor": 0.0, "hate": false,
+		"prior": prior}
+
+
+## L'entrée d'un sujet (créée avec l'appréhension de départ si le héros ne le connaît pas encore).
+static func _subject_entry(hero: Dictionary, subject: String) -> Dictionary:
+	var all: Dictionary = hero["persona"]["subjects"]
+	if not all.has(subject):
+		all[subject] = _new_subject_entry(start_apprehension(hero, subject))
+	return all[subject]
+
+
+## Le danger que le héros attend de ce sujet (0 à 100). « context » : {"setting": cadre (« nuit »,
+## « place:foret »...), "day": jour}. Une longue absence fait revenir une partie de la peur perdue ; un
+## cadre nouveau la fait remonter jusqu'à la première rencontre réussie dans ce cadre (moins chez un Curieux,
+## plus chez un Routinier). Une cicatrice l'empêche de redescendre sous son plancher.
+static func apprehension(hero: Dictionary, subject: String, context := {}) -> float:
+	var entry: Dictionary = subjects(hero).get(subject, {})
+	if entry.is_empty():
+		return start_apprehension(hero, subject)
+	var value: float = entry["apprehension"]
+	var day: int = context.get("day", today())
+	if entry["last_seen"] > 0 and day - int(entry["last_seen"]) >= D.ABSENCE_DAYS:
+		value += float(entry["extinguished"]) * D.SPONTANEOUS_RETURN
+	var setting: String = context.get("setting", "")
+	if setting != "" and int(entry["encounters"]) > 0 and not setting in entry["settings"]:
+		value += maxf(0.0, D.RENEWAL_FEAR * (1.0 - D.RENEWAL_ROUTINE_STEP * tier(hero, "CUR")))
+	if entry["scar"]:
+		value = maxf(value, float(entry["scar_floor"]))
+	return clampf(value, 0.0, 100.0)
+
+
+## Connaissance d'un sujet (0 à 4).
+static func knowledge(hero: Dictionary, subject: String) -> int:
+	return int(subjects(hero).get(subject, {}).get("knowledge", 0))
+
+
+## Après une rencontre : on compare l'attente au danger vécu. « report » : {"danger" (0 à 100 : dégâts
+## reçus, alliés tombés, coups évités de justesse, durée), "mode" (« fought », « watched », « heard »),
+## "hits", "dodges", "grave" (ami mort, quasi-mort), "setting", "day"}. Plus faible qu'attendu : la peur
+## baisse d'une part de l'écart ; plus fort : elle monte, plus vite. Un événement grave peut laisser une
+## cicatrice (Vulnérable) ou une haine (Colérique, Persévérant). La connaissance grandit (surtout en touchant
+## et en esquivant). Renvoie ce qui a changé. Sans effet en combat pour l'instant (rien ne lit ces valeurs).
+static func after_encounter(hero: Dictionary, subject: String, report: Dictionary) -> Dictionary:
+	if not hero.has("persona"):
+		return {}
+	var mode: String = report.get("mode", "fought")
+	var share: float = D.LEARN_SHARE.get(mode, 0.0)
+	var day: int = report.get("day", today())
+	var setting: String = report.get("setting", "")
+	var expected := apprehension(hero, subject, {"setting": setting, "day": day})
+	var entry := _subject_entry(hero, subject)
+	var result := {"subject": subject, "apprehension_before": float(entry["apprehension"]),
+		"knowledge_before": int(entry["knowledge"]), "scar": false, "hate": false}
+	var danger: float = report.get("danger", expected)
+	var gap := danger - expected
+	if gap < 0.0:
+		var drop := -gap * D.FEAR_DROP_RATE * share * effect_mul(1.0, D.FEAR_STABILITY_STEP, tier(hero, "STA"))
+		if D.SUBJECTS.get(subject, {}).get("type", "") == "vue":
+			drop *= effect_mul(1.0, D.DETACHMENT_STEP, -tier(hero, "SEN"))  # le Détaché s'endurcit vite
+		drop = minf(drop, float(entry["apprehension"]))
+		entry["apprehension"] = float(entry["apprehension"]) - drop
+		entry["extinguished"] = float(entry["extinguished"]) + drop
+		if setting != "" and not setting in entry["settings"]:
+			entry["settings"].append(setting)  # première rencontre réussie dans ce cadre
+	else:
+		var rise := gap * D.FEAR_RISE_RATE * share * effect_mul(1.0, D.FEAR_STABILITY_STEP, -tier(hero, "STA"))
+		entry["apprehension"] = minf(100.0, float(entry["apprehension"]) + rise)
+	if report.get("grave", false) and mode == "fought":
+		if tier(hero, "STA") <= -D.HATE_TIER and randf() < D.SCAR_CHANCE:
+			entry["scar"] = true
+			entry["scar_floor"] = float(entry["apprehension"])
+			result["scar"] = true
+		elif tier(hero, "COL") >= D.HATE_TIER or tier(hero, "PER") >= D.HATE_TIER:
+			entry["hate"] = true
+			result["hate"] = true
+	if mode != "heard":
+		entry["encounters"] = int(entry["encounters"]) + 1
+		entry["last_seen"] = day
+	var points: float = (D.KNOWLEDGE_BASE_POINTS + report.get("hits", 0) + 2.0 * report.get("dodges", 0)) * share \
+		* effect_mul(1.0, D.CURIOSITY_LEARN_STEP, tier(hero, "CUR"))
+	if mode == "watched":
+		points *= effect_mul(1.0, D.ACUITY_WATCH_STEP, tier(hero, "ACU"))
+	_add_knowledge(entry, points, D.KNOWLEDGE_CAP.get(mode, 1))
+	result["apprehension"] = float(entry["apprehension"])
+	result["knowledge"] = int(entry["knowledge"])
+	_add_to_report(hero, {"kind": "subject", "subject": subject, "knowledge": int(entry["knowledge"]),
+		"apprehension": float(entry["apprehension"]), "day": day})
+	return result
+
+
+## Ajoute des points de connaissance, sans dépasser « cap ». Renvoie le nombre de niveaux gagnés.
+static func _add_knowledge(entry: Dictionary, points: float, cap: int) -> int:
+	if int(entry["knowledge"]) >= cap or points <= 0.0:
+		return 0
+	var gained := 0
+	entry["progress"] = float(entry["progress"]) + points
+	while int(entry["knowledge"]) < cap and float(entry["progress"]) >= D.KNOWLEDGE_LEVELS[int(entry["knowledge"]) + 1]["cost"]:
+		entry["progress"] = float(entry["progress"]) - D.KNOWLEDGE_LEVELS[int(entry["knowledge"]) + 1]["cost"]
+		entry["knowledge"] = int(entry["knowledge"]) + 1
+		gained += 1
+	if int(entry["knowledge"]) >= cap:
+		entry["progress"] = 0.0
+	return gained
+
+
+## Fait apprendre un sujet (bibliothèque, mémorial) : points de connaissance jusqu'au niveau « cap », et
+## appréhension déplacée de « fear_delta ». Renvoie le nombre de niveaux gagnés.
+static func learn_subject(hero: Dictionary, subject: String, points: float, cap: int, fear_delta := 0.0) -> int:
+	if not hero.has("persona"):
+		return 0
+	var entry := _subject_entry(hero, subject)
+	entry["apprehension"] = clampf(float(entry["apprehension"]) + fear_delta, 0.0, 100.0)
+	return _add_knowledge(entry, points, cap)
+
+
+## Transmission au lobby : « a » explique (l'Empathique explique bien), « b » écoute (le Méfiant n'écoute
+## pas). Chaque sujet que « a » connaît mieux fait progresser « b », jusqu'au niveau KNOWLEDGE_CAP « lobby »
+## (et jamais au-delà de « a ») ; le récit rapproche un peu l'appréhension de « b » de celle de « a ».
+## Renvoie {sujet: niveaux gagnés}.
+static func share_knowledge(a: Dictionary, b: Dictionary) -> Dictionary:
+	var gains := {}
+	if not a.has("persona") or not b.has("persona") or tier(b, "LOY") <= -D.HATE_TIER:
+		return gains
+	for subject in subjects(a):
+		var teacher: Dictionary = subjects(a)[subject]
+		if int(teacher["knowledge"]) <= knowledge(b, subject):
+			continue
+		var learner := _subject_entry(b, subject)
+		var points := D.SHARE_POINTS * effect_mul(1.0, D.SHARE_TEACH_STEP, tier(a, "EMP")) * effect_mul(1.0, D.SHARE_LISTEN_STEP, tier(b, "LOY"))
+		var gained := _add_knowledge(learner, points, mini(int(teacher["knowledge"]), D.KNOWLEDGE_CAP["lobby"]))
+		learner["apprehension"] = float(learner["apprehension"]) + (float(teacher["apprehension"]) - float(learner["apprehension"])) * D.SHARE_FEAR_PULL
+		if gained > 0:
+			gains[subject] = gained
+	return gains
+
+
+## Le sujet d'un ennemi (« monster:gobelin » pour « Gobelin »), ou « » s'il n'en a pas.
+static func subject_for_enemy(base_name: String) -> String:
+	for subject in D.SUBJECTS:
+		if D.SUBJECTS[subject].get("enemy", "") == base_name:
+			return subject
+	return ""
+
+
+## Ce que le héros rapporte (avant de l'écrire à la bibliothèque) : une entrée par sujet (la plus récente).
+static func pending_report(hero: Dictionary) -> Array:
+	return hero.get("persona", {}).get("pending_report", [])
+
+
+static func _add_to_report(hero: Dictionary, item: Dictionary) -> void:
+	var report: Array = hero["persona"]["pending_report"]
+	for i in report.size():
+		if report[i].get("kind") == item["kind"] and report[i].get("subject", "") == item.get("subject", "") \
+				and report[i].get("floor", -1) == item.get("floor", -1):
+			report[i] = item
+			return
+	report.append(item)
+
+
+## Ajoute à son rapport un carnet d'étage, une formation ou une stratégie (voir Library.deposit).
+static func add_report_item(hero: Dictionary, item: Dictionary) -> void:
+	if hero.has("persona"):
+		_add_to_report(hero, item)
 
 
 ## +1, -1 ou 0 selon que l'axe a passé le seuil du trait (50) d'un côté ou de l'autre.
@@ -918,6 +1127,8 @@ static func secret_persona(hero_name: String, seed: int = 0) -> Dictionary:
 		persona["weights"][axis_id] = snappedf(rng.randf_range(1.0 - D.PERSONAL_WEIGHT_SPREAD, 1.0 + D.PERSONAL_WEIGHT_SPREAD), 0.01)
 	persona["hierarchy_stance"] = roll_stance(tiers, rng)
 	persona["debts"] = []
+	persona["subjects"] = _starting_subjects("", hero_name)  # Han : la synthèse, accoutumance maximale
+	persona["pending_report"] = []
 	return persona
 
 

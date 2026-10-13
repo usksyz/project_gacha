@@ -85,6 +85,82 @@ func _check_circles() -> void:
 	_check(E.circle(courtier, strong) == "rival", "opinion très basse : rival")
 	_check(E.score(courtier, "obey_strong", strong) != E.score(courtier, "obey_strong"), "score() applique le décalage du cercle")
 	_check(not E.is_watched(), "is_watched() : faux tant que les écrans ne le branchent pas (P3)")
+	_check_subjects()
+
+
+## Un héros de test au profil neutre (tous les paliers à 0), avec quelques paliers choisis.
+func _plain_hero(id: int, metier := "scribe", tiers := {}) -> Dictionary:
+	var hero := {"id": id, "name": "H%d" % id, "rarity": 1, "persona": E.generate(1, metier, [], 5000 + id)}
+	for axis_id in D.AXIS_ORDER:
+		E.set_tier(hero, axis_id, int(tiers.get(axis_id, 0)))
+	return hero
+
+
+func _check_subjects() -> void:
+	print("Sujets et accoutumance")
+	var hunter := {"id": 20, "rarity": 2, "persona": E.generate(2, "chasseur", [], 31)}
+	_check(E.knowledge(hunter, "monster:loup_noir") == 3 and E.subjects(hunter)["monster:loup_noir"]["prior"], "chasseur : loups connus avant l'invocation (niveau 3)")
+	var shepherd := {"id": 21, "rarity": 1, "persona": E.generate(1, "berger", [], 32)}
+	_check(E.apprehension(shepherd, "monster:loup_noir") >= 70.0, "berger : connaît les loups et les craint")
+	var han := {"id": 22, "name": "Han", "rarity": 1, "secret": true, "persona": E.new_persona("Han", 1, [], true)}
+	_check(E.knowledge(han, "synthesis") == 4 and E.apprehension(han, "synthesis") == 0.0, "Han : accoutumance maximale à la synthèse dès le départ")
+	var bold := _plain_hero(23, "scribe", {"AUD": 8})
+	var careful := _plain_hero(24, "scribe", {"AUD": -8, "OPT": -5})
+	_check(E.apprehension(careful, "monster:gobelin") > E.apprehension(bold, "monster:gobelin"), "Prudence et Pessimisme : plus d'appréhension de départ")
+	# Un combat facile fait baisser la peur ; un combat dur la fait monter, plus vite.
+	var a := _plain_hero(25)
+	var start := E.apprehension(a, "monster:gobelin")
+	var easy := E.after_encounter(a, "monster:gobelin", {"danger": 0.0, "mode": "fought", "day": 100})
+	var b := _plain_hero(26)
+	var hard := E.after_encounter(b, "monster:gobelin", {"danger": 100.0, "mode": "fought", "day": 100})
+	var drop: float = start - easy["apprehension"]
+	var rise: float = hard["apprehension"] - start
+	print("  gobelins, départ %.0f : combat facile → %.1f, combat dur → %.1f" % [start, easy["apprehension"], hard["apprehension"]])
+	_check(drop > 0.0 and rise > 0.0 and rise / (100.0 - start) > drop / start, "la peur monte plus vite qu'elle ne baisse")
+	var steady := _plain_hero(27, "scribe", {"STA": 8})
+	var fragile := _plain_hero(28, "scribe", {"STA": -8})
+	var s1 := E.after_encounter(steady, "monster:gobelin", {"danger": 0.0, "mode": "fought", "day": 100})
+	var s2 := E.after_encounter(fragile, "monster:gobelin", {"danger": 0.0, "mode": "fought", "day": 100})
+	_check(s1["apprehension"] < s2["apprehension"], "Stabilité : la peur baisse plus vite")
+	var watcher := _plain_hero(29)
+	E.after_encounter(watcher, "monster:gobelin", {"danger": 0.0, "mode": "watched", "day": 100})
+	_check(E.apprehension(watcher, "monster:gobelin") > easy["apprehension"], "regarder apprend moins que combattre (40 %)")
+	# Retour spontané et renouvellement.
+	_check(E.apprehension(a, "monster:gobelin", {"day": 110}) > E.apprehension(a, "monster:gobelin", {"day": 101}), "absence de 7 jours : une partie de la peur revient")
+	_check(E.apprehension(a, "monster:gobelin", {"day": 101, "setting": "nuit"}) > E.apprehension(a, "monster:gobelin", {"day": 101}), "la nuit (cadre nouveau) : la peur remonte")
+	# Connaissance : plafonds selon la façon d'apprendre.
+	var fighter := _plain_hero(30)
+	var spectator := _plain_hero(31)
+	for i in 60:
+		E.after_encounter(fighter, "monster:loup_noir", {"danger": 30.0, "mode": "fought", "hits": 3, "dodges": 2, "day": 100})
+		E.after_encounter(spectator, "monster:loup_noir", {"danger": 30.0, "mode": "watched", "day": 100})
+	_check(E.knowledge(fighter, "monster:loup_noir") == 4 and E.knowledge(spectator, "monster:loup_noir") == 3, "niveau 4 seulement sur le terrain ; en regardant : 3 au plus")
+	_check(not E.pending_report(fighter).is_empty(), "ce qu'il a appris attend d'être écrit (pending_report)")
+	# Événement grave : cicatrice chez un Vulnérable, haine chez un Colérique.
+	var scars := 0
+	for i in 200:
+		var v := _plain_hero(100 + i, "scribe", {"STA": -7})
+		if E.after_encounter(v, "monster:chef_gobelin", {"danger": 100.0, "mode": "fought", "grave": true, "day": 100})["scar"]:
+			scars += 1
+	var angry := _plain_hero(32, "scribe", {"COL": 7})
+	_check(scars > 30 and scars < 90, "Vulnérable : cicatrice possible après un événement grave (%d / 200)" % scars)
+	_check(E.after_encounter(angry, "monster:chef_gobelin", {"danger": 100.0, "mode": "fought", "grave": true, "day": 100})["hate"], "Colérique : haine de ce sujet")
+	# Transmission au lobby.
+	var kind_teacher := _plain_hero(33, "scribe", {"EMP": 8})
+	var cold_teacher := _plain_hero(34, "scribe", {"EMP": -8})
+	for teacher in [kind_teacher, cold_teacher]:
+		E.learn_subject(teacher, "monster:golem", 1000.0, 4)
+	var l1 := _plain_hero(35)
+	var l2 := _plain_hero(36)
+	var distrustful := _plain_hero(37, "scribe", {"LOY": -7})
+	E.share_knowledge(kind_teacher, l1)
+	E.share_knowledge(cold_teacher, l2)
+	var learned := func(h): return E.knowledge(h, "monster:golem") * 1000.0 + E.subjects(h)["monster:golem"]["progress"]
+	_check(learned.call(l1) > learned.call(l2), "l'Empathique explique mieux")
+	_check(E.share_knowledge(kind_teacher, distrustful).is_empty() and E.knowledge(distrustful, "monster:golem") == 0, "le Méfiant n'écoute pas")
+	for i in 20:
+		E.share_knowledge(kind_teacher, l1)
+	_check(E.knowledge(l1, "monster:golem") == D.KNOWLEDGE_CAP["lobby"], "au lobby : niveau 2 au plus")
 
 
 func _check(ok: bool, text: String) -> void:

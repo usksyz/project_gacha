@@ -729,7 +729,9 @@ const SECRET_PROFILES := {
 		"layer_notes": {"value": "Ne jamais perdre, survivre", "need": "interprété", "fear": "Perdre le contrôle, la défaite",
 			"attachment": "Évitant (s'ouvre lentement)"},
 		"talent": "élevé", "effort": "très élevé",
-		"notes": ["Accoutumance maximale à la synthèse dès le départ (à brancher avec l'accoutumance)"],
+		"notes": ["Accoutumance maximale à la synthèse dès le départ"],
+		# Sujets connus dès le départ, [connaissance, appréhension] (comme BACKGROUND_SUBJECTS).
+		"subjects": {"synthesis": [4, 0]},
 	},
 	"Jenna": {
 		"tiers": {"AUD": 4, "CUR": 6, "SEN": 6, "COL": -1, "PER": 4, "MAI": 2, "EMP": 4, "HON": 6, "AMB": -3,
@@ -913,6 +915,103 @@ const HIERARCHY_STANCES := {
 }
 ## Hasard dans le tirage du rapport à la hiérarchie (comme LAYER_NOISE).
 const STANCE_NOISE := 0.6
+
+
+# ---------------------------------------------------------------------------
+# Sujets : appréhension et connaissance (document de référence, section 3 bis) — P1b : sans effet en combat
+# ---------------------------------------------------------------------------
+# Un sujet : une espèce ou une famille de monstres, la synthèse, le lobby, un lieu, un type de mission, la
+# vue du sang... Deux valeurs par sujet : l'appréhension (0 à 100, le danger attendu, qui réglera la peur
+# et le stress en P2) et la connaissance (niveaux 0 à 4, ce qu'il sait, qui réglera ce qu'il fait de mieux).
+# « danger » : appréhension de départ d'un héros qui n'en sait rien ; « enemy » : nom de base de l'ennemi
+# (tower.gd) ; « family » : sa famille (un sujet elle aussi).
+const SUBJECTS := {
+	"monster:gobelin": {"name": "Gobelins", "type": "monstre", "danger": 35, "enemy": "Gobelin", "family": "family:gobelins"},
+	"monster:loup_noir": {"name": "Loups noirs", "type": "monstre", "danger": 45, "enemy": "Loup noir", "family": "family:betes"},
+	"monster:squelette_archer": {"name": "Squelettes archers", "type": "monstre", "danger": 45, "enemy": "Squelette archer", "family": "family:morts_vivants"},
+	"monster:golem": {"name": "Golems de pierre", "type": "monstre", "danger": 55, "enemy": "Golem de pierre", "family": "family:creatures"},
+	"monster:chaman": {"name": "Chamans", "type": "monstre", "danger": 40, "enemy": "Chaman", "family": "family:gobelins"},
+	"monster:sorcier_gobelin": {"name": "Sorciers gobelins", "type": "monstre", "danger": 55, "enemy": "Sorcier gobelin", "family": "family:gobelins"},
+	"monster:chef_gobelin": {"name": "Chef gobelin", "type": "boss", "danger": 75, "enemy": "Chef gobelin", "family": "family:gobelins"},
+	"monster:minotaure": {"name": "Minotaure", "type": "boss", "danger": 85, "enemy": "Minotaure", "family": "family:betes"},
+	"monster:liche": {"name": "Liche", "type": "boss", "danger": 90, "enemy": "Liche", "family": "family:morts_vivants"},
+	"monster:hydre": {"name": "Hydre", "type": "boss", "danger": 90, "enemy": "Hydre", "family": "family:betes"},
+	"family:gobelins": {"name": "Famille des gobelins", "type": "famille", "danger": 35},
+	"family:betes": {"name": "Bêtes", "type": "famille", "danger": 40},
+	"family:morts_vivants": {"name": "Morts-vivants", "type": "famille", "danger": 50},
+	"family:creatures": {"name": "Créatures souterraines", "type": "famille", "danger": 50},
+	"family:humanoides": {"name": "Humanoïdes", "type": "famille", "danger": 40},
+	"synthesis": {"name": "La synthèse", "type": "synthese", "danger": 80},
+	"lobby": {"name": "Le lobby", "type": "lieu", "danger": 20},
+	"place:tour": {"name": "La Tour", "type": "lieu", "danger": 50},
+	"place:mine": {"name": "Mine d'Isralta", "type": "lieu", "danger": 40},
+	"place:foret": {"name": "Forêt Kenout", "type": "lieu", "danger": 40},
+	"place:plateau": {"name": "Plateau Sinmiel", "type": "lieu", "danger": 40},
+	"place:obscurite": {"name": "L'obscurité", "type": "lieu", "danger": 45},
+	"mission:survie": {"name": "Survie (horde)", "type": "mission", "danger": 65},
+	"mission:defense": {"name": "Défense de la cité", "type": "mission", "danger": 70},
+	"sight:blood": {"name": "La vue du sang", "type": "vue", "danger": 40},
+	"sight:death": {"name": "La mort", "type": "vue", "danger": 55},
+	"sight:wounded": {"name": "Les blessés", "type": "vue", "danger": 35},
+}
+
+## Niveaux de connaissance (0 = rien) : ce que le héros sait, et ce qu'on le verra faire en combat (P2).
+## « cost » : points de progression pour atteindre ce niveau depuis le précédent.
+const KNOWLEDGE_LEVELS := {
+	1: {"name": "Reconnaît", "knows": "Le nom, la famille", "seen": "Il ne gèle plus à l'apparition", "cost": 10.0},
+	2: {"name": "Lit les attaques", "knows": "Les gestes qui annoncent un coup", "seen": "Il recule ou lève le bouclier avant le coup", "cost": 30.0},
+	3: {"name": "Points faibles", "knows": "Où frapper, quel élément", "seen": "Il vise la gorge, change d'arme tout seul", "cost": 60.0},
+	4: {"name": "Comportement", "knows": "Fuite, embuscade, appât, chef de meute", "seen": "Il coupe la fuite, frappe le chef en premier", "cost": 100.0},
+}
+const KNOWLEDGE_MAX := 4
+## Niveau le plus haut qu'on atteint selon la façon d'apprendre : en combattant (le niveau 4 ne s'apprend
+## que sur le terrain), en regardant, par un récit au lobby, à la bibliothèque (3 avec un bibliothécaire).
+const KNOWLEDGE_CAP := {"fought": 4, "watched": 3, "heard": 1, "lobby": 2, "study": 2, "study_librarian": 3}
+
+## Le passé (métier ou origine) : sujets connus avant l'invocation, [connaissance, appréhension].
+## (Chasseur : bêtes niveau 2-3 ; mineur : créatures souterraines, obscurité ; soldat : humanoïdes, sang ;
+## boucher : sang ; guérisseur : blessés, mort ; scribe : rien ; berger : connaît les loups et les craint.)
+const BACKGROUND_SUBJECTS := {
+	"chasseur": {"family:betes": [2, 25], "monster:loup_noir": [3, 30]},
+	"berger": {"monster:loup_noir": [2, 70]},
+	"mineur": {"family:creatures": [2, 35], "place:obscurite": [2, 15]},
+	"soldat": {"family:humanoides": [2, 30], "sight:blood": [2, 15], "sight:death": [1, 40]},
+	"milicien": {"family:humanoides": [1, 35], "sight:blood": [1, 25]},
+	"garde": {"family:humanoides": [2, 30], "sight:blood": [1, 25]},
+	"mercenaire": {"family:humanoides": [2, 25], "sight:blood": [2, 10], "sight:death": [2, 30]},
+	"veteran": {"family:humanoides": [3, 25], "sight:blood": [2, 10], "sight:death": [2, 25]},
+	"bandit": {"family:humanoides": [2, 30], "sight:blood": [2, 15]},
+	"chevalier_errant": {"family:humanoides": [2, 25], "family:betes": [1, 35]},
+	"chasseur_primes": {"family:humanoides": [2, 25], "family:betes": [1, 30]},
+	"maitre_armes": {"family:humanoides": [3, 20], "sight:blood": [2, 10]},
+	"boucher": {"sight:blood": [3, 0]},
+	"guerisseur": {"sight:wounded": [3, 10], "sight:death": [2, 30]},
+	"pretre": {"sight:death": [2, 25], "family:morts_vivants": [1, 50]},
+	"bucheron": {"place:foret": [2, 15], "family:betes": [1, 40]},
+	"scribe": {},
+}
+
+## Ce que la personnalité règle dans l'apprentissage (section 3 bis, « La personnalité règle tout ») :
+## constantes des fonctions apprehension(), after_encounter(), share_knowledge() (chiffres provisoires).
+const APPREHENSION_PER_TIER := {"AUD": -3.0, "OPT": -2.0}  # départ : Prudence et Pessimisme l'augmentent
+const LEARN_SHARE := {"fought": 1.0, "watched": 0.4, "heard": 0.1}  # part apprise d'une rencontre
+const FEAR_DROP_RATE := 0.3    # part de l'écart apprise quand le danger vécu est plus faible qu'attendu
+const FEAR_RISE_RATE := 0.5    # ... plus fort qu'attendu (la peur monte plus vite qu'elle ne baisse)
+const FEAR_STABILITY_STEP := 0.06  # Stabilité : la peur baisse plus vite (x1,06 par palier), monte moins
+const SCAR_CHANCE := 0.3       # événement grave chez un Vulnérable (Stabilité <= -50) : cicatrice
+const HATE_TIER := 5           # ... chez un Colérique ou un Persévérant (>= 50) : haine de ce sujet
+const ABSENCE_DAYS := 7        # absence longue : une partie de la peur perdue revient
+const SPONTANEOUS_RETURN := 0.3
+const RENEWAL_FEAR := 10.0     # lieu nouveau ou nuit : la peur remonte jusqu'à la première rencontre réussie
+const RENEWAL_ROUTINE_STEP := 0.1  # Routine (Curiosité négative) : +10 % par palier ; Curiosité : -10 %
+const KNOWLEDGE_BASE_POINTS := 5.0  # par rencontre, plus 1 par coup touché, 2 par esquive
+const CURIOSITY_LEARN_STEP := 0.05  # Curiosité : apprend plus vite (x1,05 par palier)
+const ACUITY_WATCH_STEP := 0.08     # Acuité des sens : apprend mieux en regardant (x1,08 par palier)
+const DETACHMENT_STEP := 0.06       # Détachement : s'endurcit vite à la mort (types « vue »)
+const SHARE_POINTS := 8.0           # transmission au lobby, par sujet
+const SHARE_TEACH_STEP := 0.06      # Empathie de celui qui explique
+const SHARE_LISTEN_STEP := 0.04     # Loyauté de celui qui écoute ; Méfiance (<= -50) : il n'écoute pas
+const SHARE_FEAR_PULL := 0.1        # un récit rapproche un peu l'appréhension de celle du conteur
 
 
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
