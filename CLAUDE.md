@@ -694,6 +694,16 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   horde de 5) : préparée 21 %, Maître 15 %, Maître et potions 30 %. Équipe neuve : 0 %. Un combat de l'étage 5
   dure maintenant 3 min environ (190 s) au lieu de 25 s. Ce Maître simulé est simpliste : un joueur qui tient
   la sortie des ruelles et fait tourner ses héros devrait faire mieux.
+  Écart avec `tools/sim_tower` (étape 0 avant P1b ; pas de rééquilibrage) : ces 23-36 % venaient d'un autre
+  simulateur (session de la phase 1.2, pas dans le dépôt) dont l'équipe « préparée » était au niveau 7 (étage + 2)
+  et faite de 5 Novices (le 3★ compris), alors que les monstres de l'étage 5 sont au niveau 9 (5 + 2 + palier 2).
+  `sim_tower` met la « préparée » 2 niveaux au-dessus des monstres (niveau 11 ; les 1★ s'arrêtent à 10) avec de
+  vraies classes. Même code (après l'étape 0), sans Meneur ni ordres ni potions : `sim_tower` niveau 11 : 74 % ;
+  niveau 9 : 60 % ; niveau 7 : 40 % ; niveau 5 : 22 %. Ancien simulateur relancé tel quel (niveau 7, Novices,
+  500 combats) : sans Maître 16 % (24 % avec 3 potions), avec son Maître simulé 24 % (26 %). L'ancien 33 % était
+  mesuré sur 60 à 420 combats, avant le Berserk rare. Le jeu n'a donc pas changé : c'est l'équipe simulée. Pour
+  viser environ 33 % avec un Maître qui joue, il faut d'abord dire quelle équipe est « préparée » à l'étage 5
+  (au niveau des monstres ou en dessous, avec quelles classes) ; à décider avec le porteur du projet.
   Paliers : tous les 5 étages (étage de boss), les ennemis gagnent 2 niveaux de plus
   (`TIER_BONUS_LEVELS`), et les étages suivants restent à ce cran : il faut y arriver préparé.
   Difficulté voulue par le porteur du projet : la défense de l'étage 10 reste très dure (presque
