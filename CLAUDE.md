@@ -180,9 +180,10 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   défense baissent en combat jusqu'à -30 % à 0 (`mental_factor`, appliqué à chaque coup : `Battle._mind`).
   Barre sur la fiche, les cartes d'équipe (`UI.add_mental_bar`, `TeamSlots` et grilles de l'écran Donjons)
   et l'encart de l'équipe en combat ; fenêtre « Personnalité » en fin de combat (`fighter["mind_news"]`).
-  Traits `hero["traits"]` ([{"name", "known"}]) : 1 ou 2 tirés à l'invocation (`roll_traits`, `TRAITS` :
-  Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais, Meneur ; Courageux et Lâche
-  incompatibles), « ? » tant qu'ils sont cachés ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
+  Traits (`TRAITS` : Courageux, Lâche, Loyal, Paresseux, Querelleur, Protecteur, Ambitieux, Mauvais, Meneur) :
+  lus sur les paliers de la personnalité v2 depuis P1a-bis (`has_trait` → `PersonalityEngine.has_old_trait`,
+  voir plus bas ; avant : 1 ou 2 tirés à l'invocation), `GameData.hero_traits(hero)` ([{"name", "known"}]),
+  « ? » tant qu'ils sont cachés (`hero["revealed_traits"]`, par nom) ; révélés quand ils agissent ou tous les `TRAIT_REVEAL_FIGHTS`
   (5) combats (`hero["fights"]`). Effets branchés : Courageux (moitié) / Lâche (double) face aux boss,
   Protecteur (double) à la mort d'un allié, Ambitieux stresse quand un héros plus faible (niveau × étoiles)
   part dans la Tour à sa place (jamais sous 40), Loyal, Paresseux, Courageux et Lâche pour la rupture,
@@ -263,14 +264,13 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   (points d'entraînement, chance de la forge, progrès des artisans ; `MAUVAIS_EFFICIENCY_MIN` 50 %) ; ceux
   qui travaillent au même endroit (même poste, ou terrain) regagnent `MAUVAIS_COWORKER_LOSS_PER_HOUR` de
   moins par heure ; trait révélé quand l'effet est remarqué (`notice_bad_heroes`).
-  Les parties existantes : traits tirés et santé mentale à 100 au chargement (`load_game`). Mode dev (fiche) :
+  Les parties existantes : santé mentale à 100 au chargement (`load_game`) ; leurs traits : voir P1a-bis. Mode dev (fiche) :
   -20 santé mentale, santé mentale 100, mettre en rupture, « Lien +1 cran » et « Rendre hostile » avec un
   héros cherché par son nom (`dev_raise_bond`, `dev_make_hostile`). Reste : hostilité entre groupes, liens hors de la Tour (donjon journalier, lobby), repas de la cafétéria, perte au donjon
   journalier, héros en rupture au donjon journalier.
 - Personnalité v2, étape P1a (cahier : Sommaire, « Personnalité : document de référence » sections 1 à 5
-  et 7, sous-onglets « 1. Paliers », « 2. Axes », « 5. Facettes ») : le noyau seulement, AUCUN effet en jeu
-  pour l'instant (la personnalité de « Personnalité » ci-dessus, traits Courageux... compris, reste celle qui
-  agit ; elle sera branchée dessus en P2). Deux classes hors de la pile de GameData : `PersonalityData`
+  et 7, sous-onglets « 1. Paliers », « 2. Axes », « 5. Facettes ») : le noyau seulement. Ses seuls effets en jeu
+  passent par les anciens traits (P1a-bis, plus bas) ; le reste sera branché en P2. Deux classes hors de la pile de GameData : `PersonalityData`
   (`game_data/personality_data.gd`, données seulement) et `PersonalityEngine` (`personality_engine.gd`,
   fonctions `static`). Contrat : aucune mécanique ne lit `hero["persona"]` directement, tout passe par le moteur.
   Données : `AXES` (18 axes, identifiants AUD, CUR, SEN, COL, PER, MAI, EMP, HON, AMB, LOY, FOI, STA, OPT, VIT,
@@ -287,8 +287,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   `generate(rarity, background, roster, seed, secret)` : tirage corrélé (loi normale, convertie en paliers sans
   déformer la répartition), queue de la rareté, biais du passé (x`BACKGROUND_BIAS_SCALE` 0,6), relief (un axe à
   ±60, trois à ±50), au plus deux à ±90, 8 candidats dont on garde celui qui ressemble le moins aux héros vivants,
-  3 à 6 tics. Appelé par `_new_hero` (`summon.gd`) pour toute invocation et tout code secret (héros secrets :
-  queue `SECRET_TAIL`, pas de plafond, pas de métier ; leurs profils écrits à la main restent à faire).
+  3 à 6 tics. `new_persona(nom, rarity, roster, secret)`, appelé par `_new_hero` (`summon.gd`) pour toute
+  invocation et tout code secret : un héros secret prend son profil écrit à la main (`secret_persona`, voir P1a-bis) ;
+  sans profil, il serait tiré avec la queue `SECRET_TAIL`, sans plafond. Pas de métier pour les héros secrets.
   Lecture : `tier`, `axis(hero, id, target)` (-100 à +100 ; le cercle de la cible décalera les paliers en P3,
   `_circle_shift` neutre), `pole`, `composite` (arrondi à 10), `score` (comportement, -100 à +100),
   `accesses` (recalculés par `refresh_accesses` à chaque changement de palier), `tensions`, `metier_name`.
@@ -296,7 +297,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   de Persévérance si l'axe est travaillé, coûts `EVOLUTION_COST`, revenir vers zéro 10 ; renvoie les paliers
   franchis et les accès ouverts ou fermés), `add_effort`, `set_tier`. Effets : `effect_add`, `effect_mul`,
   `effect_div`, `effect_cross`, `effect_ratio` (bornes facultatives). Pour la suite, neutres : `modifier()`
-  renvoie 1,0, `decide()` l'option par défaut.
+  renvoie 1,0, `decide()` l'option par défaut, `notify()` et `perceived()` laissent tout passer (message et
+  valeur inchangés), `can_learn()` renvoie la règle actuelle (`GameData.can_learn_skill`, cherché dans l'arbre
+  de scène pour que le banc de test tourne sans le jeu).
   Métier à la place de « Novice » : `GameData.class_label(hero)` (`heroes.gd`) sur les cartes, la fiche, le hub,
   l'armurerie, les affectations, l'entraînement ; dans les règles la classe reste « Novice ».
   Sauvegarde version 3 : au chargement, les héros sans profil en reçoivent un (`PersonalityEngine.migrate`).
@@ -310,6 +313,43 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   entière (à 90 : 1 sur 2,4 au lieu de 2) ; Rythme : l'onglet Axes met Aube au pôle haut, sa règle dit + = nuit
   (gardé : + Nocturne, exclusive Veilleur). Après l'ajout d'un fichier `class_name`, lancer une fois
   `Godot --headless --path . --import` (cache des classes ; la publication web le fait toute seule).
+- Personnalité v2, étape P1a-bis (cahier, « 1. Paliers », sections 11 et 12) : les anciens traits deviennent
+  des lectures de paliers, sans changer leurs effets. `PersonalityData.OLD_TRAITS` : Courageux = composite Courage
+  >= +50, Lâche <= -50, Loyal = Loyauté >= +50, Paresseux = Persévérance <= -50, Querelleur = Colère >= +50 et
+  Empathie <= +20, Protecteur = Empathie >= +50 et Audace >= +30, Ambitieux = Ambition >= +50, Mauvais =
+  Empathie <= -50 et Honnêteté <= -30, Meneur = synergie Meneur. `has_trait` → `PersonalityEngine.has_old_trait`
+  (ou `persona["legacy_traits"]`) ; `roll_traits` supprimé ; drapeaux « révélé » par nom dans
+  `hero["revealed_traits"]` (`reveal_trait`, `hero_traits`, `traits_text`). Un héros peut n'avoir aucun trait.
+  Sauvegarde version 4 (`migrate`, `_adopt_old_traits`) : chaque héros garde ses anciens traits (`hero["traits"]`,
+  effacé ensuite) : `push_old_trait` pousse les axes juste au seuil (Audace d'abord pour le Courage) ; deux
+  traits impossibles ensemble (Protecteur avec Querelleur ou Mauvais, Meneur avec Querelleur ou Mauvais) : celui
+  que le profil ne donne pas va dans `legacy_traits` (environ 7 % des héros) ; un trait que le profil donne en
+  plus apparaît, caché. Banc : 1,8 axe poussé par héros, de 6 paliers en moyenne (un Loyal à Loyauté -50 passe à +50).
+  Héros secrets (`SECRET_PROFILES`, `secret_persona`, `new_persona`) : profils de la section 11 (paliers, couches,
+  talent `TALENT_LEVELS` en aptitudes, effort `EFFORT_LEVELS`, pas de métier ; notes du cahier dans `layer_notes`
+  et `notes`, visibles en mode dev), à la création (code, menu SECRET_HERO) et à la migration des secrets déjà
+  possédés (leurs anciens traits tirés au hasard ne comptent plus, drapeaux gardés). Couches interprétées quand
+  le cahier ne nomme pas une option de `LAYERS` (Han : valeur Réussite, peur Le déshonneur ; besoins). Leur
+  croissance (`SECRET_HEROES`) ne change pas. Traits obtenus : Han Ambitieux ; Jenna Courageuse et Loyale ;
+  Aaron, Hansen, Zid Loyaux ; Shei Courageuse et Loyale ; Yvolka Paresseuse et Ambitieuse ; Edith Protectrice et Meneuse.
+  Fréquence des traits (banc, 40 000 héros par rareté), avant → après : chaque trait 15-16 % → Courageux 1-4 %,
+  Lâche 1-2 %, Loyal 10-15 %, Paresseux 9-14 %, Querelleur 7-9 %, Protecteur 3-6 %, Ambitieux 9-15 %, Mauvais
+  5-7 %, Meneur 2-4 % (1★ → 5★) ; traits par héros 1,4 → 0,5 (1★) à 0,8 (5★) ; héros sans trait 45 à 61 %.
+  Simulateur de la Tour : `tools/sim_tower.tscn` (voir l'en-tête de `tools/sim_tower.gd` ; copier la sauvegarde
+  locale avant, la remettre après), victoires selon chaque trait présent dans l'équipe.
+  Simulateur de la Tour : chaque lancement relit et réécrit `user://sauvegarde.cfg` ; pour ne pas y toucher,
+  le lancer dans une copie du projet avec un `override.cfg` (`[application]` `config/use_custom_user_dir=true`,
+  `config/custom_user_dir_name="..."`), jamais dans le dépôt.
+  Combats (sans ordres ni potions, 1 000 par étage, graine 7 ; « brute » : 3★ + 2★ + 3 x 1★ au niveau des
+  monstres ; « préparée » : 2 niveaux de plus, épée et bouclier ou arc D), avant (a113856) → après : brute étages
+  1 à 5 : 99,9 / 64,6 / 53,7 / 54 / 26,3 % → 99,7 / 68,9 / 53,8 / 54,1 / 27 % ; préparée : 100 / 98,6 / 94,9 /
+  95,6 / 44,1 % → 100 / 98,7 / 96 / 95,3 / 66,8 %. Écart signalé, pas corrigé : préparée étage 5, +23 points.
+  Cause : le Meneur en survie (`_organize_defense`). Équipe préparée à l'étage 5 avec un Meneur : 18-20 % de
+  victoires, sans : 73-74 % (avant comme après). Avant, 55 % des équipes avaient un Meneur (15,8 % des héros),
+  maintenant 12 % (2 à 4 %). Avec `_organize_defense` coupé (essai, pas gardé) : 73 % avant, 73,6 % après, donc
+  la lecture des traits sur les paliers ne change rien d'autre. Probablement : les porteurs de bouclier sont
+  postés un par ruelle et seuls, sans mur de boucliers. À décider avec le porteur du projet (Meneur à revoir ;
+  la cible de l'étage 5 était environ 33 % avec le Maître simulé).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -375,7 +415,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   souffle. ») ; un ordre du Maître met fin au repos. L'allié le plus frais (`_find_relief` : au moins
   `ROTATION_FRESH_STAMINA` 50 %, corps à corps de préférence) prend son poste. Pendant
   `ROTATION_VULNERABLE_SECONDS` (1 s, `swap_until`), les deux ne frappent pas et encaissent
-  x`ROTATION_DAMAGE_TAKEN` (1,5). Trait Meneur (`TRAITS`, tiré à l'invocation comme les autres) : `_lead`
+  x`ROTATION_DAMAGE_TAKEN` (1,5). Trait Meneur (`TRAITS`, synergie Meneur des paliers depuis P1a-bis) : `_lead`
   fait tourner un allié au contact sous `LEADER_TIRED_STAMINA` (20 %) s'il y a un remplaçant, au plus toutes
   les `LEADER_COOLDOWN` (8) s ; fenêtre « X fait tourner la première ligne. » ; le trait se révèle.
   Meneur en survie (demande du porteur du projet, après la phase 1.2 ; `Battle._organize_defense`) : au début
