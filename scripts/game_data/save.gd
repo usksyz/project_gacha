@@ -22,7 +22,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ## 4 : les anciens traits (hero["traits"]) se lisent sur les paliers : chaque héros garde les siens (paliers
 ##     poussés juste au seuil, PersonalityEngine.migrate), les drapeaux « révélé » passent dans
 ##     hero["revealed_traits"] ; les héros secrets prennent leur profil écrit à la main.
-const SAVE_VERSION := 4
+## 5 : P1b, structures de la personnalité (8 briques, cercles, sujets ; PersonalityEngine.migrate), journal
+##     des derniers combats (hero["recent_battles"]), bibliothèque et mémorial du Maître (absents = vides).
+const SAVE_VERSION := 5
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.

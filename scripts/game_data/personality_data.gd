@@ -793,7 +793,76 @@ const SECRET_PROFILES := {
 }
 
 
+# ---------------------------------------------------------------------------
+# Les 8 briques du moteur commun (onglet « 4. Interactions », section 2) — P1b : structures seulement
+# ---------------------------------------------------------------------------
+# Rangées dans hero["persona"]["mind"], vides ou neutres, sans aucun effet en jeu (elles se rempliront
+# en P4 et P5). Les liens existants (GameData.bonds) restent la source des relations actuelles ; les
+# opinions s'y ajoutent sans les remplacer.
+
+## Besoins (0 à 100, ils baisseront avec le temps) : un besoin satisfait vaut NEED_START.
+## « axes » : ce qui pèsera sur son poids (need_weight), comme les couches : axe → coefficient.
+const NEEDS := {
+	"securite": {"name": "Sécurité", "axes": {"AUD": -0.5, "STA": -0.4}},
+	"repos": {"name": "Repos", "axes": {"VIT": -0.4, "CON": -0.3}},
+	"appartenance": {"name": "Appartenance", "axes": {"SEN": 0.6, "LOY": 0.3}},
+	"reconnaissance": {"name": "Reconnaissance", "axes": {"AMB": 0.8}},
+	"autonomie": {"name": "Autonomie", "axes": {"LOY": -0.5, "CUR": 0.3}},
+	"progres": {"name": "Progrès", "axes": {"PER": 0.5, "AMB": 0.4}},
+	"sens": {"name": "Sens", "axes": {"FOI": 0.7}},
+}
+const NEED_START := 100.0
+## Le besoin de la couche « besoin » pèse plus lourd (layers["need"] a les mêmes identifiants, sauf
+## « competence », rattaché au Progrès).
+const NEED_LAYER_BONUS := 0.5
+const NEED_FROM_LAYER := {"securite": "securite", "appartenance": "appartenance", "competence": "progres",
+	"autonomie": "autonomie", "reconnaissance": "reconnaissance"}
+
+## Attentes : ce que le héros trouve normal. Départ : 0, sauf le rang, qui suit les étoiles (un 5★ se
+## vexera d'être traité comme un 1★).
+const EXPECTATIONS := {
+	"confort": {"name": "Confort", "start": 0.0},
+	"rang": {"name": "Rang", "start_per_star": 20.0},
+	"butin": {"name": "Part du butin", "start": 0.0},
+	"reconnaissance": {"name": "Reconnaissance", "start": 0.0},
+}
+
+## Stratégies d'adaptation au stress (choisies selon la personnalité en P4) : saines ou coûteuses.
+## Une stratégie répétée devient une habitude (mind["coping"]["habits"] : stratégie → nombre de fois).
+const COPING_STRATEGIES := {
+	"s_entrainer": {"name": "S'entraîner", "healthy": true},
+	"parler_ami": {"name": "Parler à un ami", "healthy": true},
+	"prier": {"name": "Prier", "healthy": true},
+	"dormir": {"name": "Dormir", "healthy": true},
+	"s_isoler": {"name": "S'isoler", "healthy": true},
+	"se_battre": {"name": "Se battre", "healthy": false},
+	"voler": {"name": "Voler", "healthy": false},
+	"mentir": {"name": "Mentir", "healthy": false},
+	"exiger": {"name": "Exiger", "healthy": false},
+	"refuser_mission": {"name": "Refuser une mission", "healthy": false},
+}
+
+## Désirs (1 à 3 par héros, nés des couches, en P5) : le catalogue.
+const DESIRES := {
+	"plus_fort": "Devenir le plus fort",
+	"proteger": "Protéger quelqu'un",
+	"maitriser_arme": "Maîtriser une arme",
+	"reconnu_maitre": "Être reconnu par le Maître",
+	"venger": "Venger un ami",
+	"comprendre_tour": "Comprendre la Tour",
+}
+
+## Bornes des opinions (entre héros, et envers le Maître : la confiance).
+const OPINION_MIN := -100.0
+const OPINION_MAX := 100.0
+## Pensées, souvenirs et décisions gardées au plus (les plus anciennes partent).
+const THOUGHTS_MAX := 20
+const MEMORIES_MAX := 30
+
+
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
 ## enregistré, avec la migration au chargement (PersonalityEngine.migrate).
 ## 2 : anciens traits lus sur les paliers (« legacy_traits »), profils des héros secrets (« secret_profile »).
-const PROFILE_VERSION := 2
+## 3 : P1b, les 8 briques (« mind »), cercles (« hierarchy_stance », « debts »), sujets (« subjects »,
+##     « pending_report »), raisons des décisions (« decisions »).
+const PROFILE_VERSION := 3

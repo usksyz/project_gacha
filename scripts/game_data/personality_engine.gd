@@ -22,6 +22,7 @@ class_name PersonalityEngine
 ##   "legacy_traits" : anciens traits gardés d'une sauvegarde d'avant la version 4 (voir has_old_trait)
 ##   "secret_profile" : vrai pour un héros secret au profil écrit à la main (avec « layer_notes », « notes »)
 ##   "seed" : graine du tirage (le même graine redonne le même profil, à lobby égal)
+##   "mind" : les 8 briques du moteur commun (P1b, vides ou neutres ; voir new_mind)
 ## Sur le héros lui-même : hero["revealed_traits"], les anciens traits que le Maître a vus (par nom).
 
 const D := preload("res://scripts/game_data/personality_data.gd")
@@ -74,6 +75,7 @@ static func generate(rarity: int, background: String, roster: Array, seed: int =
 		"accesses": [],
 		"legacy_traits": [],
 		"seed": seed,
+		"mind": new_mind(rarity),
 	}
 	for axis_id in D.AXIS_ORDER:
 		persona["evo"][axis_id] = 0.0
@@ -296,6 +298,7 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 	# Version 2 : un héros secret qui a un profil écrit à la main le prend (même s'il avait un profil tiré).
 	if is_secret_profiled(hero) and not hero.get("persona", {}).get("secret_profile", false):
 		hero["persona"] = secret_persona(hero["name"])
+		hero["persona"]["mind"] = new_mind(hero.get("rarity", 1))
 		changed = true
 	elif not hero.has("persona"):
 		hero["persona"] = generate(hero.get("rarity", 1), "", roster, 0, hero.get("secret", false))
@@ -327,11 +330,98 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 		if not persona.has(key[0]):
 			persona[key[0]] = key[1]
 			changed = true
+	# Version 3 (P1b) : les 8 briques, vides ou neutres ; une brique ajoutée plus tard est complétée.
+	if not persona.has("mind"):
+		persona["mind"] = new_mind(hero.get("rarity", 1))
+		changed = true
+	else:
+		var fresh := new_mind(hero.get("rarity", 1))
+		for key in fresh:
+			if not persona["mind"].has(key):
+				persona["mind"][key] = fresh[key]
+				changed = true
 	if persona.get("version", 0) < D.PROFILE_VERSION:
 		persona["version"] = D.PROFILE_VERSION
 		changed = true
 	refresh_accesses(hero)  # les règles d'accès ont pu changer depuis la dernière partie
 	return changed
+
+
+# ---------------------------------------------------------------------------
+# Les 8 briques du moteur commun (onglet « 4. Interactions », section 2) — P1b : structures seulement
+# ---------------------------------------------------------------------------
+# hero["persona"]["mind"] :
+#   "needs" : {besoin: 0 à 100} (NEEDS ; NEED_START = satisfait)
+#   "thoughts" : [{"id", "intensity", "until"}] (pensées datées : l'humeur, en P4)
+#   "expectations" : {attente: valeur} (EXPECTATIONS)
+#   "dissonance" : stress cumulé d'avoir agi contre sa nature (0 au départ)
+#   "memories" : [{"kind", "weight", "day", "with"}] (souvenirs marquants, en P4)
+#   "opinions" : {numéro du héros (texte): -100 à +100} (ce qu'il pense des autres ; GameData.bonds reste
+#                la source des liens actuels)
+#   "trust" : opinion envers le Maître (la confiance), 0 au départ
+#   "coping" : {"habits": {stratégie: nombre de fois}, "current": stratégie en cours ou ""}
+#   "desires" : [identifiants de DESIRES] (1 à 3, en P5)
+# Aucune mécanique ne les lit encore : elles n'ont aucun effet en jeu.
+
+## Les 8 briques d'un nouveau héros, vides ou neutres.
+static func new_mind(rarity: int) -> Dictionary:
+	var needs := {}
+	for need_id in D.NEEDS:
+		needs[need_id] = D.NEED_START
+	var expectations := {}
+	for expectation_id in D.EXPECTATIONS:
+		var data: Dictionary = D.EXPECTATIONS[expectation_id]
+		expectations[expectation_id] = float(data.get("start", 0.0)) + float(data.get("start_per_star", 0.0)) * rarity
+	return {
+		"needs": needs,
+		"thoughts": [],
+		"expectations": expectations,
+		"dissonance": 0.0,
+		"memories": [],
+		"opinions": {},
+		"trust": 0.0,
+		"coping": {"habits": {}, "current": ""},
+		"desires": [],
+	}
+
+
+static func mind(hero: Dictionary) -> Dictionary:
+	return hero.get("persona", {}).get("mind", {})
+
+
+## Valeur d'un besoin (0 à 100 ; satisfait par défaut).
+static func need(hero: Dictionary, need_id: String) -> float:
+	return float(mind(hero).get("needs", {}).get(need_id, D.NEED_START))
+
+
+## Poids d'un besoin pour ce héros (1 = normal) : ses axes, et la couche « besoin ». Pour P5.
+static func need_weight(hero: Dictionary, need_id: String) -> float:
+	var weight := 1.0
+	for axis_id in D.NEEDS[need_id]["axes"]:
+		weight += tier(hero, axis_id) / float(D.TIER_MAX) * float(D.NEEDS[need_id]["axes"][axis_id])
+	var layer: String = hero.get("persona", {}).get("layers", {}).get("need", "")
+	if D.NEED_FROM_LAYER.get(layer, "") == need_id:
+		weight += D.NEED_LAYER_BONUS
+	return maxf(0.1, weight)
+
+
+## Opinion d'un héros sur un autre (-100 à +100 ; 0 s'il n'en a pas encore).
+static func opinion(hero: Dictionary, other: Dictionary) -> float:
+	return float(mind(hero).get("opinions", {}).get(str(other.get("id", -1)), 0.0))
+
+
+## Change l'opinion d'un héros sur un autre (bornée). Pour P4 et le mode dev.
+static func add_opinion(hero: Dictionary, other: Dictionary, delta: float) -> void:
+	if not hero.has("persona") or other.get("id", -1) == hero.get("id", -2):
+		return
+	var opinions: Dictionary = hero["persona"]["mind"]["opinions"]
+	var key := str(other["id"])
+	opinions[key] = clampf(float(opinions.get(key, 0.0)) + delta, D.OPINION_MIN, D.OPINION_MAX)
+
+
+## Confiance envers le Maître (son opinion du Maître, -100 à +100).
+static func trust(hero: Dictionary) -> float:
+	return float(mind(hero).get("trust", 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +721,9 @@ static func _adopt_old_traits(hero: Dictionary) -> void:
 ## Le profil d'un nouveau héros : celui écrit à la main pour un héros secret qui en a un, sinon un tirage.
 static func new_persona(hero_name: String, rarity: int, roster: Array, secret := false) -> Dictionary:
 	if secret and D.SECRET_PROFILES.has(hero_name):
-		return secret_persona(hero_name)
+		var persona := secret_persona(hero_name)
+		persona["mind"] = new_mind(rarity)
+		return persona
 	return generate(rarity, "", roster, 0, secret)
 
 
@@ -672,6 +764,7 @@ static func secret_persona(hero_name: String, seed: int = 0) -> Dictionary:
 		"legacy_traits": [],
 		"secret_profile": true,
 		"seed": seed,
+		"mind": new_mind(1),  # (rang attendu : voir le héros, réglé par migrate si besoin)
 	}
 	for axis_id in D.AXIS_ORDER:
 		persona["evo"][axis_id] = 0.0

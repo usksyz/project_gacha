@@ -13,6 +13,14 @@ var failures := 0
 
 
 func _initialize() -> void:
+	# « -- p1b » : seulement les structures de P1b (rapide).
+	if "p1b" in OS.get_cmdline_user_args():
+		_check_structures()
+		print("")
+		print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
+		quit(1 if failures > 0 else 0)
+		return
+	_check_structures()
 	_check_distribution()
 	_check_facettes_examples()
 	_check_evolution()
@@ -24,6 +32,26 @@ func _initialize() -> void:
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
+
+
+## P1b : les structures de données (8 briques...), à la génération et à la migration.
+func _check_structures() -> void:
+	print("Structures P1b")
+	var fresh := {"id": 1, "name": "Test", "rarity": 3, "persona": E.generate(3, "", [], 42)}
+	var mind: Dictionary = fresh["persona"]["mind"]
+	_check(mind.keys().size() == 9 and mind["needs"].size() == D.NEEDS.size(), "8 briques à la génération (besoins, pensées, attentes, dissonance, souvenirs, opinions + confiance, adaptation, désirs)")
+	_check(mind["expectations"]["rang"] == 60.0, "rang attendu selon les étoiles (3★ : 60)")
+	_check(E.need(fresh, "repos") == D.NEED_START and E.opinion(fresh, {"id": 7}) == 0.0, "besoins satisfaits, opinions neutres")
+	# Un héros de la version 2 du profil (sans briques) : migrate les ajoute sans rien perdre.
+	var old := {"id": 2, "name": "Ancien", "rarity": 5, "persona": E.generate(5, "", [], 43)}
+	old["persona"].erase("mind")
+	old["persona"]["version"] = 2
+	var tiers_before: Dictionary = old["persona"]["tiers"].duplicate()
+	E.migrate(old, [old])
+	_check(old["persona"].has("mind") and old["persona"]["mind"]["expectations"]["rang"] == 100.0, "migration : briques ajoutées (5★ : rang 100)")
+	_check(old["persona"]["tiers"] == tiers_before and old["persona"]["version"] == D.PROFILE_VERSION, "migration : paliers gardés, version du profil à jour")
+	E.add_opinion(fresh, old, 150.0)
+	_check(E.opinion(fresh, old) == D.OPINION_MAX, "opinion bornée à +100")
 
 
 func _check(ok: bool, text: String) -> void:
