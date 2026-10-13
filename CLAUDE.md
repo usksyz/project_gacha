@@ -336,21 +336,17 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   15-16 % → Courageux 4,9 / 5,6 / 6,9 / 8,7 / 10 % (1★ → 5★ ; à ±50 : 1-4 %), Lâche 4,8-5,7 % (à ±50 : 1-2 %),
   Loyal 10-15 %, Paresseux 9-14 %, Querelleur 7-9 %, Protecteur 3-6 %, Ambitieux 9-15 %, Mauvais 5-7 %, Meneur
   2-4 % ; traits par héros 1,4 → 0,54 (1★) à 0,87 (5★) ; héros sans trait 40 (5★) à 56 % (1★).
-  Simulateur de la Tour : `tools/sim_tower.tscn` (voir l'en-tête de `tools/sim_tower.gd` ; copier la sauvegarde
-  locale avant, la remettre après), victoires selon chaque trait présent dans l'équipe.
-  Simulateur de la Tour : chaque lancement relit et réécrit `user://sauvegarde.cfg` ; pour ne pas y toucher,
-  le lancer dans une copie du projet avec un `override.cfg` (`[application]` `config/use_custom_user_dir=true`,
-  `config/custom_user_dir_name="..."`), jamais dans le dépôt.
+  Simulateur de la Tour : `tools/sim_tower.tscn` (voir l'en-tête de `tools/sim_tower.gd`), victoires selon chaque
+  trait présent dans l'équipe ; options `niveau=` (niveau imposé) et `meneur=avec|sans|libre` (étape 0 avant P1b).
+  Chaque lancement relit et réécrit `user://sauvegarde.cfg` : le lancer dans une copie du projet (worktree git)
+  avec un `override.cfg` (`[application]` `config/use_custom_user_dir=true`, `config/custom_user_dir_name="..."`),
+  jamais dans le dépôt.
   Combats (sans ordres ni potions, 1 000 par étage, graine 7 ; « brute » : 3★ + 2★ + 3 x 1★ au niveau des
   monstres ; « préparée » : 2 niveaux de plus, épée et bouclier ou arc D), avant (a113856) → après : brute étages
   1 à 5 : 99,9 / 64,6 / 53,7 / 54 / 26,3 % → 99,7 / 68,9 / 53,8 / 54,1 / 27 % ; préparée : 100 / 98,6 / 94,9 /
-  95,6 / 44,1 % → 100 / 98,7 / 96 / 95,3 / 66,8 %. Écart signalé, pas corrigé : préparée étage 5, +23 points.
-  Cause : le Meneur en survie (`_organize_defense`). Équipe préparée à l'étage 5 avec un Meneur : 18-20 % de
-  victoires, sans : 73-74 % (avant comme après). Avant, 55 % des équipes avaient un Meneur (15,8 % des héros),
-  maintenant 12 % (2 à 4 %). Avec `_organize_defense` coupé (essai, pas gardé) : 73 % avant, 73,6 % après, donc
-  la lecture des traits sur les paliers ne change rien d'autre. Probablement : les porteurs de bouclier sont
-  postés un par ruelle et seuls, sans mur de boucliers. À décider avec le porteur du projet (Meneur à revoir ;
-  la cible de l'étage 5 était environ 33 % avec le Maître simulé).
+  95,6 / 44,1 % → 100 / 98,7 / 96 / 95,3 / 66,8 %. Écart : préparée étage 5, +23 points. Cause : l'ancien
+  Meneur en survie (avec Meneur 18-20 %, sans 73-74 %) ; avant, 55 % des équipes avaient un Meneur, maintenant
+  12 %. Avec `_organize_defense` coupé : 73 % avant, 73,6 % après. Corrigé à l'étape 0 (voir « Meneur en survie »).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -420,12 +416,21 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   fait tourner un allié au contact sous `LEADER_TIRED_STAMINA` (20 %) s'il y a un remplaçant, au plus toutes
   les `LEADER_COOLDOWN` (8) s ; fenêtre « X fait tourner la première ligne. » ; le trait se révèle.
   Meneur en survie (demande du porteur du projet, après la phase 1.2 ; `Battle._organize_defense`) : au début
-  d'un combat sur le terrain à ruelles, un Meneur (ni effrayé ni en panique) poste lui-même l'équipe : les
-  tireurs en hauteur, les porteurs de bouclier à la sortie des ruelles (`alley_exits`, un par ruelle, les
-  suivants à côté d'un premier), un lancier juste derrière un bouclier ; fenêtre « X organise la défense. »,
-  trait révélé. Les héros postés tiennent leur poste (`fighter["hold"]`, comme en hauteur : ils frappent ce qui
-  est à leur portée et y reviennent s'ils sont poussés) ; un ordre du Maître lève la consigne, un héros relevé
-  par la rotation la passe à celui qui le remplace. Sans Meneur, les héros attendent les ordres du Maître.
+  d'un combat sur le terrain à ruelles, un Meneur (ni effrayé ni en panique) forme lui-même l'équipe : les
+  porteurs de bouclier côte à côte (mur de boucliers) au milieu, `DEFENSE_LINE_GAP` (2) rangs sous la sortie des
+  ruelles, les autres au corps à corps juste derrière (un lancier d'abord), les tireurs derrière eux ; fenêtre
+  « X organise la défense. », trait révélé. Ce sont des postes de départ, pas une consigne : quand l'ennemi
+  arrive, chacun se bat librement. Un héros qui a déjà un ordre du Maître le garde. Sans Meneur, les héros
+  restent sur leur ligne de départ et attendent les ordres du Maître.
+  Revu à l'étape 0 avant P1b (demande du porteur du projet : avec Meneur ≥ sans Meneur). L'ancienne version
+  (un bouclier seul par ruelle, tireurs en hauteur, consigne « tenir le poste » `fighter["hold"]`, supprimée)
+  faisait perdre l'étage 5. Simulation, étage 5, équipe préparée, sans ordres, 1 000 combats par essai :
+  sans Meneur 74,6 / 74,3 / 73 % (3 graines) ; P1 ancienne version 21,6 % ; P2 mur au centre, postes tenus
+  21,7 % ; P3 mur à la sortie d'une ruelle, tenus 24,6 % ; P4 mur au centre, libres, tireurs en hauteur (tenue)
+  70,6 % ; P5 (gardée) mur au centre, tous libres, tireurs derrière 74,1 / 75,1 / 72,1 % ; P6 comme P5 sur la
+  ligne de départ 72,1 % ; P7 « Meneur adaptable » (P5 avec postes tenus, consigne levée dès qu'un tireur
+  ennemi est à 7 cases, reposte à la vague suivante sans tireurs) 54,1 / 58,2 %. Tenir un poste coûte cher
+  face aux archers squelettes. P5 : 73,8 % contre 74 % sans Meneur sur 3 000 combats (égalité aux aléas près).
   Agonie (rendue plus exigeante comme au ch. 11, demande du porteur du projet) : à 0 point de vie, un héros
   ne meurt pas tout de suite (`_announce_fall` → `_start_agony`) : il
   agonise `AGONY_SECONDS` (8 s ; avant 10), fenêtre rouge « X est dans un état critique, sa vie est en danger ! » ;
