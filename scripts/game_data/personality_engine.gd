@@ -84,6 +84,8 @@ static func generate(rarity: int, background: String, roster: Array, seed: int =
 	persona["layers"] = _roll_layers(best, rng)
 	persona["aptitudes"] = _roll_aptitudes(rarity, metier, rng)
 	persona["accesses"] = _compute_accesses(best)
+	persona["hierarchy_stance"] = roll_stance(best, rng)
+	persona["debts"] = []
 	return persona
 
 
@@ -330,6 +332,15 @@ static func migrate(hero: Dictionary, roster: Array) -> bool:
 		if not persona.has(key[0]):
 			persona[key[0]] = key[1]
 			changed = true
+	# Version 3 (P1b) : cercles (rapport à la hiérarchie tiré selon les paliers, graine du profil), dettes.
+	if not persona.has("hierarchy_stance"):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(persona.get("seed", 0)) + 7
+		persona["hierarchy_stance"] = roll_stance(persona["tiers"], rng)
+		changed = true
+	if not persona.has("debts"):
+		persona["debts"] = []
+		changed = true
 	# Version 3 (P1b) : les 8 briques, vides ou neutres ; une brique ajoutée plus tard est complétée.
 	if not persona.has("mind"):
 		persona["mind"] = new_mind(hero.get("rarity", 1))
@@ -447,9 +458,145 @@ static func effective_tier(hero: Dictionary, axis_id: String, target = null) -> 
 	return clampi(tier(hero, axis_id) + _circle_shift(hero, target, axis_id), -D.TIER_MAX, D.TIER_MAX)
 
 
-## Décalage du cercle de la cible (onglet « 4. Interactions ») : à venir (P3). Neutre pour l'instant.
-static func _circle_shift(_hero: Dictionary, _target, _axis_id: String) -> int:
-	return 0
+## Décalage du cercle de la cible (onglet « 4. Interactions », section 2 bis) : celui commun à tous
+## (CIRCLE_SHIFTS), plus celui de son rapport à la hiérarchie. Envers le Maître : comme un plus fort.
+## Aucune mécanique ne passe encore de cible : aucun effet en jeu (P3).
+static func _circle_shift(hero: Dictionary, target, axis_id: String) -> int:
+	if target == null:
+		return 0
+	return circle_shift_for(hero, circle(hero, target), axis_id)
+
+
+## Décalage d'un axe pour un cercle donné (sans cible réelle : mode dev, « visage par cercle »).
+static func circle_shift_for(hero: Dictionary, circle_id: String, axis_id: String) -> int:
+	var shift: int = D.CIRCLE_SHIFTS.get(circle_id, {}).get(axis_id, 0)
+	var stance: Dictionary = D.HIERARCHY_STANCES.get(hierarchy_stance(hero), {})
+	var stance_circle := "plus_fort" if circle_id == "maitre" else circle_id
+	return shift + int(stance.get("shifts", {}).get(stance_circle, {}).get(axis_id, 0))
+
+
+## Le visage du héros dans un cercle : les axes qui y changent, {axe: [palier de base, palier effectif]}.
+static func circle_face(hero: Dictionary, circle_id: String) -> Dictionary:
+	var face := {}
+	for axis_id in D.AXIS_ORDER:
+		var base := tier(hero, axis_id)
+		var shifted := clampi(base + circle_shift_for(hero, circle_id, axis_id), -D.TIER_MAX, D.TIER_MAX)
+		if shifted != base:
+			face[axis_id] = [base, shifted]
+	return face
+
+
+# ---------------------------------------------------------------------------
+# Les cercles (onglet « 4. Interactions », section 2 bis)
+# ---------------------------------------------------------------------------
+
+## Tire le rapport à la hiérarchie selon les paliers (Ambition, Empathie, Loyauté, Honnêteté, Colère...),
+## plus du hasard, comme les couches.
+static func roll_stance(tiers: Dictionary, rng: RandomNumberGenerator) -> String:
+	var best := "egalitaire"
+	var best_score := -INF
+	for stance_id in D.HIERARCHY_STANCES:
+		var score_value := rng.randfn(0.0, D.STANCE_NOISE)
+		var axes: Dictionary = D.HIERARCHY_STANCES[stance_id]["axes"]
+		for axis_id in axes:
+			score_value += float(tiers.get(axis_id, 0)) / D.TIER_MAX * axes[axis_id]
+		if score_value > best_score:
+			best = stance_id
+			best_score = score_value
+	return best
+
+
+static func hierarchy_stance(hero: Dictionary) -> String:
+	return hero.get("persona", {}).get("hierarchy_stance", "egalitaire")
+
+
+## Dettes de vie : ceux qui l'ont sauvé ([{"id", "day"}]). Un sauveur entre dans son cercle Intimes ;
+## le poids de la dette (dévoué, rembourseur, fier, opportuniste...) se lira sur ses scores en P3.
+static func debts(hero: Dictionary) -> Array:
+	return hero.get("persona", {}).get("debts", [])
+
+
+static func add_debt(hero: Dictionary, savior: Dictionary, day := -1) -> void:
+	if not hero.has("persona") or savior.get("id", -1) == hero.get("id", -2):
+		return
+	if debts(hero).any(func(debt): return debt["id"] == savior["id"]):
+		return
+	hero["persona"]["debts"].append({"id": savior["id"], "day": today() if day < 0 else day})
+
+
+## Le cercle d'une cible pour ce héros : « maitre » (target = "maitre"), « intime », « rival », « groupe »,
+## « nouveau », « plus_fort », « plus_faible » ou « lobby » ; « » s'il n'y a pas de cible (ou lui-même).
+## Lit les liens existants (GameData.bonds : frère d'armes = intime, ami = groupe, hostiles = rival), les
+## opinions, les dettes, le groupe d'origine, puis l'ancienneté et le rang perçu.
+static func circle(hero: Dictionary, target) -> String:
+	if target is String and target == "maitre":
+		return "maitre"
+	if not target is Dictionary or target.get("id", -1) == hero.get("id", -2):
+		return ""
+	var bond := _bond_level(hero, target)
+	var view := opinion(hero, target)
+	if bond >= 3 or view >= D.OPINION_INTIMATE or debts(hero).any(func(debt): return debt["id"] == target["id"]):
+		return "intime"
+	if bond < 0 or view <= D.OPINION_RIVAL:
+		return "rival"
+	if bond == 2 or (hero.get("group", "") != "" and hero.get("group", "") == target.get("group", "")):
+		return "groupe"
+	if int(target.get("fights", 0)) < D.NEW_FIGHTS and int(hero.get("fights", 0)) >= D.NEW_FIGHTS:
+		return "nouveau"
+	var rank := social_rank(hero, target)
+	if rank >= D.RANK_GAP:
+		return "plus_fort"
+	if rank <= -D.RANK_GAP:
+		return "plus_faible"
+	return "lobby"
+
+
+## Rang perçu de la cible par rapport au héros (points de RANK_FACTORS ; positif = il la voit au-dessus).
+## Calculé à la demande (le cache recalculé après chaque événement visible viendra avec les événements, P4).
+static func social_rank(hero: Dictionary, target: Dictionary) -> float:
+	return _standing(target) - _standing(hero)
+
+
+static func _standing(hero: Dictionary) -> float:
+	var f: Dictionary = D.RANK_FACTORS
+	var value: float = f["rarity"] * hero.get("rarity", 1) + f["level"] * hero.get("level", 1) + f["fights"] * hero.get("fights", 0)
+	if has_old_trait(hero, "Meneur"):
+		value += f["leader"]
+	if hero.get("favorite", false):
+		value += f["favorite"]
+	return value
+
+
+## Le Maître regarde-t-il ? (fiche ouverte, combat suivi, scène observée : branché en P3 par les écrans,
+## avec set_watched). Faux pour l'instant.
+static var _watched := false
+
+
+static func is_watched() -> bool:
+	return _watched
+
+
+static func set_watched(watched: bool) -> void:
+	_watched = watched
+
+
+## Palier du lien existant entre deux héros (GameData.bond_level ; 0 sans le jeu, au banc de test).
+static func _bond_level(hero: Dictionary, target: Dictionary) -> int:
+	var game := _game()
+	if game == null or not hero.has("id") or not target.has("id"):
+		return 0
+	return game.bond_level(hero, target)
+
+
+## GameData, cherché dans l'arbre de scène (null au banc de test, qui tourne sans le jeu).
+static func _game() -> Node:
+	var tree := Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null("GameData") if tree else null
+
+
+## Le jour (nombre de jours depuis 1970, heure de l'appareil) : pour dater sujets, dettes et souvenirs.
+static func today() -> int:
+	return int(Time.get_unix_time_from_system() / 86400.0)
 
 
 ## +1, -1 ou 0 selon que l'axe a passé le seuil du trait (50) d'un côté ou de l'autre.
@@ -769,6 +916,8 @@ static func secret_persona(hero_name: String, seed: int = 0) -> Dictionary:
 	for axis_id in D.AXIS_ORDER:
 		persona["evo"][axis_id] = 0.0
 		persona["weights"][axis_id] = snappedf(rng.randf_range(1.0 - D.PERSONAL_WEIGHT_SPREAD, 1.0 + D.PERSONAL_WEIGHT_SPREAD), 0.01)
+	persona["hierarchy_stance"] = roll_stance(tiers, rng)
+	persona["debts"] = []
 	return persona
 
 

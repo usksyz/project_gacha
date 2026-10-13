@@ -52,6 +52,39 @@ func _check_structures() -> void:
 	_check(old["persona"]["tiers"] == tiers_before and old["persona"]["version"] == D.PROFILE_VERSION, "migration : paliers gardés, version du profil à jour")
 	E.add_opinion(fresh, old, 150.0)
 	_check(E.opinion(fresh, old) == D.OPINION_MAX, "opinion bornée à +100")
+	_check_circles()
+
+
+func _check_circles() -> void:
+	print("Cercles")
+	# Répartition des rapports à la hiérarchie sur 20 000 héros 3★.
+	var counts := {}
+	for i in 20000:
+		var stance: String = E.generate(3, "", [], 900000 + i)["hierarchy_stance"]
+		counts[stance] = counts.get(stance, 0) + 1
+	var parts := []
+	for stance_id in D.HIERARCHY_STANCES:
+		parts.append("%s %.1f %%" % [D.HIERARCHY_STANCES[stance_id]["name"], 100.0 * counts.get(stance_id, 0) / 20000.0])
+	print("  rapports à la hiérarchie (3★) : " + ", ".join(parts))
+	_check(D.HIERARCHY_STANCES.keys().all(func(s): return counts.get(s, 0) > 400), "chaque rapport à la hiérarchie existe (plus de 2 %)")
+	# Un Courtisan : soumis aux forts, dur avec les faibles et les nouveaux.
+	var courtier := {"id": 10, "name": "Courtisan", "rarity": 3, "level": 10, "fights": 10, "persona": E.generate(3, "", [], 77)}
+	courtier["persona"]["hierarchy_stance"] = "courtisan"
+	E.set_tier(courtier, "EMP", 0)
+	var strong := {"id": 11, "rarity": 5, "level": 20, "fights": 20}
+	var weak := {"id": 12, "rarity": 1, "level": 1, "fights": 10}
+	var newcomer := {"id": 13, "rarity": 3, "level": 10, "fights": 0}
+	_check(E.circle(courtier, strong) == "plus_fort" and E.circle(courtier, weak) == "plus_faible" and E.circle(courtier, newcomer) == "nouveau",
+		"cercles selon le rang perçu et l'ancienneté")
+	_check(E.axis(courtier, "EMP", strong) == 40 and E.axis(courtier, "EMP", weak) == -50 and E.axis(courtier, "EMP") == 0,
+		"Courtisan : Empathie +40 envers un plus fort, -50 envers un faible, 0 sans cible (exemple du cahier)")
+	_check(E.circle(courtier, "maitre") == "maitre" and E.axis(courtier, "EMP", "maitre") == 40, "envers le Maître : comme un plus fort")
+	E.add_debt(courtier, weak)
+	_check(E.circle(courtier, weak) == "intime", "un sauveur entre dans le cercle Intimes (dette de vie)")
+	E.add_opinion(courtier, strong, -80.0)
+	_check(E.circle(courtier, strong) == "rival", "opinion très basse : rival")
+	_check(E.score(courtier, "obey_strong", strong) != E.score(courtier, "obey_strong"), "score() applique le décalage du cercle")
+	_check(not E.is_watched(), "is_watched() : faux tant que les écrans ne le branchent pas (P3)")
 
 
 func _check(ok: bool, text: String) -> void:

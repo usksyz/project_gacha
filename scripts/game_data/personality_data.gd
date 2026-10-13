@@ -860,6 +860,61 @@ const THOUGHTS_MAX := 20
 const MEMORIES_MAX := 30
 
 
+# ---------------------------------------------------------------------------
+# Les cercles (onglet « 4. Interactions », section 2 bis) — P1b : données et lecture, aucun effet en jeu
+# ---------------------------------------------------------------------------
+# On n'est pas le même avec tout le monde : la valeur d'un axe utilisée envers une cible est le palier de
+# base + le décalage du cercle de la cible (CIRCLE_SHIFTS, plus celui du rapport à la hiérarchie). Un
+# héros peut appartenir à plusieurs cercles : on prend le plus proche, dans l'ordre de CIRCLES.
+const CIRCLES := {
+	"intime": "Intimes (ami proche, sauveur, mentor)",
+	"rival": "Rivaux et ennemis",
+	"groupe": "Groupe (sa clique, son équipe)",
+	"nouveau": "Nouveaux",
+	"plus_fort": "Plus forts",
+	"plus_faible": "Plus faibles",
+	"lobby": "Lobby",
+	"maitre": "Le Maître",
+}
+## Décalages communs à tous (en paliers), avant ceux du rapport à la hiérarchie.
+const CIRCLE_SHIFTS := {
+	"intime": {"EMP": 3, "LOY": 3, "HON": 2},
+	"rival": {"EMP": -3, "COL": 3, "LOY": -3},
+	"groupe": {"EMP": 1, "LOY": 1},
+}
+## Seuils : opinion d'un intime ou d'un rival ; un « nouveau » a fait moins de NEW_FIGHTS combats ;
+## écart de rang perçu pour être « plus fort » ou « plus faible ».
+const OPINION_INTIMATE := 60.0
+const OPINION_RIVAL := -60.0
+const NEW_FIGHTS := 3
+const RANK_GAP := 15.0
+## Ce qui fait le rang perçu d'un héros (points) : étoiles, niveau, combats faits, Meneur, favori du Maître.
+## (Force vue en combat, victimes, humiliations : avec les événements, en P4.)
+const RANK_FACTORS := {"rarity": 10.0, "level": 1.0, "fights": 0.5, "leader": 5.0, "favorite": 5.0}
+
+## Le rapport à la hiérarchie, tiré à la création selon les axes (comme les couches) ; il pourra changer
+## avec un arc. « axes » : axe → coefficient du tirage ; « shifts » : cercle → {axe: décalage en paliers}.
+## Envers le Maître (le plus fort de tous), on prend les décalages « plus_fort ».
+## Exemple du cahier, pour un Courtisan : envers les plus forts, Empathie +40, Maîtrise de soi +30,
+## Honnêteté -20 ; envers les plus faibles et les nouveaux, Empathie -50, Colère +30, Ambition +20.
+const HIERARCHY_STANCES := {
+	"egalitaire": {"name": "Égalitaire", "axes": {"HON": 0.6, "EMP": 0.4, "AMB": -0.4}, "shifts": {}},
+	"deferent": {"name": "Déférent", "axes": {"LOY": 0.7, "MAI": 0.4, "AMB": -0.4},
+		"shifts": {"plus_fort": {"LOY": 3, "MAI": 2, "COL": -2}}},
+	"courtisan": {"name": "Courtisan", "axes": {"AMB": 0.6, "HON": -0.6, "EMP": -0.4},
+		"shifts": {"plus_fort": {"EMP": 4, "MAI": 3, "HON": -2}, "plus_faible": {"EMP": -5, "COL": 3, "AMB": 2},
+			"nouveau": {"EMP": -5, "COL": 3, "AMB": 2}}},
+	"dominateur": {"name": "Dominateur", "axes": {"AMB": 0.7, "COL": 0.5, "LOY": -0.3},
+		"shifts": {"plus_fort": {"COL": 2, "LOY": -3}, "plus_faible": {"AMB": 2, "EMP": 1}, "nouveau": {"AMB": 2}}},
+	"rebelle": {"name": "Rebelle", "axes": {"LOY": -0.6, "COL": 0.5, "EMP": 0.4},
+		"shifts": {"plus_fort": {"LOY": -4, "COL": 3}, "plus_faible": {"EMP": 3}, "nouveau": {"EMP": 2}}},
+	"protecteur": {"name": "Protecteur", "axes": {"EMP": 0.7, "LOY": 0.4, "COL": -0.3},
+		"shifts": {"plus_fort": {"LOY": 1}, "plus_faible": {"EMP": 3, "MAI": 1}, "nouveau": {"EMP": 3, "MAI": 1}}},
+}
+## Hasard dans le tirage du rapport à la hiérarchie (comme LAYER_NOISE).
+const STANCE_NOISE := 0.6
+
+
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
 ## enregistré, avec la migration au chargement (PersonalityEngine.migrate).
 ## 2 : anciens traits lus sur les paliers (« legacy_traits »), profils des héros secrets (« secret_profile »).
