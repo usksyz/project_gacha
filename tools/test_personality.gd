@@ -202,6 +202,42 @@ func _check_library() -> void:
 	_check(skill["state"] == "piste" and not skill["verified"] and skill["authors"].size() == 2, "registre des compétences : rumeur puis piste, non vérifiée")
 	L.set_skill_state(library, "Résistance au feu", "verifiee")
 	_check(L.skill_entry(library, "Résistance au feu")["verified"], "méthode vérifiée")
+	_check_memorial()
+
+
+func _check_memorial() -> void:
+	print("Mémorial")
+	var M = load("res://scripts/game_data/memorial.gd")
+	var memorial: Dictionary = M.new_memorial()
+	var dead := []
+	for i in 3:
+		var h := _plain_hero(60 + i)
+		h["alive"] = false
+		h["death_cause"] = "tué par Liche"
+		E.learn_subject(h, "monster:liche", 1000.0, 4)
+		h["recent_battles"] = [{"floor": 10, "victory": false, "formation": ["mur de boucliers"], "events": [
+			{"t": 1.0, "kind": "contact", "with": "Liche"}, {"t": 2.0, "kind": "dodge", "with": "Liche"},
+			{"t": 9.0, "kind": "death", "cause": "tué par Liche"}]}]
+		dead.append(h)
+	var living := _plain_hero(63)
+	var result: Dictionary = M.record(memorial, dead + [living])
+	_check(result["recorded"].size() == 2 and result["refused"].size() == 2, "2 places au niveau 1 : le 3e mort et le vivant sont refusés")
+	var kept: Dictionary = M.view(memorial, memorial["entries"][0])
+	_check(kept["subjects"].is_empty() and kept["battles"][0]["events"].size() == 2 and kept["floor"] == 0,
+		"mémoire 1 : le dernier combat, moments clés seulement (pas l'esquive), pas de connaissance")
+	M.upgrade_memory(memorial)
+	M.upgrade_memory(memorial)
+	kept = M.view(memorial, memorial["entries"][0])
+	_check(kept["subjects"].get("monster:liche", 0) == 2 and kept["battles"][0]["events"].size() == 3 and kept["floor"] == 10,
+		"mémoire 3 : connaissance jusqu'au niveau 2, combat complet, étage où il est mort (souvenirs déjà enregistrés compris)")
+	var mourner := _plain_hero(64, "scribe", {"SEN": 7})
+	var cold := _plain_hero(65, "scribe", {"SEN": -7})
+	var r1: Dictionary = M.relive(memorial, mourner, 60)
+	var r2: Dictionary = M.relive(memorial, cold, 60)
+	_check(E.knowledge(mourner, "monster:liche") >= 1 and r1["stress"] > 0.0 and r2["stress"] == 0.0 and r2["reaction"] == "froid",
+		"revivre un souvenir : connaissance gagnée ; ça coûte au Sensible, le Détaché apprend froidement")
+	_check(M.replay(memorial, 60).size() == 3, "replay du dernier combat pour le Maître")
+	_check(M.remove(memorial, 60) == "H60 sera oublié à jamais." and M.free_places(memorial) == 1, "retirer : « [Nom] sera oublié à jamais », place libérée")
 
 
 func _check(ok: bool, text: String) -> void:

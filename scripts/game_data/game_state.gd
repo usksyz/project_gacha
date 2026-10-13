@@ -115,6 +115,8 @@ var tutorial_step := ""
 ## Bibliothèque du Maître : le savoir des survivants (voir library.gd, Library). Personnalité P1b : données
 ## seulement (pas encore de salle).
 var library: Dictionary = Library.new_library()
+## Mémorial du Maître : le savoir des morts (voir memorial.gd, Memorial). P1b : données seulement.
+var memorial: Dictionary = Memorial.new_memorial()
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace
