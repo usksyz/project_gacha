@@ -112,6 +112,9 @@ var pending_challenges: Array = []
 var seen_tips: Array = []
 ## Étape du tutoriel obligatoire d'une partie neuve (voir TUTORIAL_STEPS) ; "" = terminé (ou ancienne partie).
 var tutorial_step := ""
+## Bibliothèque du Maître : le savoir des survivants (voir library.gd, Library). Personnalité P1b : données
+## seulement (pas encore de salle).
+var library: Dictionary = Library.new_library()
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace

@@ -223,6 +223,11 @@ const METIERS := {
 	"veteran": {"name": "Vétéran", "combat": 3, "weights": {3: 3, 4: 6, 5: 8}, "aptitudes": {"epee": 1, "bouclier": 1}},
 	"maitre_armes": {"name": "Maître d'armes", "combat": 3, "weights": {4: 2, 5: 5}, "aptitudes": {"epee": 2, "lance": 1}},
 }
+## Savoir écrire dépend du métier (document de référence, section 3 bis, « La bibliothèque ») : un scribe
+## ou un érudit, même 1★, sera précieux comme bibliothécaire ; un illettré raconte, quelqu'un d'autre écrit.
+## (Les héros secrets savent écrire.)
+const LITERATE_METIERS := ["scribe", "erudit", "pretre", "marchand", "artisan_expert", "guerisseur", "chevalier_errant"]
+
 ## Métier des héros secrets : aucun pour l'instant (ils ont leur propre histoire, qui viendra avec leurs
 ## profils écrits à la main) ; leur classe s'affiche comme avant.
 const SECRET_METIER := ""

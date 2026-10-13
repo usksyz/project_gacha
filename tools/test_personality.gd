@@ -161,6 +161,47 @@ func _check_subjects() -> void:
 	for i in 20:
 		E.share_knowledge(kind_teacher, l1)
 	_check(E.knowledge(l1, "monster:golem") == D.KNOWLEDGE_CAP["lobby"], "au lobby : niveau 2 au plus")
+	_check_library()
+
+
+func _check_library() -> void:
+	print("Bibliothèque")
+	var L = load("res://scripts/game_data/library.gd")
+	var library: Dictionary = L.new_library()
+	var scout := _plain_hero(40, "scribe")
+	var gloomy := _plain_hero(41, "paysan", {"OPT": -8})
+	for h in [scout, gloomy]:
+		E.learn_subject(h, "monster:liche", 1000.0, 4, 30.0)
+		E.after_encounter(h, "monster:liche", {"danger": 90.0, "mode": "fought", "day": 100})
+	var written: Array = L.deposit(library, scout)
+	var card: Dictionary = library["bestiary"]["monster:liche"]
+	_check(not written.is_empty() and E.pending_report(scout).is_empty(), "le rapport est consigné, puis vidé")
+	_check(not card["verified"] and card["knowledge"] == 4 and not card["told"], "un seul auteur : non vérifiée ; un scribe l'écrit lui-même")
+	var danger_one: float = card["danger"]
+	L.deposit(library, gloomy)
+	_check(card["verified"] and card["told"], "un second héros la confirme : vérifiée ; un paysan illettré la raconte")
+	_check(card["danger"] > danger_one, "le Pessimiste surestime le danger")
+	var reader := _plain_hero(42)
+	for i in 30:
+		L.study(library, reader, "monster:liche")
+	var reader2 := _plain_hero(43)
+	for i in 30:
+		L.study(library, reader2, "monster:liche", true)
+	_check(E.knowledge(reader, "monster:liche") == 2 and E.knowledge(reader2, "monster:liche") == 3, "étude : niveau 2 au plus, 3 avec un bibliothécaire")
+	var calm := _plain_hero(44)
+	var fragile := _plain_hero(45, "scribe", {"STA": -7})
+	var before_calm := E.apprehension(calm, "monster:liche")
+	var before_fragile := E.apprehension(fragile, "monster:liche")
+	L.study(library, calm, "monster:liche")
+	L.study(library, fragile, "monster:liche")
+	_check(E.apprehension(calm, "monster:liche") < before_calm and E.apprehension(fragile, "monster:liche") > before_fragile,
+		"la lecture rassure, mais un récit d'horreur inquiète un Vulnérable")
+	L.set_skill_state(library, "Résistance au feu", "rumeur", {"id": 40, "name": "H40"})
+	L.set_skill_state(library, "Résistance au feu", "piste", {"id": 41, "name": "H41"}, {"activite": "s'exposer au feu"})
+	var skill: Dictionary = L.skill_entry(library, "Résistance au feu")
+	_check(skill["state"] == "piste" and not skill["verified"] and skill["authors"].size() == 2, "registre des compétences : rumeur puis piste, non vérifiée")
+	L.set_skill_state(library, "Résistance au feu", "verifiee")
+	_check(L.skill_entry(library, "Résistance au feu")["verified"], "méthode vérifiée")
 
 
 func _check(ok: bool, text: String) -> void:

@@ -58,6 +58,7 @@ func save_game() -> void:
 	file.set_value("partie", "defis", pending_challenges)
 	file.set_value("partie", "conseils_vus", seen_tips)
 	file.set_value("partie", "tutoriel", tutorial_step)
+	file.set_value("partie", "bibliotheque", library)
 	file.save(SAVE_PATH)
 
 
@@ -96,6 +97,8 @@ func load_game() -> bool:
 	# compte comme vus (Paramètres > « Réafficher les conseils » pour les revoir).
 	seen_tips = file.get_value("partie", "conseils_vus", TIP_IDS.duplicate())
 	tutorial_step = file.get_value("partie", "tutoriel", "")  # partie d'avant le tutoriel : pas de tutoriel
+	# Bibliothèque (version 5) : absente d'une ancienne sauvegarde = vide.
+	library = Library.migrate(file.get_value("partie", "bibliotheque", Library.new_library()))
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
@@ -166,4 +169,5 @@ func _new_game() -> void:
 	relation_news = []
 	pending_challenges = []
 	seen_tips = []  # partie neuve : le Système accueille le Maître (voir show_tip)
+	library = Library.new_library()
 	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.
