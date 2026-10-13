@@ -417,6 +417,7 @@ func _lead(leader: Dictionary) -> void:
 ## lui-même l'équipe : les porteurs de bouclier côte à côte (un mur de boucliers) au milieu, DEFENSE_LINE_GAP
 ## rangs sous la sortie des ruelles ; les autres au corps à corps juste derrière eux (un lancier d'abord, il
 ## frappe par-dessus le mur) ; les tireurs encore derrière. Fenêtre « X organise la défense », trait révélé.
+## Moins de deux boucliers : pas de mur, il ne déplace personne.
 ## Ce sont leurs postes de départ, pas une consigne : quand les ennemis arrivent, ils se battent comme les
 ## autres (simulation, étage 5 : tenir le poste, ou les tireurs en hauteur, faisait perdre bien plus souvent,
 ## les héros restant figés face aux archers ennemis). Un ordre du Maître passe avant. Sans Meneur, les héros
@@ -438,6 +439,8 @@ func _organize_defense() -> void:
 	var shields := free.filter(func(h): return h["shield"] and not h["ranged"])
 	var others := free.filter(func(h): return not h["shield"] and not h["ranged"])
 	var shooters := free.filter(func(h): return h["ranged"])
+	if shields.size() < 2:
+		return  # pas de mur possible : la ligne de départ vaut mieux qu'un groupe serré (simulation, équipe sans armes)
 	var row := ALLEY_ROW + ALLEY_LENGTH + DEFENSE_LINE_GAP
 	var center := GRID_W / 2
 	# Le mur : du milieu vers les côtés (x, x - 1, x + 1, x - 2...).
@@ -454,8 +457,6 @@ func _organize_defense() -> void:
 		_send_to_post(others[i], _free_cell_near(_cell_of(front + Vector2(0, 1))))
 	for hero in shooters:
 		_send_to_post(hero, _free_cell_near(Vector2i(center, row + 2)))
-	if free.is_empty():
-		return
 	_reveal(leader, "Meneur")
 	var who := _name_with_stars(leader)
 	_log("%s organise la défense : un mur de boucliers, les autres derrière." % who, "awaken")

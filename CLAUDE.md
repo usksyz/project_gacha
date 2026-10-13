@@ -418,7 +418,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Meneur en survie (demande du porteur du projet, après la phase 1.2 ; `Battle._organize_defense`) : au début
   d'un combat sur le terrain à ruelles, un Meneur (ni effrayé ni en panique) forme lui-même l'équipe : les
   porteurs de bouclier côte à côte (mur de boucliers) au milieu, `DEFENSE_LINE_GAP` (2) rangs sous la sortie des
-  ruelles, les autres au corps à corps juste derrière (un lancier d'abord), les tireurs derrière eux ; fenêtre
+  ruelles, les autres au corps à corps juste derrière (un lancier d'abord), les tireurs derrière eux (moins de
+  deux porteurs de bouclier : pas de mur, il ne déplace personne) ; fenêtre
   « X organise la défense. », trait révélé. Ce sont des postes de départ, pas une consigne : quand l'ennemi
   arrive, chacun se bat librement. Un héros qui a déjà un ordre du Maître le garde. Sans Meneur, les héros
   restent sur leur ligne de départ et attendent les ordres du Maître.
@@ -431,6 +432,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   ligne de départ 72,1 % ; P7 « Meneur adaptable » (P5 avec postes tenus, consigne levée dès qu'un tireur
   ennemi est à 7 cases, reposte à la vague suivante sans tireurs) 54,1 / 58,2 %. Tenir un poste coûte cher
   face aux archers squelettes. P5 : 73,8 % contre 74 % sans Meneur sur 3 000 combats (égalité aux aléas près).
+  Équipe brute (sans armes, donc sans boucliers) : P5 la serrait au centre, 22,4 % contre 25,8 % sans Meneur ;
+  d'où la règle « moins de deux boucliers : il ne déplace personne » (après : 24,8 % contre 25,8 %, aléas).
   Agonie (rendue plus exigeante comme au ch. 11, demande du porteur du projet) : à 0 point de vie, un héros
   ne meurt pas tout de suite (`_announce_fall` → `_start_agony`) : il
   agonise `AGONY_SECONDS` (8 s ; avant 10), fenêtre rouge « X est dans un état critique, sa vie est en danger ! » ;
