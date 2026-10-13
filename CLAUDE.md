@@ -315,7 +315,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   `Godot --headless --path . --import` (cache des classes ; la publication web le fait toute seule).
 - Personnalité v2, étape P1a-bis (cahier, « 1. Paliers », sections 11 et 12) : les anciens traits deviennent
   des lectures de paliers, sans changer leurs effets. `PersonalityData.OLD_TRAITS` : Courageux = composite Courage
-  >= +50, Lâche <= -50, Loyal = Loyauté >= +50, Paresseux = Persévérance <= -50, Querelleur = Colère >= +50 et
+  >= +40, Lâche <= -40 (choix du porteur du projet, étape 0 avant P1b ; le cahier disait ±50), Loyal = Loyauté >= +50, Paresseux = Persévérance <= -50, Querelleur = Colère >= +50 et
   Empathie <= +20, Protecteur = Empathie >= +50 et Audace >= +30, Ambitieux = Ambition >= +50, Mauvais =
   Empathie <= -50 et Honnêteté <= -30, Meneur = synergie Meneur. `has_trait` → `PersonalityEngine.has_old_trait`
   (ou `persona["legacy_traits"]`) ; `roll_traits` supprimé ; drapeaux « révélé » par nom dans
@@ -330,11 +330,12 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   et `notes`, visibles en mode dev), à la création (code, menu SECRET_HERO) et à la migration des secrets déjà
   possédés (leurs anciens traits tirés au hasard ne comptent plus, drapeaux gardés). Couches interprétées quand
   le cahier ne nomme pas une option de `LAYERS` (Han : valeur Réussite, peur Le déshonneur ; besoins). Leur
-  croissance (`SECRET_HEROES`) ne change pas. Traits obtenus : Han Ambitieux ; Jenna Courageuse et Loyale ;
+  croissance (`SECRET_HEROES`) ne change pas. Traits obtenus : Han Courageux (Courage +40 tout juste) et Ambitieux ; Jenna Courageuse et Loyale ;
   Aaron, Hansen, Zid Loyaux ; Shei Courageuse et Loyale ; Yvolka Paresseuse et Ambitieuse ; Edith Protectrice et Meneuse.
-  Fréquence des traits (banc, 40 000 héros par rareté), avant → après : chaque trait 15-16 % → Courageux 1-4 %,
-  Lâche 1-2 %, Loyal 10-15 %, Paresseux 9-14 %, Querelleur 7-9 %, Protecteur 3-6 %, Ambitieux 9-15 %, Mauvais
-  5-7 %, Meneur 2-4 % (1★ → 5★) ; traits par héros 1,4 → 0,5 (1★) à 0,8 (5★) ; héros sans trait 45 à 61 %.
+  Fréquence des traits (banc, 40 000 héros par rareté, seuils ±40 du Courage), avant → après : chaque trait
+  15-16 % → Courageux 4,9 / 5,6 / 6,9 / 8,7 / 10 % (1★ → 5★ ; à ±50 : 1-4 %), Lâche 4,8-5,7 % (à ±50 : 1-2 %),
+  Loyal 10-15 %, Paresseux 9-14 %, Querelleur 7-9 %, Protecteur 3-6 %, Ambitieux 9-15 %, Mauvais 5-7 %, Meneur
+  2-4 % ; traits par héros 1,4 → 0,54 (1★) à 0,87 (5★) ; héros sans trait 40 (5★) à 56 % (1★).
   Simulateur de la Tour : `tools/sim_tower.tscn` (voir l'en-tête de `tools/sim_tower.gd` ; copier la sauvegarde
   locale avant, la remettre après), victoires selon chaque trait présent dans l'équipe.
   Simulateur de la Tour : chaque lancement relit et réécrit `user://sauvegarde.cfg` ; pour ne pas y toucher,

@@ -693,8 +693,9 @@ const EFFORT_START := 0.0
 ## dans le sens du pôle (négatif = pôle bas)}, comme SYNERGIES ; « at_most » : {axe: palier maximal} ;
 ## « synergy » : l'accès croisé qu'il faut avoir.
 const OLD_TRAITS := {
-	"Courageux": {"composite": {"courage": 5}},           # Courage >= +50
-	"Lâche": {"composite": {"courage": -5}},              # Courage <= -50
+	# Courageux / Lâche : seuil ±40 (choix du porteur du projet, étape 0 avant P1b ; le cahier disait ±50).
+	"Courageux": {"composite": {"courage": 4}},           # Courage >= +40
+	"Lâche": {"composite": {"courage": -4}},              # Courage <= -40
 	"Loyal": {"needs": {"LOY": 5}},                       # Loyauté >= +50
 	"Paresseux": {"needs": {"PER": -5}},                  # Persévérance <= -50 (Abandon)
 	"Querelleur": {"needs": {"COL": 5}, "at_most": {"EMP": 2}},  # Colère >= +50 et Empathie <= +20
