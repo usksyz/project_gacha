@@ -347,6 +347,67 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   95,6 / 44,1 % → 100 / 98,7 / 96 / 95,3 / 66,8 %. Écart : préparée étage 5, +23 points. Cause : l'ancien
   Meneur en survie (avec Meneur 18-20 %, sans 73-74 %) ; avant, 55 % des équipes avaient un Meneur, maintenant
   12 %. Avec `_organize_defense` coupé : 73 % avant, 73,6 % après. Corrigé à l'étape 0 (voir « Meneur en survie »).
+- Personnalité v2, étape P1b (cahier, « Personnalité : document de référence », section 3 bis et section 7
+  « Découpage de P1 » ; « 3. Moteur » ; « 4. Interactions », sections 2, 2 bis, 5 à 7 ; « Compétences : registre
+  et recherche », section 10) : toutes les STRUCTURES sur lesquelles P2 à P5 se brancheront, AUCUN effet en jeu.
+  Sauvegarde version 5, profil version 3 (`PROFILE_VERSION`), migration au chargement (`PersonalityEngine.migrate` ;
+  bibliothèque et mémorial absents = vides).
+  1. Les 8 briques (`persona["mind"]`, `new_mind`, données `NEEDS`, `EXPECTATIONS`, `COPING_STRATEGIES`, `DESIRES`) :
+  besoins (0 à 100, `NEED_START` 100 = satisfait ; `need_weight` : axes et couche « besoin »), pensées, attentes (rang
+  attendu : 20 par étoile), dissonance, souvenirs, opinions (`opinion`, `add_opinion`, -100 à +100 ; `GameData.bonds`
+  reste la source des liens), confiance envers le Maître (`trust`), adaptation (`coping`), désirs. Vides ou neutres.
+  2. Cercles (`CIRCLES`, `CIRCLE_SHIFTS`, `HIERARCHY_STANCES`, `RANK_FACTORS`) : rapport à la hiérarchie tiré à la
+  création selon les paliers (`roll_stance` ; 3★ : Égalitaire 15 %, Déférent 17 %, Courtisan 19 %, Dominateur 16 %,
+  Rebelle 16 %, Protecteur 16 %), dettes de vie (`debts`, `add_debt`), `circle(hero, cible)` (intime : frère d'armes,
+  opinion >= 60 ou sauveur ; rival : hostiles ou <= -60 ; groupe : ami ou même groupe ; nouveau : moins de 3 combats ;
+  plus fort / plus faible : rang perçu à 15 points d'écart ; « maitre »), `social_rank` (calculé à la demande ; le
+  cache viendra avec les événements), `is_watched` / `set_watched` (faux tant que les écrans ne le branchent pas, P3).
+  `axis()` et `score()` appliquent le décalage du cercle de la cible (`_circle_shift`, `circle_shift_for`,
+  `circle_face`) ; aucune mécanique ne passe encore de cible. Exemple du cahier vérifié : un Courtisan à Empathie 0
+  est à +40 envers un plus fort (et le Maître), -50 envers un faible.
+  3. Sujets (`SUBJECTS` : monstres de la Tour avec leur famille, synthèse, lobby, lieux, missions, vue du sang ;
+  `KNOWLEDGE_LEVELS`, `KNOWLEDGE_CAP`, `BACKGROUND_SUBJECTS`, constantes d'apprentissage) : `persona["subjects"]`
+  (appréhension, connaissance, progression, dernière rencontre, peur éteinte, cadres réussis, cicatrice, haine, connu
+  avant l'invocation) et `pending_report`. `apprehension` (absence de 7 jours : 30 % de la peur perdue revient ; cadre
+  nouveau : +10, moins chez un Curieux), `knowledge`, `after_encounter` (peur qui baisse de 30 % de l'écart, monte de
+  50 % ; Stabilité ; cicatrice 30 % chez un Vulnérable, haine chez un Colérique ou Persévérant ; connaissance : combat
+  niveau 4, regard 3, récit 1), `share_knowledge` (Empathie explique, Méfiance n'écoute pas, niveau 2 au plus),
+  `learn_subject`, `subject_for_enemy`. Métier : chasseur loups niveau 3, berger loups connus et craints (70), soldat
+  humanoïdes et sang... Han : synthèse niveau 4, appréhension 0 (`SECRET_PROFILES`, « subjects »). Rien ne lit ces
+  valeurs en combat (P2).
+  4. `scripts/game_data/library.gd` (`Library`, `GameData.library`, sauvegardé « bibliotheque ») : bestiaire, carnets
+  d'étage, formations, stratégies, registre des compétences (`SKILL_STATES` : inconnue, rumeur, piste, hypothèse, en
+  test, méthode vérifiée, améliorée ; `set_skill_state`). `deposit(library, hero)` consigne le rapport du héros, filtré
+  par sa personnalité (Curiosité ou Acuité : fiche plus détaillée ; Pessimisme : danger surestimé ; Ruse : omission
+  possible ; Ambition : rôle exagéré ; illettré : fiche racontée, `LITERATE_METIERS`), vérifiée au 2e auteur.
+  `study` : niveau 2 (3 avec un bibliothécaire), jamais plus que la fiche ; la lecture rassure (-3), un récit d'horreur
+  inquiète un Vulnérable (+3). Niveaux de la salle `LEVELS`. Pas encore de salle (P5).
+  5. `scripts/game_data/memorial.gd` (`Memorial`, `GameData.memorial`, sauvegardé « memorial ») : places (`CAPACITY`
+  2 à 12) et mémoire (`MEMORY`, niveaux 1 à 5 du cahier) améliorées séparément ; `record(memorial, héros)` sans
+  ramener le corps ; on garde tout et la mémoire filtre à la lecture (`view` : monter la mémoire améliore les souvenirs
+  déjà là) ; `remove` renvoie « [Nom] sera oublié à jamais. » ; `relive` (connaissance du mort ; stress, x2 pour un
+  intime, 0 pour un Détaché, et réaction calculés, appliqués en P4) ; `replay` (le dernier combat vu par le mort).
+  6. Journal de combat (`battle.gd`, section « Journal de combat ») : par héros, `fighter["journal"]` (premier
+  contact avec chaque ennemi, blessure grave, agonie, secours, mort, ennemi achevé, formation ; 60 au plus) et
+  `journal_counts` (coups portés, reçus, esquives, ennemis achevés) ; `Battle.formations_used` (trois portées, mur de
+  boucliers, défense du Meneur). Aucun tirage au hasard : mêmes combats à graine égale (vérifié : `sim_tower`,
+  étages 1 à 5, 300 combats, graine 7, brute et préparée, sorties identiques octet pour octet avant et après ;
+  brute 100 / 69,3 / 49 / 57,3 / 27,3 %, préparée 100 / 98 / 95,3 / 95 / 74 %).
+  `finish_tower_battle` → `_keep_battle_journals` (`tower.gd`) : `hero["recent_battles"]` (3 derniers combats,
+  morts compris) ; les survivants ajoutent le carnet de l'étage à leur `pending_report`.
+  7. Le « pourquoi » : `decide()` garde ses 3 plus fortes raisons dans `persona["decisions"]` (10 dernières,
+  `decisions()`), visibles en mode dev ; il choisit toujours l'option par défaut (P3).
+  8. Mode dev : fiche du héros, sous « PERSONNALITÉ » : briques, cercles et visage cercle par cercle, place des autres
+  héros dans ses cercles, sujets, rapport à consigner, dernières décisions, dernier combat ; boutons « Combat facile /
+  dur (gobelins) », « Consigner à la bibliothèque », « Étudier le bestiaire » (`dev_subject_encounter`, `dev_deposit`,
+  `dev_study`). Outils du mode dev > « Bibliothèque et mémorial » : voir la bibliothèque, voir le mémorial (« Retirer »,
+  fenêtre « Retirer [Nom] du mémorial ? », puis « [Nom] sera oublié à jamais. »), enregistrer les morts, +1 niveau
+  de places ou de mémoire.
+  Banc : `test_personality.gd` (« -- p1b » : seulement les contrôles P1b, quelques secondes ; complet : 125 contrôles).
+  Vérifié aussi en mode normal, sur une copie d'une vraie sauvegarde version 2 : migration sans rien perdre, combat
+  de la Tour complet (journal, carnet d'étage, bibliothèque, mémorial), enregistrer puis relire à l'identique (les
+  nombres à virgule relus se comparent à 0,0001 près : arrondi connu de la sauvegarde). P1b est terminée : P2
+  branchera les effets (sujets et appréhension en combat, besoins, opinions) sur ces structures.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
