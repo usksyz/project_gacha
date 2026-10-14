@@ -184,15 +184,9 @@ var enemies: Array[Dictionary] = []
 var map_data: Dictionary = {}
 var map := BattleMap.new()
 
-## Les morceaux de décor à dessiner (ancien dessin, tirés de la carte) :
-## [{"rect": Rect2i, "kind": "rock" / "wall" / "house" / "rampart"}].
-var obstacles: Array[Dictionary] = []
-
 ## Remparts de la cité (quête de défense seulement).
 var walls := 0
 
-## Les toits et hauteurs à dessiner (ancien dessin, tirés de la carte).
-var heights: Array[Rect2i] = []
 ## Terrain de survie : la sortie de chaque ruelle côté héros (de gauche à droite ; vide hors de la survie),
 ## et si un Meneur a déjà organisé la défense (voir _organize_defense).
 var alley_exits: Array[Vector2] = []
@@ -744,18 +738,6 @@ func _build_map() -> void:
 		map_data = MapGenerator.generate_map(quest.get("floor", 0), quest, randi())
 	map.from_data(map_data)
 	alley_exits.assign(map_data.get("alley_exits", []))
-	# (Ce que l'écran dessine encore à l'ancienne : obstacles et hauteurs, voir battle_view.gd.)
-	for structure in map_data.get("structures", []):
-		var rect: Rect2i = structure["rect"]
-		if map.kind_at(rect.position) == BattleMap.Kind.BLOCK:
-			obstacles.append({"rect": rect, "kind": OLD_DRAWING.get(structure["kind"], "rock")})
-		elif structure["height"] >= 2 and structure["kind"] != "ladder":
-			heights.append(rect)
-
-
-## Comment l'ancien dessin (obstacles) montre chaque structure de la carte.
-const OLD_DRAWING := {"house": "house", "gate": "rampart", "rampart": "rampart", "ruin": "wall", "boulder": "rock",
-	"trees": "rock", "well": "rock"}
 
 
 ## Vrai si ce combattant se tient en hauteur (au-dessus du sol).

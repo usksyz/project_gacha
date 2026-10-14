@@ -1,4 +1,4 @@
-class_name BattleView
+﻿class_name BattleView
 extends Control
 ## Écran de combat, en direct et vu du dessus.
 ## En haut le titre, le chrono et la barre de vie du boss ; au milieu le champ de bataille ;
@@ -16,16 +16,26 @@ const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
 const ORDER_COLOR := Color("f5d142")
 const GROUND_COLOR := Color("27301f")
-## Hauteurs du terrain de survie (on y grimpe : voir Battle.is_high).
-const HEIGHT_COLOR := Color("6e6648")
 
-## Couleur du décor, selon son genre.
-const OBSTACLE_COLORS := {
-	"rock": Color("5b5d66"),
-	"wall": Color("6b5a48"),
-	"house": Color("4a3b2e"),
-	"rampart": Color("8a8f98"),
+## Couleur de chaque type de case (voir BattleMap.Kind) ; plus claire à chaque niveau de hauteur
+## (HEIGHT_LIGHTEN par niveau), et le chiffre de la hauteur dans le coin (Combat v2, C1).
+const KIND_COLORS := {
+	BattleMap.Kind.GROUND: Color("27301f"),
+	BattleMap.Kind.BLOCK: Color("3a3030"),
+	BattleMap.Kind.ROOF: Color("7a4434"),
+	BattleMap.Kind.LADDER: Color("27301f"),
+	BattleMap.Kind.STAIRS: Color("4c5638"),
+	BattleMap.Kind.LOW_WALL: Color("6b5a48"),
+	BattleMap.Kind.RAMPART: Color("737882"),
+	BattleMap.Kind.GATE: Color("5a4128"),
+	BattleMap.Kind.GRASS: Color("3a5a2a"),
+	BattleMap.Kind.TOWER: Color("8a6a4a"),
+	BattleMap.Kind.ROCK: Color("5b5d66"),
 }
+const HEIGHT_LIGHTEN := 0.09
+const LADDER_COLOR := Color("c99a5b")
+const EDGE_COLOR := Color(0, 0, 0, 0.55)
+const HEIGHT_TEXT_COLOR := Color(1, 1, 1, 0.55)
 
 ## Couleur des lignes spéciales du journal, selon leur « style » (voir Battle.events).
 const STYLE_COLORS := {
@@ -449,8 +459,8 @@ func _update_hint() -> void:
 	elif selected_id >= 0:
 		hint_label.text = "%s : touche un endroit pour l'y envoyer, un ennemi à attaquer, ou un bouton en bas." \
 			% battle.units[selected_id]["name"]
-		if not battle.heights.is_empty():
-			hint_label.text += " Les hauteurs (cases claires) : on y grimpe lentement, puis on y frappe d'en haut."
+		if not battle.height_cells().is_empty():
+			hint_label.text += " Le chiffre d'une case : sa hauteur. On monte par les échelles et les escaliers ; d'en haut, on frappe plus fort et on tire plus loin."
 	else:
 		hint_label.text = "Touche un héros pour le guider."
 	_update_berserk_button()
@@ -578,20 +588,7 @@ func _draw_arena() -> void:
 		return  # zone trop petite (écran en train de se fermer) : rien à dessiner
 	var origin := _origin()
 	arena.draw_rect(Rect2(origin, Vector2(Battle.GRID_W, Battle.GRID_H) * cell), GROUND_COLOR)
-
-	# Hauteurs (terrain de survie) : plus claires, bordées, avec des marches pour dire qu'on y grimpe.
-	for rect in battle.heights:
-		var area := Rect2(origin + Vector2(rect.position) * cell, Vector2(rect.size) * cell).grow(-1.5)
-		arena.draw_rect(area, HEIGHT_COLOR)
-		arena.draw_rect(area, HEIGHT_COLOR.lightened(0.4), false, 2.0)
-		for i in range(1, 3):
-			var y := area.position.y + area.size.y * i / 3.0
-			arena.draw_line(Vector2(area.position.x + 4, y), Vector2(area.end.x - 4, y), HEIGHT_COLOR.lightened(0.25), 1.0)
-
-	for obstacle in battle.obstacles:
-		var rect: Rect2i = obstacle["rect"]
-		var screen_rect := Rect2(origin + Vector2(rect.position) * cell, Vector2(rect.size) * cell).grow(-1.5)
-		arena.draw_rect(screen_rect, OBSTACLE_COLORS[obstacle["kind"]])
+	_draw_cells(origin, cell)
 
 	# Entre deux pas du combat, les pions glissent de leur ancienne position à la nouvelle.
 	var weight := clampf(accumulator / Battle.TICK, 0.0, 1.0)
@@ -605,6 +602,74 @@ func _draw_arena() -> void:
 		_draw_unit(battle.units[id], _to_screen(positions[id]), cell)
 	_draw_names(positions, cell)
 	_draw_effects(positions, cell)
+
+
+## La carte « 3D sur grille » vue du dessus (Combat v2, C1) : chaque case dans la couleur de son type, plus
+## claire quand elle est haute, avec sa hauteur écrite dans le coin ; les échelles, escaliers, toits, tours,
+## remparts, murets, rochers et herbes ont leur dessin ; un trait sombre marque chaque bord qui tombe vers une
+## case plus basse (on lit le relief).
+func _draw_cells(origin: Vector2, cell: float) -> void:
+	var map: BattleMap = battle.map
+	var font := ThemeDB.fallback_font
+	var font_size := maxi(8, int(cell * 0.32))
+	for i in map.kinds.size():
+		var c := map.cell_at(i)
+		var kind := map.kinds[i]
+		var height := map.heights[i]
+		var area := Rect2(origin + Vector2(c) * cell, Vector2.ONE * cell)
+		var color: Color = KIND_COLORS.get(kind, GROUND_COLOR).lightened(height * HEIGHT_LIGHTEN)
+		if kind != BattleMap.Kind.GROUND or height > 0:
+			arena.draw_rect(area, color)
+		match kind:
+			BattleMap.Kind.BLOCK:
+				# Obstacle (maison fermée, arbre, puits, pan de mur) : hachuré.
+				arena.draw_rect(area.grow(-1.5), color.darkened(0.25), false, 1.5)
+				arena.draw_line(area.position + Vector2(3, 3), area.end - Vector2(3, 3), color.lightened(0.15), 1.0)
+				arena.draw_line(Vector2(area.end.x - 3, area.position.y + 3), Vector2(area.position.x + 3, area.end.y - 3), color.lightened(0.15), 1.0)
+			BattleMap.Kind.ROOF:
+				# Toit : des rangées de tuiles.
+				for k in range(1, 4):
+					var y := area.position.y + area.size.y * k / 4.0
+					arena.draw_line(Vector2(area.position.x, y), Vector2(area.end.x, y), color.darkened(0.2), 1.0)
+			BattleMap.Kind.LADDER:
+				# Échelle : deux montants et des barreaux.
+				var left := area.position.x + cell * 0.28
+				var right := area.end.x - cell * 0.28
+				arena.draw_line(Vector2(left, area.position.y + 2), Vector2(left, area.end.y - 2), LADDER_COLOR, 2.0)
+				arena.draw_line(Vector2(right, area.position.y + 2), Vector2(right, area.end.y - 2), LADDER_COLOR, 2.0)
+				for k in range(1, 5):
+					var y := area.position.y + area.size.y * k / 5.0
+					arena.draw_line(Vector2(left, y), Vector2(right, y), LADDER_COLOR, 1.5)
+			BattleMap.Kind.STAIRS:
+				# Escalier ou pente : des marches.
+				for k in range(1, 3):
+					var x := area.position.x + area.size.x * k / 3.0
+					arena.draw_line(Vector2(x, area.position.y + 3), Vector2(x, area.end.y - 3), color.lightened(0.2), 1.0)
+			BattleMap.Kind.LOW_WALL:
+				arena.draw_rect(Rect2(area.position + Vector2(2, cell * 0.3), Vector2(cell - 4, cell * 0.4)), color.lightened(0.15))
+			BattleMap.Kind.RAMPART:
+				# Chemin de ronde : des créneaux côté ennemis (en haut).
+				arena.draw_rect(Rect2(area.position + Vector2(cell * 0.1, 0), Vector2(cell * 0.3, cell * 0.25)), color.lightened(0.2))
+				arena.draw_rect(Rect2(area.position + Vector2(cell * 0.6, 0), Vector2(cell * 0.3, cell * 0.25)), color.lightened(0.2))
+			BattleMap.Kind.TOWER:
+				# Clocher : la cloche.
+				arena.draw_circle(area.get_center(), cell * 0.22, Color("d8b04a"))
+			BattleMap.Kind.ROCK:
+				arena.draw_circle(area.get_center(), cell * 0.38, color.lightened(0.12))
+			BattleMap.Kind.GRASS:
+				for k in 4:
+					var p := area.position + Vector2(cell * (0.2 + 0.2 * k), cell * (0.35 if k % 2 == 0 else 0.65))
+					arena.draw_line(p, p + Vector2(0, -cell * 0.18), color.lightened(0.3), 1.0)
+		# Bords qui tombent vers une case plus basse : un trait sombre.
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var next: Vector2i = c + d
+			if map.in_bounds(next) and map.height_at(next) < height and kind != BattleMap.Kind.BLOCK:
+				var a := area.get_center() + Vector2(d) * cell * 0.5 + Vector2(d.y, d.x) * cell * 0.5
+				var b := area.get_center() + Vector2(d) * cell * 0.5 - Vector2(d.y, d.x) * cell * 0.5
+				arena.draw_line(a, b, EDGE_COLOR, 2.0)
+		if height > 0:
+			arena.draw_string(font, area.position + Vector2(2, font_size), str(height), HORIZONTAL_ALIGNMENT_LEFT, -1,
+				font_size, HEIGHT_TEXT_COLOR)
 
 
 ## Les ordres en cours : un trait jaune vers l'endroit ou l'ennemi visé.
@@ -676,6 +741,12 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 
 	if unit["bleed"]["ticks"] > 0:  # saigne : une goutte rouge
 		arena.draw_circle(center + Vector2(radius * 0.8, -radius * 0.6), 3.5, Color("ff3030"))
+	if battle.height_of(unit) > 0:  # en hauteur : sa hauteur dans une pastille claire
+		var badge := center + Vector2(radius * 0.8, radius * 0.7)
+		arena.draw_circle(badge, maxf(5.0, cell * 0.16), Color("e8e2c8"))
+		var size := maxi(8, int(cell * 0.24))
+		arena.draw_string(font, badge + Vector2(-size, size * 0.38), str(battle.height_of(unit)), HORIZONTAL_ALIGNMENT_CENTER,
+			size * 2, size, Color("1b1b1b"))
 
 
 ## Nom des héros sous leur pion, seulement s'il a la place (pas d'autre héros trop près).
