@@ -238,6 +238,16 @@ func _check_memorial() -> void:
 		"revivre un souvenir : connaissance gagnée ; ça coûte au Sensible, le Détaché apprend froidement")
 	_check(M.replay(memorial, 60).size() == 3, "replay du dernier combat pour le Maître")
 	_check(M.remove(memorial, 60) == "H60 sera oublié à jamais." and M.free_places(memorial) == 1, "retirer : « [Nom] sera oublié à jamais », place libérée")
+	print("Le pourquoi des décisions")
+	var h := _plain_hero(70)
+	var picked = E.decide(h, [{"value": "fuir", "reasons": [{"why": "Prudence +60", "weight": 6.0}, {"why": "ami blessé", "weight": -2.0},
+		{"why": "appréhension 80", "weight": 8.0}, {"why": "fatigue", "weight": 1.0}]}, "rester"], {"name": "fuir ou rester"})
+	var last: Dictionary = E.decisions(h).back()
+	_check(picked == "fuir" and last["reasons"].size() == 3 and last["reasons"][0]["why"] == "appréhension 80" and last["what"] == "fuir ou rester",
+		"decide() garde ses 3 plus fortes raisons")
+	for i in 15:
+		E.decide(h, ["a"])
+	_check(E.decisions(h).size() == E.DECISIONS_KEPT, "seules les dernières décisions sont gardées")
 
 
 func _check(ok: bool, text: String) -> void:

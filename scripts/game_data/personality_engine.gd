@@ -1245,11 +1245,35 @@ static func modifier(_effect: String, _hero: Dictionary, _context := {}) -> floa
 
 
 ## Choix d'un héros parmi des options : pour l'instant, l'option par défaut (context["default"], sinon
-## la première).
-static func decide(_hero: Dictionary, options: Array, context := {}):
-	if context.has("default"):
-		return context["default"]
-	return options[0] if not options.is_empty() else null
+## la première) ; la vraie décision (IA à score, dissonance, hésitation) viendra en P3.
+## Le « pourquoi » (document « 4. Interactions », section 6) : chaque appel garde ses 3 plus fortes raisons
+## dans hero["persona"]["decisions"] (les DECISIONS_KEPT dernières), visibles en mode dev. Une option peut
+## être un dictionnaire {"value", "reasons": [{"why": texte, "weight": nombre}]} ; context["name"] dit de
+## quelle décision il s'agit, context["reasons"] ajoute des raisons communes. Renvoie l'option choisie (sa
+## « value » si c'est un tel dictionnaire).
+const DECISIONS_KEPT := 10
+
+
+static func decide(hero: Dictionary, options: Array, context := {}):
+	var chosen = context["default"] if context.has("default") else (options[0] if not options.is_empty() else null)
+	var reasons: Array = context.get("reasons", []).duplicate()
+	if chosen is Dictionary:
+		reasons.append_array(chosen.get("reasons", []))
+	if reasons.is_empty():
+		reasons.append({"why": "option par défaut (la décision par la personnalité viendra en P3)", "weight": 0.0})
+	reasons.sort_custom(func(a, b): return absf(a.get("weight", 0.0)) > absf(b.get("weight", 0.0)))
+	var value = chosen.get("value", chosen) if chosen is Dictionary else chosen
+	if hero.has("persona"):
+		var decisions: Array = hero["persona"].get("decisions", [])
+		decisions.append({"what": context.get("name", "décision"), "chosen": str(value), "day": today(),
+			"reasons": reasons.slice(0, 3)})
+		hero["persona"]["decisions"] = decisions.slice(-DECISIONS_KEPT)
+	return value
+
+
+## Les dernières décisions et leurs raisons (mode dev).
+static func decisions(hero: Dictionary) -> Array:
+	return hero.get("persona", {}).get("decisions", [])
 
 
 ## Couche de perception (P3) : ce que le Maître apprend d'un héros (fenêtres, notifications), filtré plus
