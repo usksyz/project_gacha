@@ -461,6 +461,29 @@ func _combat_feats(hero: Dictionary, fighter: Dictionary, battle: Battle) -> Arr
 	return news
 
 
+## Combats gardés dans hero["recent_battles"] (le mémorial en relit jusqu'à trois).
+const RECENT_BATTLES_KEPT := 3
+
+
+## Journal de combat (personnalité P1b) : chaque héros, mort ou vivant, garde le journal compact de ses
+## derniers combats : {"floor", "day", "victory", "survived", "formation": [noms], "counts", "events"}.
+## Les survivants ajoutent le carnet de l'étage à ce qu'ils rapportent (PersonalityEngine.pending_report),
+## à écrire plus tard à la bibliothèque. Aucun effet en jeu.
+func _keep_battle_journals(battle: Battle, floor_number: int, killed_by: Array) -> void:
+	var day := PersonalityEngine.today()
+	for fighter in battle.heroes:
+		var hero: Dictionary = fighter["source"]
+		var battles: Array = hero.get("recent_battles", [])
+		battles.append({"floor": floor_number, "day": day, "victory": battle.victory, "survived": hero["alive"],
+			"formation": battle.formations_used.duplicate(), "counts": fighter["journal_counts"].duplicate(),
+			"events": fighter["journal"].duplicate(true)})
+		hero["recent_battles"] = battles.slice(-RECENT_BATTLES_KEPT)
+		if hero["alive"]:
+			PersonalityEngine.add_report_item(hero, {"kind": "floor", "floor": floor_number, "victory": battle.victory,
+				"waves": battle.current_wave() + 1 if battle.quest.get("waves", 0) > 0 else 0,
+				"killed_by": killed_by.duplicate(), "worked": battle.formations_used.duplicate() if battle.victory else []})
+
+
 ## Applique le résultat d'un combat de la Tour et renvoie un rapport pour l'écran de fin :
 ## - les héros tombés meurent pour toujours (sauf un immortel du mode dev) ;
 ## - en cas de victoire : or, gemmes, expérience pour les survivants, étage suivant ;
@@ -511,6 +534,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 					report["lost_weapons"].append("%s : %s" % [fighter["source"]["name"], weapon_name(weapon)])
 	if not report["dead"].is_empty():
 		report["tips"].append("mort")  # conseil du Système à la première mort
+	_keep_battle_journals(battle, floor_number, report["dead"].map(func(dead): return dead["cause"]))
 
 	var rewards := tower_rewards(floor_number)
 	if replay:

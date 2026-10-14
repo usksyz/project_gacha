@@ -461,6 +461,7 @@ func _organize_defense() -> void:
 	var who := _name_with_stars(leader)
 	_log("%s organise la défense : un mur de boucliers, les autres derrière." % who, "awaken")
 	_alert("Défense", ["%s organise la défense." % who])
+	_journal_formation("défense du Meneur (%s)" % leader["name"])
 
 
 ## Le Meneur place un héros : il y va, et ce sera son poste (voir _follow_order).
@@ -669,6 +670,10 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# Élément de la magie d'un mage (un mage sans élément noté fait du feu).
 		"element": source.get("element", "Feu" if fighter_class == "Mage" else ""),
 		"kills": [],               # ennemis achevés : [{"name", "boss"}] (pour Tueur de gobelins)
+		# Journal compact du combat (héros seulement, voir _journal) : matière de la bibliothèque et du mémorial.
+		"journal": [],
+		"journal_counts": {"hits_given": 0, "hits_taken": 0, "dodges": 0, "kills": 0},
+		"met": {},                 # ennemis déjà rencontrés (premier contact noté une fois)
 		"took_fire": false,        # a subi des dégâts de feu (pour Résistance aux flammes)
 		# Santé mentale, suivie en direct (voir _stress) ; recopiée sur le héros à la fin du combat.
 		"mental": GameData.mental(source) if is_hero else GameData.MENTAL_MAX,
@@ -1103,6 +1108,56 @@ func range_band(unit: Dictionary) -> String:
 	return "courte"
 
 
+# ---------------------------------------------------------------------------
+# Journal de combat (personnalité P1b ; document de référence, section 3 bis)
+# ---------------------------------------------------------------------------
+# Pour chaque héros, un journal compact : premiers contacts, blessures graves, agonie, secours, mort,
+# ennemis achevés, formations utilisées ; et des compteurs (coups portés, reçus, esquives). Il est gardé sur
+# le héros pour ses derniers combats (GameData.finish_tower_battle, hero["recent_battles"]) : c'est la
+# matière de la bibliothèque et du mémorial. Il n'influence rien (aucun tirage au hasard).
+
+## Formations utilisées pendant le combat (noms), dans l'ordre.
+var formations_used: Array = []
+## Événements gardés au plus par héros (les compteurs, eux, comptent tout).
+const JOURNAL_MAX := 60
+
+
+func _journal(unit: Dictionary, kind: String, data := {}) -> void:
+	if not unit["is_hero"] or unit["journal"].size() >= JOURNAL_MAX:
+		return
+	var event := {"t": snappedf(time, 0.1), "kind": kind}
+	event.merge(data)
+	unit["journal"].append(event)
+
+
+## Un coup (ou une esquive) : compteurs, premier contact avec cet ennemi, blessure grave.
+func _journal_hit(attacker: Dictionary, target: Dictionary, amount: int, critical: bool) -> void:
+	for pair in [[attacker, target], [target, attacker]]:
+		var hero: Dictionary = pair[0]
+		var foe: Dictionary = pair[1]
+		if hero["is_hero"] and not foe["is_hero"] and not hero["met"].has(foe["id"]):
+			hero["met"][foe["id"]] = true
+			_journal(hero, "contact", {"with": foe["base_name"]})
+	if attacker["is_hero"] and amount >= 0:
+		attacker["journal_counts"]["hits_given"] += 1
+	if target["is_hero"]:
+		if amount < 0:
+			target["journal_counts"]["dodges"] += 1
+		else:
+			target["journal_counts"]["hits_taken"] += 1
+			if critical or amount >= target["max_hp"] * BLEED_HIT:
+				_journal(target, "wound", {"by": attacker["base_name"], "amount": amount})
+
+
+## Une formation entre en jeu : notée pour le combat et dans le journal des héros debout.
+func _journal_formation(formation: String) -> void:
+	if formation in formations_used:
+		return
+	formations_used.append(formation)
+	for hero in _alive(heroes):
+		_journal(hero, "formation", {"name": formation})
+
+
 ## Chaque pas : l'équipe couvre-t-elle les trois portées (héros debout sur le terrain) ? Annonce aussi, une
 ## fois, le premier mur de boucliers. (Rien en duel.)
 func _update_formations() -> void:
@@ -1117,6 +1172,7 @@ func _update_formations() -> void:
 		if covered:
 			_log("L'équipe couvre les trois portées (courte, moyenne, longue) : +%d %% en attaque et en défense." \
 				% roundi(GameData.RANGE_COVER_BONUS * 100), "awaken")
+			_journal_formation("trois portées")
 		else:
 			_log("L'équipe ne couvre plus les trois portées.", "disobey")
 	if not _wall_announced:
@@ -1127,6 +1183,7 @@ func _update_formations() -> void:
 				var names := [hero["name"]] + wall.map(func(ally): return ally["name"])
 				_log("Mur de boucliers : %s serrent les rangs." % " et ".join(names), "awaken")
 				_alert("Mur de boucliers", ["%s serrent les rangs : leur défense monte." % " et ".join(names)])
+				_journal_formation("mur de boucliers")
 				break
 
 
@@ -1445,10 +1502,13 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 		target["acts"]["vit"] += 1
 	var text := "esquive !" if amount < 0 else "-%d" % amount
 	_effect(kind, attacker, target, text, critical and amount >= 0)
+	_journal_hit(attacker, target, amount, critical)
 	if target["hp"] <= 0 and target["killer"] == "":
 		_announce_fall(target, "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]], false, {"attacker": attacker, "kind": kind})
 		if attacker["is_hero"]:
 			attacker["kills"].append({"name": target["base_name"], "boss": target["boss"]})
+			attacker["journal_counts"]["kills"] += 1
+			_journal(attacker, "kill", {"with": target["base_name"], "boss": target["boss"]})
 
 
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
@@ -1965,6 +2025,7 @@ func _start_agony(fighter: Dictionary, cause: String, blow := {}) -> void:
 	if fighter["berserk"]:
 		_exit_berserk(fighter)
 	var who := _name_with_stars(fighter)
+	_journal(fighter, "agony", {"cause": cause})
 	_log("%s s'effondre ! Il est dans un état critique." % who, "bleed")
 	var lines := ["%s est dans un état critique, sa vie est en danger !" % who]
 	# Arme plantée (œuvre, ch. 11) : l'arme reste dans la plaie ; un allié ne peut pas le stabiliser.
@@ -2018,6 +2079,7 @@ func _stabilize(fighter: Dictionary, by: String) -> void:
 	fighter["present"] = false  # mis à l'abri : il ne combat plus
 	fighter["hp"] = maxi(1, roundi(fighter["max_hp"] * GameData.AGONY_STABILIZED_HP))
 	var text := "%s est stabilisé grâce à %s." % [_name_with_stars(fighter), by]
+	_journal(fighter, "rescued", {"by": by})
 	_log(text + " Il est mis à l'abri.", "awaken")
 	_alert("Stabilisé", [text, "Il sort du combat, sa vie n'est plus en danger."])
 	fighter["mind_news"].append("%s a frôlé la mort : stabilisé grâce à %s." % [fighter["name"], by])
@@ -2110,6 +2172,7 @@ func _die(fighter: Dictionary, cause: String) -> void:
 	else:
 		fighter["killer"] = cause
 		fighter["panic"] = ""
+		_journal(fighter, "death", {"cause": cause})
 		_log("%s tombe au combat !" % fighter["name"])
 		# Voir un allié tomber ébranle les autres (Protecteur : deux fois plus ; un ami ou un frère d'armes :
 		# bien plus encore, voir BOND_DEATH_FACTOR).
