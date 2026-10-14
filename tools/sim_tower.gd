@@ -1,5 +1,5 @@
 extends Node
-## Simulateur de la Tour (mesures d'équilibre de CLAUDE.md), sans ordres du Maître et sans potions.
+## Simulateur de la Tour (mesures d'équilibre de CLAUDE.md), sans potions (sauf « potions=N »).
 ## Lancer (la scène charge GameData, donc la sauvegarde locale : en faire une copie avant, et la remettre
 ## après, car GameData peut la réécrire au lancement) :
 ##   Godot --headless --path . res://tools/sim_tower.tscn -- etages=1,2,3,4 combats=200 equipe=brute graine=1
@@ -8,37 +8,64 @@ extends Node
 ## « niveau » : niveau imposé à toute l'équipe (sinon celui des monstres, +2 pour la préparée).
 ## « meneur » : libre (traits du tirage), avec (un héros de l'équipe est Meneur, les autres non) ou sans
 ## (aucun Meneur) : pour comparer à équipe égale ce que fait le Meneur.
+## « maitre » : non (aucun ordre) ou oui (Maître simulé, simpliste : au début, chaque tireur monte sur la
+## hauteur la plus proche à moins de MASTER_HEIGHT_RANGE cases s'il y en a ; pendant le combat, un héros au
+## contact à moins de MASTER_TIRED de son endurance échange sa place, au plus toutes les MASTER_SWAP_COOLDOWN s).
+## « potions » : potions de soin dans l'entrepôt (0 par défaut).
+## « carte » : graine de carte imposée à tous les combats (sinon une carte par combat, tirée de la graine).
 ## Chaque lancement relit et réécrit user://sauvegarde.cfg : le lancer dans une copie du projet avec un
 ## override.cfg (dossier de sauvegarde à part), voir CLAUDE.md, section P1a-bis.
-## Affiche, par étage : victoires (%), morts par combat, et les anciens traits présents dans les équipes.
+## Affiche, par étage : victoires (%), morts par combat, temps de calcul moyen d'un combat (ms), unités
+## bloquées (plus de BLOCK_SECONDS sans avancer alors qu'elles veulent avancer : « sans raison » si aucun
+## combattant ne leur barre la route, « foule » sinon, « escalade » quand elles grimpent lentement), et les
+## anciens traits présents dans les équipes.
+## Marche aussi avec le code d'avant C1 (pas de MapGenerator : la carte est alors tirée par le combat).
 
 const TRAIT_NAMES := ["Courageux", "Lâche", "Loyal", "Paresseux", "Querelleur", "Protecteur", "Ambitieux", "Mauvais", "Meneur"]
-
+const MASTER_HEIGHT_RANGE := 7.0
+const MASTER_TIRED := 0.25
+const MASTER_SWAP_COOLDOWN := 4.0
+## Une unité « bloquée » : elle veut avancer (elle cherche son chemin à chaque pas) pendant BLOCK_SECONDS
+## sans s'éloigner de plus de BLOCK_DISTANCE cases de là où elle était.
+const BLOCK_SECONDS := 2.0
+const BLOCK_DISTANCE := 0.3
 
 var _args := {}
+var _generator = null  # MapGenerator (code C1 et après), sinon null
+## Numéro → dernier moment où il attendait derrière quelqu'un d'immobile (code C1 et après).
+var _waited := {}
 
 
 func _ready() -> void:
-	var args := {"etages": "1,2,3,4,5", "combats": "200", "equipe": "brute", "graine": "1", "meneur": "libre"}
+	var args := {"etages": "1,2,3,4,5", "combats": "200", "equipe": "brute", "graine": "1", "meneur": "libre", "meneur_toit": "",
+		"maitre": "non", "potions": "0", "carte": ""}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
 		if parts.size() == 2:
 			args[parts[0]] = parts[1]
 	_args = args
+	if ResourceLoader.exists("res://scripts/map_generator.gd"):
+		_generator = load("res://scripts/map_generator.gd")
 	seed(int(args["graine"]))
 	Settings.dev_mode = false  # (pas enregistré)
-	GameData.warehouse = {}    # pas de potions
 	GameData.roster.clear()    # lobby vide : le tirage diversifiant ne compare pas les héros à ceux de la sauvegarde
 	var prepared: bool = args["equipe"] == "preparee"
+	var master: bool = args["maitre"] == "oui"
 	for floor_text in args["etages"].split(","):
 		var floor_number := int(floor_text)
 		var count := int(args["combats"])
 		var wins := 0
 		var deaths := 0
+		var usec := 0
+		var blocked := {"sans raison": 0, "foule": 0, "escalade": 0}
+		var blocked_examples := []
 		var trait_counts := {}
 		var with_trait := {}  # {trait: [combats où l'équipe l'a, victoires]}
 		for i in count:
 			GameData.arsenal = []
+			GameData.warehouse = {}
+			if int(args["potions"]) > 0:
+				GameData.warehouse[GameData.POTION] = {"F": int(args["potions"])}
 			var team := _make_team(floor_number, prepared, args["meneur"])
 			var present := {}
 			for hero in team:
@@ -46,8 +73,28 @@ func _ready() -> void:
 					if GameData.has_trait(hero, trait_name):
 						trait_counts[trait_name] = trait_counts.get(trait_name, 0) + 1
 						present[trait_name] = true
-			var battle := Battle.new(team, GameData.tower_enemies(floor_number), GameData.floor_quest(floor_number))
-			battle.run()
+			var quest := GameData.floor_quest(floor_number)
+			var started := Time.get_ticks_usec()
+			var battle: Battle
+			if _generator != null:
+				var map_seed := int(args["carte"]) if args["carte"] != "" else randi()
+				if _generator.get_script_method_list().any(func(m): return m["name"] == "generate"):
+					var layout: Dictionary = _generator.generate(floor_number, quest, map_seed)
+					battle = Battle.new(team, layout["enemies"], quest)
+					battle.set("map_data", layout["map"])
+				else:
+					battle = Battle.new(team, GameData.tower_enemies(floor_number), quest)
+					battle.set("map_data", _generator.generate_map(floor_number, quest, map_seed))
+			else:
+				battle = Battle.new(team, GameData.tower_enemies(floor_number), quest)
+			if args["meneur_toit"] != "":
+				battle.set("leader_roof_shooters", args["meneur_toit"] == "oui")  # (essai du point 6 de C1)
+			var result := _play(battle, master, i)
+			usec += Time.get_ticks_usec() - started
+			for kind in blocked:
+				blocked[kind] += result["blocked"][kind]
+			if blocked_examples.size() < 5:
+				blocked_examples.append_array(result["examples"].slice(0, 5 - blocked_examples.size()))
 			if battle.victory:
 				wins += 1
 			for trait_name in present:
@@ -59,8 +106,11 @@ func _ready() -> void:
 		var trait_parts := []
 		for trait_name in TRAIT_NAMES:
 			trait_parts.append("%s %.2f" % [trait_name, trait_counts.get(trait_name, 0) / float(count)])
-		print("RESULTAT equipe=%s etage=%d combats=%d victoires=%.1f%% morts=%.2f traits_par_equipe: %s" \
-			% [args["equipe"], floor_number, count, 100.0 * wins / count, float(deaths) / count, ", ".join(trait_parts)])
+		print("RESULTAT equipe=%s maitre=%s etage=%d combats=%d victoires=%.1f%% morts=%.2f temps_ms=%.0f bloques_sans_raison=%d bloques_foule=%d bloques_escalade=%d traits_par_equipe: %s" \
+			% [args["equipe"], args["maitre"], floor_number, count, 100.0 * wins / count, float(deaths) / count,
+			usec / 1000.0 / count, blocked["sans raison"], blocked["foule"], blocked["escalade"], ", ".join(trait_parts)])
+		for example in blocked_examples:
+			print("  bloqué : ", example)
 		# Victoires selon que l'équipe a le trait ou non (pour trouver ce qui pèse sur l'équilibre).
 		var split_parts := []
 		for trait_name in TRAIT_NAMES:
@@ -70,6 +120,89 @@ func _ready() -> void:
 				100.0 * (wins - entry[1]) / maxf(1, without)])
 		print("  victoires selon le trait : ", ", ".join(split_parts))
 	get_tree().quit()
+
+
+## Joue le combat pas à pas (comme Battle.run), avec le Maître simulé s'il est demandé, et compte les
+## unités bloquées. Renvoie {"blocked": {"sans raison", "foule", "escalade"}, "examples": [textes]}.
+func _play(battle: Battle, master: bool, number := 0) -> Dictionary:
+	battle.start()
+	var steps := int(round(BLOCK_SECONDS / Battle.TICK))
+	var history := {}   # numéro → [positions des derniers pas où il voulait avancer]
+	var stuck := {}     # numéro → vrai pendant un blocage déjà compté
+	var swapped := {}   # numéro → moment du dernier échange ordonné
+	_waited.clear()
+	var result := {"blocked": {"sans raison": 0, "foule": 0, "escalade": 0}, "examples": []}
+	if master:
+		_master_heights(battle)
+	while not battle.finished:
+		if master:
+			_master_rotation(battle, swapped)
+		var timers := {}
+		for unit in battle.units:
+			timers[unit["id"]] = unit["path_timer"]
+		battle.step()
+		_trace(battle, number)
+		for unit in battle.units:
+			var id: int = unit["id"]
+			var wants: bool = unit["present"] and unit["hp"] > 0 and unit["path_timer"] != timers[id]
+			if not wants:
+				history.erase(id)
+				stuck.erase(id)
+				continue
+			if unit.get("blocked", 0.0) > 0.0:
+				_waited[id] = battle.time  # (quelqu'un d'immobile lui barre la route, voir Battle._blocked)
+			var trail: Array = history.get(id, [])
+			trail.append(unit["pos"])
+			if trail.size() > steps:
+				trail.pop_front()
+			history[id] = trail
+			var moved := 0.0
+			for pos in trail:
+				moved = maxf(moved, pos.distance_to(trail[0]))
+			if trail.size() == steps and moved < BLOCK_DISTANCE:
+				if not stuck.has(id):
+					stuck[id] = true
+					var crowded := _crowded(battle, unit)
+					var kind := "foule" if crowded else ("escalade" if _climbing(battle, unit) else "sans raison")
+					result["blocked"][kind] += 1
+					if kind == "sans raison" and result["examples"].size() < 5:
+						result["examples"].append("combat %d, %s à %s, t=%.1f s, chemin %s%s" % [number, unit["name"], unit["pos"], battle.time,
+							Array(unit["path"]).slice(0, 3), _details(battle, unit)])
+			elif moved >= BLOCK_DISTANCE:
+				stuck.erase(id)
+	return result
+
+
+## Maître simulé, au début : chaque tireur monte sur la hauteur libre la plus proche (s'il y en a une assez près).
+func _master_heights(battle: Battle) -> void:
+	var cells: Array = battle.height_cells()
+	var taken := {}
+	for hero in battle.heroes:
+		if not hero["ranged"]:
+			continue
+		var best = null
+		for cell in cells:
+			if taken.has(cell) or hero["pos"].distance_to(cell) > MASTER_HEIGHT_RANGE:
+				continue
+			if best == null or hero["pos"].distance_to(cell) < hero["pos"].distance_to(best):
+				best = cell
+		if best != null:
+			taken[best] = true
+			battle.order_move(hero, best)
+
+
+## Maître simulé, pendant le combat : un héros fatigué au contact échange sa place.
+func _master_rotation(battle: Battle, swapped: Dictionary) -> void:
+	for hero in battle.heroes:
+		if not battle.can_swap(hero) or battle.time - swapped.get(hero["id"], -100.0) < MASTER_SWAP_COOLDOWN:
+			continue
+		if hero["stamina"] > hero["max_stamina"] * MASTER_TIRED:
+			continue
+		var contact := battle.enemies.any(func(e): return e["present"] and e["hp"] > 0 \
+			and e["pos"].distance_to(hero["pos"]) <= GameData.STAMINA_CONTACT_RANGE)
+		if contact:
+			swapped[hero["id"]] = battle.time
+			battle.order_swap(hero)
 
 
 ## Mort pour de bon à la fin du combat (Battle._die note « killer » ; un immortel est seulement à terre).
@@ -105,3 +238,55 @@ func _make_team(floor_number: int, prepared: bool, leader := "libre") -> Array:
 
 func _give(hero: Dictionary, type: String) -> void:
 	GameData.arsenal.append({"id": GameData.arsenal.size() + 1, "type": type, "grade": "D", "owner": hero["id"]})
+
+
+## Il escalade (un muret, un rocher, une échelle) : il avance, mais lentement (code C1 et après seulement).
+func _climbing(battle: Battle, unit: Dictionary) -> bool:
+	var map = battle.get("map")
+	if map == null or unit["path"].is_empty():
+		return false
+	var links: Dictionary = map.get_script().get_script_constant_map()["Link"]  # (BattleMap n'existe pas avant C1)
+	var passage: int = map.step_link(map.cell_of(unit["pos"]), map.cell_of(unit["path"][0]))
+	return passage == links["CLIMB"] or passage == links["LADDER"]
+
+
+## Détails d'un blocage (code C1 et après) : sa case, la suivante, le passage, qui se tient autour.
+func _details(battle: Battle, unit: Dictionary) -> String:
+	var map = battle.get("map")
+	if map == null:
+		return ""
+	var here: Vector2i = map.cell_of(unit["pos"])
+	var next: Vector2i = map.cell_of(unit["path"][0]) if not unit["path"].is_empty() else here
+	var around := []
+	for other in battle.units:
+		if other["id"] != unit["id"] and other["present"] and other["pos"].distance_to(unit["pos"]) < 2.5:
+			around.append("%s %s hp %d%s" % [other["name"], map.cell_of(other["pos"]), other["hp"], " immobile" if other.get("still", false) else ""])
+	return " ; case %s (h %d) → %s (h %d), passage %d, cible %d, bloqué %.1f, détour %s ; autour : %s" % [here, map.height_at(here),
+		next, map.height_at(next), map.step_link(here, next), unit.get("target_id", -1), unit.get("blocked", 0.0),
+		unit.get("detour_until", 0.0) > battle.time, around]
+
+
+## Quelqu'un (debout) lui barre-t-il la route ? Tout près (moins de 1,6 case), ou dans la case suivante de son
+## chemin (une ruelle d'une case où l'on fait la queue) ; ou il a attendu derrière quelqu'un pendant ces BLOCK_SECONDS
+## secondes, ou fait un détour.
+func _crowded(battle: Battle, unit: Dictionary) -> bool:
+	if battle.time - _waited.get(unit["id"], -100.0) <= BLOCK_SECONDS or unit.get("detour_until", 0.0) > battle.time:
+		return true
+	var next: Vector2 = unit["path"][0] if not unit["path"].is_empty() else unit["pos"]
+	return battle.units.any(func(other): return other["id"] != unit["id"] and other["present"] and other["hp"] > 0 \
+		and (other["pos"].distance_to(unit["pos"]) < 1.6 or Vector2i(other["pos"].floor()) == Vector2i(next.floor())))
+
+
+## « suivre=12:Gobelin_C de=15 a=20 » : à chaque pas du combat 12 entre 15 et 20 s, l'état de Gobelin C (pour
+## comprendre un blocage).
+func _trace(battle: Battle, number: int) -> void:
+	var wanted: String = _args.get("suivre", "")
+	if wanted == "" or not wanted.begins_with("%d:" % number):
+		return
+	if battle.time < float(_args.get("de", "0")) or battle.time > float(_args.get("a", "9999")):
+		return
+	for unit in battle.units:
+		if unit["name"] == wanted.split(":")[1].replace("_", " "):
+			print("t=%.1f pos=%s chemin=%s but=%s case_attaque=%d cible=%d ordre=%s bloqué=%.1f détour=%s pv=%d%s" % [battle.time,
+				unit["pos"], Array(unit["path"]).slice(0, 2), unit.get("path_goal", ""), unit.get("slot", -1), unit.get("target_id", -1),
+				unit["order"], unit.get("blocked", 0.0), unit.get("detour_until", 0.0) > battle.time, unit["hp"], _details(battle, unit)])

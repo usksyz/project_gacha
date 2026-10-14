@@ -445,8 +445,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   la relâcher sur la liste pour la retirer ; toucher marche toujours. `DragScroll` ne défile pas pendant
   un glisser. Avant l'étage, une fenêtre « Formation de groupe » confirme le groupe.
 - `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
-  de 0,1 s (`start()` puis `step()`) : grille avec décor, recherche de chemin `AStarGrid2D`, ligne de
-  vue pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
+  de 0,1 s (`start()` puis `step()`) : grille « 3D » avec hauteurs (voir « Combat v2, étape C1 »), recherche de
+  chemin, ligne de vue 3D pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
   du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres.
   `scripts/battle_view.gd` : classe `BattleView`, affiche le combat en direct (pions, coups,
   chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause
@@ -454,6 +454,77 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
+- Combat v2, étape C1 (cahier, onglet « Combat v2 », sections 0, 2, 3, 8, 8 bis, 9) : la simulation devient
+  « 3D sur grille » ; pas encore de nouvelle vue (la vue isométrique, c'est C2). Chiffres provisoires.
+  1. `scripts/battle_map.gd` (`BattleMap`) : hauteur de chaque case (0 à 4 niveaux) et type (`Kind` : sol,
+  obstacle, toit, échelle, escalier ou pente, muret, rempart, porte, herbes hautes, tour, rocher). `Battle.map`.
+  2. Verticalité (`tower.gd`, section « Verticalité ») : passages d'une case à l'autre (`BattleMap.Link` : marche,
+  escalier `STAIRS_SPEED` 0,8, escalade d'un niveau `CLIMB_SPEED` 0,25 selon la Dextérité, échelle `LADDER_SPEED`
+  0,45 jusqu'à 3 niveaux, saut d'un niveau sans risque, de deux niveaux (sens unique) ; deux niveaux sans échelle :
+  impossible) ; chute (`fall_damage` : 2 niveaux 5 % de la vie, 3 niveaux 25 %, +10 % par niveau en plus ; jamais
+  par une échelle) ; avantage de hauteur par niveau (+`HEIGHT_DAMAGE_PER_LEVEL` 10 % de dégâts, -10 % subis,
+  plafond 3 niveaux, tireurs +1 case par niveau ; remplace +20 % / -25 %) ; au corps à corps, pas plus d'un niveau
+  d'écart (`MELEE_MAX_LEVELS`) ; ligne de vue 3D (`BattleMap.line_of_sight` : des yeux, 0,8 niveau au-dessus de la
+  case, au corps de la cible ; un mur cache ce qui est derrière sauf pour qui est plus haut) ; pousser (`_push` : un
+  coup au contact critique ou d'au moins 20 % de la vie fait tomber d'un bord à 35 %, jamais un boss) ; couvert
+  (`_covered` : derrière un muret, une clôture ou un rocher, 35 % des tirs s'y arrêtent, « couvert ! », sauf tireur
+  2 niveaux au-dessus). Chacun a sa case et sa hauteur (`fighter["z"]`, `Battle.height_of`, `_land`) ; les
+  bousculades ne font pas changer de niveau.
+  3. Cartes (`scripts/map_generator.gd`, `MapGenerator.generate_map(étage, quête, graine)`, même graine même carte,
+  gabarits de la section 8 bis, `template_for`) : village envahi (étage 1), prairie (étage 2), relief (autres étages
+  ordinaires, ajout du projet en attendant les lieux des étages 3, 4, 6...), ville en ruine (survie : la rangée de
+  maisons percée de 3 ruelles d'une case, toits à 2 niveaux, deux échelles côté héros, une côté ennemis, un clocher à
+  4 niveaux ; un pâté sans échelle reste une maison fermée), cité (défense : rempart à 2 niveaux, chemin de ronde
+  `WALL_ROW` 17, escaliers à l'intérieur, porte fermée ; les tireurs partent du chemin de ronde, les monstres frappent
+  le rempart à son pied), arène (duel). Vérifications après chaque carte (`check` : zones de départ plates, chemin
+  dans les deux sens, aucune poche hors d'atteinte des héros (hors défense : ni des ennemis), point haut accessible,
+  ruelles ouvertes) ; sinon on recommence (40 essais, puis carte plate). Banc : toutes jouables, 3 à 7 ms par carte.
+  4. Déplacements (`battle.gd`, section « Déplacements » ; constantes après `PERSONAL_SPACE`) : un graphe AStar3D par
+  camp (`BattleMap.find_path`), coûts des cases (`TERRAIN_COSTS` : pente 1,15, échelle 2, muret 3, rocher 2 ; foule
+  `CROWD_STILL_COST` 3 / `CROWD_MOVING_COST` 0,5 ; pour les héros, danger `DANGER_COST` 1 par tireur ennemi à portée,
+  2 au plus ; `_refresh_costs` toutes les 0,5 s) ; champ de flux des monstres (`BattleMap.flow_field`, `_flow_for`,
+  `_follow_flow` : une carte des distances par cible pour toute la horde, recalculée au plus toutes les 0,5 s si la
+  cible a bougé, toutes les 2 s sinon ; près de la cible en marchant, `FLOW_NEAR` 3 et `NEAR_MARGIN` 2, chemin à soi) ;
+  réservation des cases d'attaque (`_attack_slot` : une case de corps à corps autour de la cible par attaquant) ;
+  évitement local (`_sidestep` : contourner qui se tient immobile) ; bloqué plus de `REPATH_BLOCKED` (1 s) : nouveau
+  chemin qui évite le passage, un monstre quitte le flux `DETOUR_SECONDS` (3 s) et essaie une autre ruelle
+  (`_blocked`). Défense : un monstre au corps à corps à qui un héros barre la route l'attaque (avant, il hésitait).
+  5. Vue de dessus (`battle_view.gd`, `_draw_cells`) : chaque case dans la couleur de son type, plus claire en
+  hauteur, avec sa hauteur écrite dans le coin ; échelles, escaliers, toits, clocher, rempart, murets, rochers,
+  herbes ; trait sombre sur chaque bord qui tombe ; pastille de hauteur sur un combattant en hauteur.
+  6. Meneur en survie : voir « Meneur en survie » (P5 gardée, et les tireurs sur les toits).
+  8. Carte et ennemis en donnée, étages figés (section 8 bis, tranché par le porteur du projet) :
+  `MapGenerator.generate(étage, quête, graine)` renvoie {"version", "seed", "map", "enemies"} : les ennemis de
+  `tower_enemies` (qui accepte un tirage à suivre) avec « start » (case de départ, vague 0) et « entry » (colonne
+  d'entrée des renforts), « elite » toujours faux (élites : C5). `GameData.floor_layout(étage)` : à la première
+  visite, l'étage est généré (graine au hasard) et enregistré (`GameData.floors`, « etages ») ; ensuite il n'est plus
+  jamais modifié et se rejoue à l'identique, perdu ou gagné ; la quête suit toujours `floor_quest`. L'écran Donjons
+  s'en sert ; `pending_battle["map"]` : un combat repris au lancement se joue sur la même carte. Sauvegarde version 6
+  (absents d'une ancienne sauvegarde : générés au prochain passage). Une carte sans donnée (duel, combat en cours
+  d'avant C1) est fabriquée avec une graine au hasard (`Battle.map_data` vide).
+  7. Tests. Banc `tools/test_combat_v2.tscn` (scène : dans une copie du projet, voir plus bas) : passages, chemins,
+  ligne de vue, chutes, hauteur, pousser, couvert, flux, réservation, autre passage, Meneur, cartes (« cartes=N »,
+  « voir=oui » les dessine en lettres), étages figés. `tools/sim_tower.gd` : options `maitre=oui` (Maître simulé :
+  tireurs sur la hauteur la plus proche à moins de 7 cases au début, échange de place des fatigués au contact),
+  `potions=N`, `carte=graine`, `meneur_toit=oui|non`, `suivre=combat:Nom de=t a=t` (trace pas à pas) ; il compte le
+  temps de calcul et les unités bloquées (plus de 2 s sans s'éloigner de 0,3 case alors qu'elles veulent avancer :
+  « foule » si quelqu'un leur barre la route, « escalade », sinon « sans raison »).
+  Mesures avant / après C1 (pas de rééquilibrage : les cibles du Sommaire seront réglées après C2). Commande, dans une
+  copie du projet (worktree + `override.cfg`, voir P1a-bis) : `Godot --headless --path <copie> res://tools/sim_tower.tscn
+  -- etages=N combats=300 equipe=brute|preparee [maitre=oui] graine=7`, un étage par lancement, 18 lancements en
+  parallèle ; avant = commit db57bdb (même simulateur), après = 7a39c6a. Victoires % (morts par combat) :
+  brute étages 1 / 2 / 3 / 4 / 5 / 10 : 100 (0,30) / 67 (2,16) / 51 (2,91) / 56,3 (2,70) / 26 (3,34) / 20,7 (4,15) →
+  100 (0,28) / 63,3 (2,38) / 52,7 (2,96) / 49 (3,04) / 23,3 (3,35) / 12 (4,40) ;
+  préparée : 100 (0) / 97,7 (0,39) / 95,3 (0,68) / 96 (0,59) / 76,3 (2,10) / 34 (3,76) →
+  100 (0) / 97,3 (0,44) / 96 (0,58) / 94 (0,72) / 60,7 (2,64) / 28 (3,93) ;
+  préparée avec Maître simulé : 100 (0) / 97,7 (0,31) / 96,3 (0,65) / 92 (0,76) / 66,3 (2,43) / 27,7 (3,96) →
+  100 (0) / 96 (0,49) / 92,3 (0,76) / 94 (0,78) / 65,7 (2,35) / 21,7 (4,03).
+  Le plus gros écart : étage 5, préparée sans ordres, -16 points (les toits à échelle de la horde, le flux et les
+  encerclements : à vérifier en C2 avant de régler) ; avec le Maître (tireurs sur les toits), l'étage 5 ne bouge pas.
+  Étage 10 : -6 à -9 points (les monstres frappent le héros qui leur barre la route). Temps de calcul d'un combat (18
+  lancements en même temps, donc plus lent que seul) : étage 1 80-109 → 288-383 ms, étages 2 à 4 130-170 → 415-510 ms,
+  étage 5 557-620 → 1 030-1 146 ms, étage 10 250-269 → 561-612 ms. Unités bloquées sans raison : 0 sur 5 400 combats
+  avant comme après (« foule » : 10 à 226 par série de 300, surtout la queue dans les ruelles de l'étage 5).
 - Phase 1.1 de la feuille de route v2 (cahier, « Améliorations combat... », lot A ; chiffres dans `tower.gd`,
   section « Combat ») :
   Endurance : `fighter["stamina"]` (`STAMINA_MAX` 100), héros seulement (l'adversaire d'un duel aussi). Se
@@ -495,6 +566,12 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   face aux archers squelettes. P5 : 73,8 % contre 74 % sans Meneur sur 3 000 combats (égalité aux aléas près).
   Équipe brute (sans armes, donc sans boucliers) : P5 la serrait au centre, 22,4 % contre 25,8 % sans Meneur ;
   d'où la règle « moins de deux boucliers : il ne déplace personne » (après : 24,8 % contre 25,8 %, aléas).
+  C1 (point 6) : P5 gardée, et les tireurs vont sur les toits à 2 niveaux les plus proches de la sortie des
+  ruelles, parmi ceux qu'on atteint de son côté (`leader_roof_shooters`, interrupteur pour comparer ; ils y
+  restent et tirent). Simulation sur les cartes de C1, étage 5, préparée, sans ordres, graines 31 à 33, 3 x 300
+  combats (`sim_tower ... etages=5 combats=300 equipe=preparee meneur=sans|avec meneur_toit=non|oui graine=31`) :
+  sans Meneur 64,7 / 67,0 / 66,3 % (2,60 morts par combat) ; P5 65,3 / 67,3 / 64,7 % (2,46) ; P5 + toits
+  69,3 / 71,0 / 74,3 % (2,15). Plus haut que les anciennes hauteurs (2 niveaux contre 1), les tireurs y gagnent.
   Agonie (rendue plus exigeante comme au ch. 11, demande du porteur du projet) : à 0 point de vie, un héros
   ne meurt pas tout de suite (`_announce_fall` → `_start_agony`) : il
   agonise `AGONY_SECONDS` (8 s ; avant 10), fenêtre rouge « X est dans un état critique, sa vie est en danger ! » ;
@@ -738,15 +815,13 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   fois), chaque vague annoncée (journal, fenêtre « Vague N »). Écran : « Vague 2/5 » à côté du compte à
   rebours (affiché en permanence, « 3:30 au premier contact » tant qu'il attend) ; annonce de l'étage.
   Quête sans `waves` (ancienne sauvegarde en plein combat) : tous les ennemis en vague 0, comme avant.
-  Terrain de survie (phase 1.2 ; ch. 9 et 11 ; `tower.gd`, section après la survie ; `battle.gd`,
-  `_build_alleys`) : une rangée de maisons d'un bord à l'autre (lignes `ALLEY_ROW` 8 à 10) percée de
-  `SURVIVAL_ALLEYS` (3) ruelles larges d'une case ; côté héros, `HEIGHT_COUNT` (2) hauteurs de 2 x 2 à la
-  sortie d'une ruelle (`Battle.heights`, `is_high`, `height_cells`) ; quelques rochers côté ennemis. Escalader :
-  vitesse x`CLIMB_SPEED_FACTOR` (0,35). En hauteur contre un adversaire en contrebas : +`HEIGHT_ATTACK_BONUS`
-  (20 %) de dégâts, -`HEIGHT_DEFENSE_BONUS` (25 %) de dégâts subis, tireurs +`HEIGHT_REACH_BONUS` (1 case).
-  Le Maître y envoie un héros par un ordre (toucher la hauteur, cases claires) ; un héros dont le poste est
-  en hauteur la tient (il ne descend pas courir après les ennemis, il frappe ce qui est à sa portée). Les
-  héros n'y vont pas d'eux-mêmes.
+  Terrain de survie (phase 1.2 ; ch. 9 et 11 ; depuis C1 : gabarit « ville » de `MapGenerator`) : une rangée de
+  maisons d'un bord à l'autre (lignes `ALLEY_ROW` 8 à 10) percée de `SURVIVAL_ALLEYS` (3) ruelles larges d'une
+  case ; quelques rochers et débris côté ennemis. Phase 1.2 : 2 hauteurs de 2 x 2 (1 niveau, +20 % / -25 %) à la
+  sortie des ruelles ; remplacées en C1 par les toits à 2 niveaux, les échelles et le clocher (voir « Combat v2,
+  étape C1 »). Le Maître y envoie un héros par un ordre (toucher le toit) ; un héros dont le poste est en hauteur
+  la tient (il ne descend pas courir après les ennemis, il frappe ce qui est à sa portée). Les héros n'y vont pas
+  d'eux-mêmes, sauf les tireurs qu'un Meneur y poste.
   Simulation de la phase 1.2 (200 combats par réglage, 150 à 420 pour l'étage 5 ; équipe du tutoriel ;
   « préparée » : 2 niveaux de plus, épée et bouclier D, arc D ; Maître simulé : rotation des fatigués et
   tireurs sur les hauteurs) — victoires avant → après (morts par combat) :
