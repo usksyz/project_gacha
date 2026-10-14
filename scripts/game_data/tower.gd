@@ -352,6 +352,7 @@ func floor_quest(floor_number: int) -> Dictionary:
 		type = "subjugation"
 	var quest: Dictionary = QUEST_TYPES[type].duplicate()
 	quest["type"] = type
+	quest["floor"] = floor_number  # (le lieu de la carte en dépend, voir MapGenerator.template_for)
 	quest["lasting"] = type in ["survival", "defense"]  # il faut tenir, pas tout tuer
 	quest["seconds"] = KILL_QUEST_SECONDS
 	if type == "survival":

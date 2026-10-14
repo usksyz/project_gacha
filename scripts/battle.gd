@@ -59,12 +59,9 @@ const TICK := 0.1
 # --- Champ de bataille ---
 
 ## Taille de la grille, en cases (largeur, hauteur). Les héros partent du bas, les ennemis du haut.
-const GRID_W := 18
-const GRID_H := 20
-
-## Terrain de survie : première ligne de la rangée de maisons, et sa profondeur (longueur des ruelles).
-const ALLEY_ROW := 8
-const ALLEY_LENGTH := 3
+## (La carte elle-même, ses zones de départ et ses ruelles : voir MapGenerator.)
+const GRID_W := MapGenerator.WIDTH
+const GRID_H := MapGenerator.LENGTH
 
 ## Nombre d'ennemis sur le terrain en même temps, et délai avant l'arrivée d'un renfort.
 const ENEMY_SLOTS := 6
@@ -163,17 +160,20 @@ var units: Array[Dictionary] = []
 var heroes: Array[Dictionary] = []
 var enemies: Array[Dictionary] = []
 
-## Le champ de bataille « 3D sur grille » (voir BattleMap) : hauteur et type de chaque case.
+## La carte du combat, en donnée (voir MapGenerator.generate_map) : à donner avant start() ; vide, start()
+## en fabrique une. Le champ de bataille « 3D sur grille » qui en est tiré (voir BattleMap) : hauteur et type de
+## chaque case.
+var map_data: Dictionary = {}
 var map := BattleMap.new()
 
-## Cases bloquées par le décor, et les morceaux de décor à dessiner :
+## Les morceaux de décor à dessiner (ancien dessin, tirés de la carte) :
 ## [{"rect": Rect2i, "kind": "rock" / "wall" / "house" / "rampart"}].
 var obstacles: Array[Dictionary] = []
 
 ## Remparts de la cité (quête de défense seulement).
 var walls := 0
 
-## Hauteurs du terrain de survie (toits, plateformes : on les escalade, voir is_high), à dessiner.
+## Les toits et hauteurs à dessiner (ancien dessin, tirés de la carte).
 var heights: Array[Rect2i] = []
 ## Terrain de survie : la sortie de chaque ruelle côté héros (de gauche à droite ; vide hors de la survie),
 ## et si un Meneur a déjà organisé la défense (voir _organize_defense).
@@ -442,7 +442,7 @@ func _organize_defense() -> void:
 	var shooters := free.filter(func(h): return h["ranged"])
 	if shields.size() < 2:
 		return  # pas de mur possible : la ligne de départ vaut mieux qu'un groupe serré (simulation, équipe sans armes)
-	var row := ALLEY_ROW + ALLEY_LENGTH + DEFENSE_LINE_GAP
+	var row: int = map_data["alley_exit_row"] + DEFENSE_LINE_GAP
 	var center := GRID_W / 2
 	# Le mur : du milieu vers les côtés (x, x - 1, x + 1, x - 2...).
 	var wall: Array = []
@@ -705,64 +705,25 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 # Champ de bataille
 # ---------------------------------------------------------------------------
 
-## Crée le décor : des rochers et des murs au milieu de la carte (des maisons alignées
-## en ruelles pour les quêtes de survie), et les remparts de la cité en bas pour la défense.
-## On vérifie toujours qu'un chemin relie le haut et le bas de la carte.
+## Prépare le champ de bataille à partir de la carte (map_data, voir MapGenerator) ; sans carte donnée (duel,
+## ancien combat en cours), on en fabrique une avec une graine au hasard.
 func _build_map() -> void:
-	map.setup(GRID_W, GRID_H)
-
-	if quest["walls"] > 0:
-		_add_obstacle(Rect2i(0, GRID_H - 1, GRID_W, 1), "rampart")
-
-	if quest["type"] == "survival":
-		_build_alleys()
-		return
-	var pieces := randi_range(6, 9)
-	for i in pieces:
-		var horizontal := randf() < 0.5
-		var size := Vector2i(randi_range(2, 4), 1) if horizontal else Vector2i(1, randi_range(2, 3))
-		if randf() < 0.4:
-			size = Vector2i(randi_range(1, 2), randi_range(1, 2))
-		var cell := Vector2i(randi_range(0, GRID_W - size.x), randi_range(5, GRID_H - 8))
-		_try_obstacle(Rect2i(cell, size), "rock" if size.x == size.y else "wall")
+	if map_data.is_empty():
+		map_data = MapGenerator.generate_map(quest.get("floor", 0), quest, randi())
+	map.from_data(map_data)
+	alley_exits.assign(map_data.get("alley_exits", []))
+	# (Ce que l'écran dessine encore à l'ancienne : obstacles et hauteurs, voir battle_view.gd.)
+	for structure in map_data.get("structures", []):
+		var rect: Rect2i = structure["rect"]
+		if map.kind_at(rect.position) == BattleMap.Kind.BLOCK:
+			obstacles.append({"rect": rect, "kind": OLD_DRAWING.get(structure["kind"], "rock")})
+		elif structure["height"] >= 2 and structure["kind"] != "ladder":
+			heights.append(rect)
 
 
-## Terrain de survie (voir GameData, tower.gd, SURVIVAL_ALLEYS) : une rangée de maisons d'un bord à l'autre,
-## percée de ruelles larges d'une case ; côté héros, des hauteurs à la sortie de certaines ruelles ;
-## quelques rochers côté ennemis.
-func _build_alleys() -> void:
-	var top := ALLEY_ROW
-	# Les ruelles : réparties sur la largeur, un peu au hasard.
-	var alleys: Array[int] = []
-	var span := float(GRID_W) / GameData.SURVIVAL_ALLEYS
-	for i in GameData.SURVIVAL_ALLEYS:
-		alleys.append(clampi(int(span * (i + 0.5)) + randi_range(-1, 1), 1, GRID_W - 2))
-	# Les maisons entre les ruelles (de 2 à 4 cases de large, pour qu'on les distingue).
-	var x := 0
-	while x < GRID_W:
-		if x in alleys:
-			x += 1
-			continue
-		var width := 1
-		var wanted := randi_range(2, 4)
-		while x + width < GRID_W and not (x + width) in alleys and width < wanted:
-			width += 1
-		_add_obstacle(Rect2i(x, top, width, ALLEY_LENGTH), "house")
-		x += width
-	# La sortie de chaque ruelle, côté héros (là où un Meneur poste les boucliers, voir _organize_defense).
-	alleys.sort()
-	for alley in alleys:
-		alley_exits.append(Vector2(alley + 0.5, top + ALLEY_LENGTH + 0.5))
-	# Les hauteurs : côté héros, juste à côté de la sortie d'une ruelle (on tient la sortie d'en haut).
-	alleys.shuffle()
-	for alley in alleys.slice(0, GameData.HEIGHT_COUNT):
-		var side := 1 if alley + 3 < GRID_W and (alley < 2 or randf() < 0.5) else -2
-		var rect := Rect2i(alley + side, top + ALLEY_LENGTH, 2, 2)
-		heights.append(rect)
-		map.fill(rect, BattleMap.Kind.ROOF, 1)
-	# Quelques rochers côté ennemis, pour que la horde n'arrive pas en ligne droite.
-	for i in randi_range(2, 4):
-		_try_obstacle(Rect2i(Vector2i(randi_range(0, GRID_W - 2), randi_range(3, top - 2)), Vector2i(randi_range(1, 2), 1)), "rock")
+## Comment l'ancien dessin (obstacles) montre chaque structure de la carte.
+const OLD_DRAWING := {"house": "house", "gate": "rampart", "rampart": "rampart", "ruin": "wall", "boulder": "rock",
+	"trees": "rock", "well": "rock"}
 
 
 ## Vrai si ce combattant se tient en hauteur (au-dessus du sol).
@@ -770,34 +731,15 @@ func is_high(unit: Dictionary) -> bool:
 	return height_of(unit) > 0
 
 
-## Le centre de chaque case en hauteur (pour un ordre « monte là-haut »).
+## Le centre de chaque case haute (2 niveaux et plus : toits, clocher, rempart, sommet d'une butte), là où
+## l'on peut se tenir (pour un ordre « monte là-haut »).
 func height_cells() -> Array:
 	var cells := []
-	for rect in heights:
-		for x in range(rect.position.x, rect.end.x):
-			for y in range(rect.position.y, rect.end.y):
-				if map.walkable(Vector2i(x, y)) and map.height_at(Vector2i(x, y)) > 0 and not Vector2(x + 0.5, y + 0.5) in cells:
-					cells.append(Vector2(x + 0.5, y + 0.5))
+	for i in map.heights.size():
+		var cell := map.cell_at(i)
+		if map.walkable(cell) and map.heights[i] >= 2 and map.kind_at(cell) != BattleMap.Kind.LADDER:
+			cells.append(BattleMap.center(cell))
 	return cells
-
-
-## Hauteur d'un morceau de décor (pour la carte « 3D sur grille »).
-const OBSTACLE_HEIGHTS := {"rock": 1, "wall": 2, "house": 2, "rampart": 2}
-
-
-## Ajoute un morceau de décor s'il ne coupe pas la carte en deux ; sinon on l'enlève.
-func _try_obstacle(rect: Rect2i, kind: String) -> void:
-	_add_obstacle(rect, kind)
-	var top := map.nearest_walkable(Vector2i(GRID_W / 2, 1))
-	var bottom := map.nearest_walkable(Vector2i(GRID_W / 2, GRID_H - 4))
-	if not map.connected(top, bottom) or not map.connected(bottom, top):
-		map.fill(rect, BattleMap.Kind.GROUND, 0)
-		obstacles.pop_back()
-
-
-func _add_obstacle(rect: Rect2i, kind: String) -> void:
-	map.fill(rect, BattleMap.Kind.BLOCK, OBSTACLE_HEIGHTS.get(kind, 1))
-	obstacles.append({"rect": rect, "kind": kind})
 
 
 ## Place les héros en formation en bas (les tireurs derrière), et les premiers ennemis en haut.
@@ -806,16 +748,17 @@ func _place_units() -> void:
 	var back: Array[Dictionary] = []
 	for hero in heroes:
 		(back if hero["ranged"] else front).append(hero)
-	var front_row := GRID_H - 5 if quest["walls"] > 0 else GRID_H - 6
-	_place_row(front, front_row)
-	_place_row(back, front_row + 2)
+	var rows: Array = map_data.get("hero_rows", [MapGenerator.HERO_FRONT_ROW, MapGenerator.HERO_BACK_ROW])
+	_place_row(front, rows[0])
+	_place_row(back, rows[1])
 	for hero in heroes:
 		hero["post"] = hero["pos"]
 
 	# (Survie : seulement la première vague ; les autres attendent leur tour, voir current_wave.)
 	var first := enemies.filter(func(e): return e["wave"] == 0)
 	for i in mini(ENEMY_SLOTS, first.size()):
-		_spawn_enemy(first[i], randi_range(1, 3))
+		var enemy_rows: Vector2i = map_data.get("enemy_rows", MapGenerator.ENEMY_ROWS)
+		_spawn_enemy(first[i], randi_range(enemy_rows.x, enemy_rows.y))
 
 
 ## Aligne des combattants sur une ligne, centrés, sur des cases libres.
@@ -991,7 +934,7 @@ func _call_reinforcements() -> void:
 	for place in _free_since.keys():
 		if time - _free_since[place] >= REINFORCE_DELAY and not waiting.is_empty():
 			var enemy: Dictionary = waiting.pop_front()
-			_spawn_enemy(enemy, 0)
+			_spawn_enemy(enemy, map_data.get("entry_row", MapGenerator.ENTRY_ROW))
 			arrivals.append(enemy["name"])
 			_free_since.erase(place)
 	if not arrivals.is_empty():
@@ -1060,16 +1003,21 @@ func _think(unit: Dictionary) -> void:
 				_move_towards(unit, wounded["pos"])
 			return
 
-	# Défense : un ennemi va aux remparts, sauf si un héros lui barre la route.
+	# Défense : un ennemi va au pied du rempart et le frappe, sauf si un héros lui barre la route (un héros
+	# qu'il peut atteindre : pas un tireur sur le chemin de ronde, deux niveaux plus haut).
 	if not unit["is_hero"] and quest["walls"] > 0:
-		var nearest := _nearest(unit, foes)
+		var reachable := foes.filter(func(foe): return absi(height_of(foe) - height_of(unit)) <= GameData.MELEE_MAX_LEVELS)
+		var nearest := _nearest(unit, reachable)
 		if nearest.is_empty() or unit["pos"].distance_to(nearest["pos"]) > 2.5:
-			if unit["pos"].y >= GRID_H - 2.2:
+			var wall_row: int = map_data.get("wall_row", -1)
+			if wall_row < 0:
+				wall_row = GRID_H  # (ancienne carte sans rempart : le bas de la carte)
+			if unit["pos"].y >= wall_row - 1.25:
 				if unit["cooldown"] <= 0:
 					unit["cooldown"] = _attack_time(unit)
 					walls = maxi(0, walls - 1)
 			else:
-				_move_towards(unit, Vector2(unit["pos"].x, GRID_H - 1.5))
+				_move_towards(unit, Vector2(unit["pos"].x, wall_row - 0.5))
 			return
 
 	# Protecteur : un allié proche en danger passe avant l'ennemi ; il va se placer à son côté.

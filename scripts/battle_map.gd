@@ -214,6 +214,37 @@ func connected(from: Vector2i, to: Vector2i) -> bool:
 	return false
 
 
+## Toutes les cases que l'on peut atteindre à pied depuis l'une des cases « from » : {case: vrai}.
+func reachable(from: Array) -> Dictionary:
+	var seen := {}
+	var queue: Array[Vector2i] = []
+	for cell in from:
+		if walkable(cell) and not seen.has(cell):
+			seen[cell] = true
+			queue.append(cell)
+	while not queue.is_empty():
+		var cell: Vector2i = queue.pop_back()
+		for d in DIRECTIONS.slice(0, 4):
+			var next: Vector2i = cell + d
+			if not seen.has(next) and link(cell, next) != Link.NONE:
+				seen[next] = true
+				queue.append(next)
+	return seen
+
+
+## La carte en donnée (pour la sauvegarde : voir MapGenerator).
+func to_data() -> Dictionary:
+	return {"size": size, "heights": heights.duplicate(), "kinds": kinds.duplicate()}
+
+
+## Reprend une carte enregistrée (voir to_data). Le graphe des chemins est reconstruit.
+func from_data(data: Dictionary) -> void:
+	size = data["size"]
+	heights = PackedInt32Array(data["heights"])
+	kinds = PackedInt32Array(data["kinds"])
+	build_graph()
+
+
 ## Ligne de vue en 3D (cahier : « un mur cache ce qui est derrière, sauf pour qui est plus haut que lui ») :
 ## des yeux de celui qui regarde (EYE_HEIGHT au-dessus de sa case) au milieu du corps de la cible
 ## (BODY_HEIGHT), rien ne doit dépasser la ligne. Un obstacle compte à sa hauteur (au moins 1 niveau).

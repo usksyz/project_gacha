@@ -20,6 +20,7 @@ func _ready() -> void:
 	_check_paths()
 	_check_sight()
 	_check_verticality()
+	_check_generator()
 	print("BILAN : %s" % ("tout est bon" if problems == 0 else "%d problème(s)" % problems))
 	get_tree().quit()
 
@@ -155,6 +156,64 @@ func _check_verticality() -> void:
 	_ok(battle._covered(goblin, hero), "derrière un muret, à couvert des tirs")
 	hero["z"] = 1 + GameData.COVER_IGNORE_LEVELS  # (en haut d'une tour)
 	_ok(not battle._covered(goblin, hero), "un tireur bien plus haut tire par-dessus le muret")
+
+
+## Les gabarits (section 8 bis, « Tests ») : N cartes par gabarit (« cartes=N » en argument, 1 000 par
+## défaut ; le cahier en demande 10 000), toutes jouables (vérifications de MapGenerator.check, sans passer
+## à la carte plate de secours), même graine même carte, temps de fabrication. « voir=oui » dessine une
+## carte de chaque gabarit en lettres.
+func _check_generator() -> void:
+	print("Cartes (section 8 bis)")
+	var args := {"cartes": "1000", "voir": "non"}
+	for arg in OS.get_cmdline_user_args():
+		var parts := arg.split("=")
+		if parts.size() == 2:
+			args[parts[0]] = parts[1]
+	var count := int(args["cartes"])
+	var cases := {"village": [1, GameData.floor_quest(1)], "prairie": [2, GameData.floor_quest(2)],
+		"relief": [3, GameData.floor_quest(3)], "ville": [5, GameData.floor_quest(5)], "cite": [10, GameData.floor_quest(10)],
+		"arene": [0, GameData.duel_quest()]}
+	for template in cases:
+		var floor_number: int = cases[template][0]
+		var quest: Dictionary = cases[template][1]
+		var fallback := 0
+		var usec := 0
+		var heights_seen := {}
+		for i in count:
+			var started := Time.get_ticks_usec()
+			var data := MapGenerator.generate_map(floor_number, quest, i * 7919 + 13)
+			usec += Time.get_ticks_usec() - started
+			if data["template"] != template or MapGenerator.check(data) != "":
+				fallback += 1
+			for h in data["heights"]:
+				heights_seen[h] = true
+		_ok(fallback == 0, "%s : %d cartes jouables sur %d (%.2f ms par carte), hauteurs %s" % [template, count - fallback, count,
+			usec / 1000.0 / count, heights_seen.keys()])
+		var a := MapGenerator.generate_map(floor_number, quest, 42)
+		var b := MapGenerator.generate_map(floor_number, quest, 42)
+		_ok(var_to_str(a) == var_to_str(b), "%s : même graine, même carte" % template)
+		if args["voir"] == "oui":
+			print(draw(a))
+
+
+## Une carte en lettres (pour la regarder dans la console) : chiffre = hauteur du sol ; # obstacle ; H échelle ;
+## T toit ; ^ tour ; = rempart ; / escalier ou pente ; m muret ; " herbes hautes ; R rocher.
+static func draw(data: Dictionary) -> String:
+	var map := BattleMap.new()
+	map.size = data["size"]
+	map.heights = PackedInt32Array(data["heights"])
+	map.kinds = PackedInt32Array(data["kinds"])
+	var signs := {K.BLOCK: "#", K.LADDER: "H", K.ROOF: "T", K.TOWER: "^", K.RAMPART: "=", K.STAIRS: "/",
+		K.LOW_WALL: "m", K.GRASS: "\"", K.ROCK: "R"}
+	var lines := ["%s (graine %d)" % [data["template"], data.get("seed", 0)]]
+	for y in map.size.y:
+		var line := ""
+		for x in map.size.x:
+			var cell := Vector2i(x, y)
+			var kind := map.kind_at(cell)
+			line += (signs[kind] if signs.has(kind) else ".") + str(map.height_at(cell))
+		lines.append(line)
+	return "\n".join(lines)
 
 
 ## Dégâts moyens d'un coup du héros (à la hauteur « az ») sur le gobelin (à « tz »).
