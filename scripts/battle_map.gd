@@ -327,8 +327,9 @@ func connected(from: Vector2i, to: Vector2i) -> bool:
 	return false
 
 
-## Toutes les cases que l'on peut atteindre à pied depuis l'une des cases « from » : {case: vrai}.
-func reachable(from: Array) -> Dictionary:
+## Toutes les cases que l'on peut atteindre à pied depuis l'une des cases « from » : {case: vrai}. Avec
+## « min_row », sans jamais passer au-dessus de cette ligne (rester de son côté de la carte).
+func reachable(from: Array, min_row := 0) -> Dictionary:
 	var seen := {}
 	var queue: Array[Vector2i] = []
 	for cell in from:
@@ -339,7 +340,7 @@ func reachable(from: Array) -> Dictionary:
 		var cell: Vector2i = queue.pop_back()
 		for d in DIRECTIONS.slice(0, 4):
 			var next: Vector2i = cell + d
-			if not seen.has(next) and link(cell, next) != Link.NONE:
+			if not seen.has(next) and next.y >= min_row and link(cell, next) != Link.NONE:
 				seen[next] = true
 				queue.append(next)
 	return seen

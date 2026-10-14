@@ -437,13 +437,19 @@ func _lead(leader: Dictionary) -> void:
 ## Survie (terrain à ruelles), au début du combat : un héros Meneur (ni effrayé ni en panique) forme
 ## lui-même l'équipe : les porteurs de bouclier côte à côte (un mur de boucliers) au milieu, DEFENSE_LINE_GAP
 ## rangs sous la sortie des ruelles ; les autres au corps à corps juste derrière eux (un lancier d'abord, il
-## frappe par-dessus le mur) ; les tireurs encore derrière. Fenêtre « X organise la défense », trait révélé.
+## frappe par-dessus le mur) ; les tireurs sur les toits les plus proches de la sortie des ruelles, ceux qu'on
+## atteint de son côté (Combat v2, C1 ; sans toit : derrière les autres). Un tireur posté en hauteur y reste
+## et tire (voir _think). Fenêtre « X organise la défense », trait révélé.
 ## Moins de deux boucliers : pas de mur, il ne déplace personne.
-## Ce sont leurs postes de départ, pas une consigne : quand les ennemis arrivent, ils se battent comme les
-## autres (simulation, étage 5 : tenir le poste, ou les tireurs en hauteur, faisait perdre bien plus souvent,
-## les héros restant figés face aux archers ennemis). Un ordre du Maître passe avant. Sans Meneur, les héros
-## restent sur leur ligne de départ et attendent les ordres du Maître.
+## Pour le mur et le corps à corps, ce sont des postes de départ, pas une consigne : quand les ennemis arrivent,
+## ils se battent comme les autres (étape 0, simulation de l'étage 5 : tenir le poste au sol, ou les tireurs sur
+## les anciennes hauteurs d'un niveau, faisait perdre bien plus souvent, les héros restant figés face aux archers
+## ennemis ; avec les toits à 2 niveaux de C1, les tireurs postés en haut gagnent au contraire). Un ordre du
+## Maître passe avant. Sans Meneur, les héros restent sur leur ligne de départ et attendent les ordres du Maître.
 const DEFENSE_LINE_GAP := 2
+## Le Meneur envoie aussi les tireurs sur les toits (C1, gardé après simulation : étage 5, équipe préparée,
+## 3 x 300 combats, sans Meneur 66 %, Meneur P5 65,8 %, P5 + toits 71,5 %). Interrupteur pour comparer (sim_tower).
+var leader_roof_shooters := true
 
 
 func _organize_defense() -> void:
@@ -476,8 +482,19 @@ func _organize_defense() -> void:
 	for i in others.size():
 		var front: Vector2 = wall[i % wall.size()] if not wall.is_empty() else Vector2(center + 0.5, row + 0.5)
 		_send_to_post(others[i], _free_cell_near(_cell_of(front + Vector2(0, 1))))
+	# Les tireurs : derrière (P5), ou sur les toits les plus proches de la sortie des ruelles (essai C1).
+	var roofs: Array = []
+	if leader_roof_shooters:
+		# (seulement les toits qu'on atteint de son côté de la carte, sans passer chez les ennemis)
+		var ours := map.reachable(heroes.map(func(h): return _cell_of(h["pos"])), MapGenerator.ALLEY_ROW)
+		roofs = height_cells().filter(func(p): return ours.has(_cell_of(p)))
+	var spot_of := BattleMap.center(Vector2i(center, map_data["alley_exit_row"] - 1))
+	roofs.sort_custom(func(a, b): return a.distance_to(spot_of) < b.distance_to(spot_of))
 	for hero in shooters:
-		_send_to_post(hero, _free_cell_near(Vector2i(center, row + 2)))
+		if not roofs.is_empty():
+			_send_to_post(hero, roofs.pop_front())
+		else:
+			_send_to_post(hero, _free_cell_near(Vector2i(center, row + 2)))
 	_reveal(leader, "Meneur")
 	var who := _name_with_stars(leader)
 	_log("%s organise la défense : un mur de boucliers, les autres derrière." % who, "awaken")

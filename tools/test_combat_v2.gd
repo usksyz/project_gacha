@@ -210,6 +210,29 @@ func _check_movement() -> void:
 	wall.set_cost(Vector2i(1, 2), 1.0 + Battle.BLOCKED_PATH_COST, BattleMap.SIDE_ENEMIES)
 	_ok(through.call(wall.find_path(Vector2i(1, 0), Vector2i(1, 4), BattleMap.SIDE_ENEMIES)) == 5, "passage bouché : l'autre passage")
 	_ok(through.call(wall.find_path(Vector2i(1, 0), Vector2i(1, 4), BattleMap.SIDE_HEROES)) == 1, "chaque camp a ses coûts")
+	# Le Meneur en survie : mur de boucliers au milieu, tireur sur un toit de son côté.
+	GameData.arsenal = []
+	var team := []
+	for weapon in [["Épée", "Bouclier"], ["Épée", "Bouclier"], ["Arc"], ["Épée"]]:
+		var member: Dictionary = GameData._create_hero(3)
+		while GameData.has_trait(member, "Meneur"):
+			member = GameData._create_hero(3)
+		for type in weapon:
+			GameData.arsenal.append({"id": GameData.arsenal.size() + 1, "type": type, "grade": "D", "owner": member["id"]})
+		team.append(member)
+	team[3]["persona"]["legacy_traits"].append("Meneur")
+	var quest := GameData.floor_quest(5)
+	var survival := Battle.new(team, GameData.tower_enemies(5), quest)
+	survival.map_data = MapGenerator.generate_map(5, quest, 4242)
+	survival.start()
+	survival.step()
+	var archer: Dictionary = survival.heroes.filter(func(h): return h["ranged"])[0]
+	var archer_spot: Vector2 = archer["order"].get("pos", archer["post"])
+	var wall_row: int = survival.map_data["alley_exit_row"] + Battle.DEFENSE_LINE_GAP
+	var shields := survival.heroes.filter(func(h): return h["shield"])
+	_ok(survival.map.height_at(survival._cell_of(archer_spot)) >= 2 and archer_spot.y > MapGenerator.ALLEY_ROW
+		and shields.all(func(h): return int(h["order"].get("pos", h["post"]).y) == wall_row),
+		"Meneur en survie : mur de boucliers au milieu, l'archer sur un toit (hauteur %d)" % survival.map.height_at(survival._cell_of(archer_spot)))
 
 
 ## Les gabarits (section 8 bis, « Tests ») : N cartes par gabarit (« cartes=N » en argument, 1 000 par
