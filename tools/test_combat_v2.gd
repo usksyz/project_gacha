@@ -20,6 +20,7 @@ func _ready() -> void:
 	_check_paths()
 	_check_sight()
 	_check_verticality()
+	_check_movement()
 	_check_generator()
 	print("BILAN : %s" % ("tout est bon" if problems == 0 else "%d problème(s)" % problems))
 	get_tree().quit()
@@ -156,6 +157,59 @@ func _check_verticality() -> void:
 	_ok(battle._covered(goblin, hero), "derrière un muret, à couvert des tirs")
 	hero["z"] = 1 + GameData.COVER_IGNORE_LEVELS  # (en haut d'une tour)
 	_ok(not battle._covered(goblin, hero), "un tireur bien plus haut tire par-dessus le muret")
+
+
+## Déplacements (section 3) : champ de flux, réservation des cases d'attaque, autre passage si l'un est bouché.
+func _check_movement() -> void:
+	print("Déplacements (section 3)")
+	var map := _test_map()
+	var flow := map.flow_field([Vector2i(3, 2)], BattleMap.SIDE_ENEMIES)
+	var cell := Vector2i(0, 0)
+	var steps := 0
+	var by_ladder := false
+	while cell != Vector2i(3, 2) and steps < 30 and cell != Vector2i(-1, -1):
+		cell = map.flow_step(flow, cell, BattleMap.SIDE_ENEMIES)
+		by_ladder = by_ladder or cell == Vector2i(1, 2)
+		steps += 1
+	_ok(cell == Vector2i(3, 2) and by_ladder, "champ de flux : on descend vers le but, par l'échelle pour le toit (%d pas)" % steps)
+	# Réservation : 9 gobelins autour d'un héros au milieu du plat ; 8 cases d'attaque, une chacun.
+	var hero: Dictionary = GameData._create_hero(3)
+	var goblins := []
+	for i in 9:
+		goblins.append(GameData._create_enemy(GameData.ENEMY_TYPES[0], 3))
+	var battle := Battle.new([hero], goblins, GameData.floor_quest(1))
+	battle.start()
+	battle.map = BattleMap.new(9, 9)
+	battle.map.build_graph()
+	for unit in battle.units:
+		unit["present"] = true
+	_put(battle, battle.heroes[0], Vector2i(4, 4))
+	for i in 9:
+		_put(battle, battle.enemies[i], Vector2i(i, 0))
+	var slots := {}
+	var none := 0
+	for goblin in battle.enemies:
+		var slot := battle._attack_slot(goblin, battle.heroes[0])
+		if slot < 0:
+			none += 1
+		else:
+			slots[slot] = true
+	_ok(slots.size() == 8 and none == 1, "8 cases d'attaque autour de la cible, une par attaquant ; le 9e attend")
+	# Un passage bouché : un mur percé de deux trous ; quelqu'un d'immobile dans le premier, on prend l'autre.
+	var wall := BattleMap.new(7, 5)
+	wall.fill(Rect2i(0, 2, 7, 1), K.BLOCK, 2)
+	wall.fill(Rect2i(1, 2, 1, 1), K.GROUND, 0)
+	wall.fill(Rect2i(5, 2, 1, 1), K.GROUND, 0)
+	wall.build_graph()
+	var through := func(path: PackedVector2Array) -> int:
+		for p in path:
+			if wall.cell_of(p).y == 2:
+				return wall.cell_of(p).x
+		return -1
+	_ok(through.call(wall.find_path(Vector2i(1, 0), Vector2i(1, 4), BattleMap.SIDE_ENEMIES)) == 1, "par le passage le plus court")
+	wall.set_cost(Vector2i(1, 2), 1.0 + Battle.BLOCKED_PATH_COST, BattleMap.SIDE_ENEMIES)
+	_ok(through.call(wall.find_path(Vector2i(1, 0), Vector2i(1, 4), BattleMap.SIDE_ENEMIES)) == 5, "passage bouché : l'autre passage")
+	_ok(through.call(wall.find_path(Vector2i(1, 0), Vector2i(1, 4), BattleMap.SIDE_HEROES)) == 1, "chaque camp a ses coûts")
 
 
 ## Les gabarits (section 8 bis, « Tests ») : N cartes par gabarit (« cartes=N » en argument, 1 000 par

@@ -101,6 +101,24 @@ const BASE_ATTACK_TIME := 1.2
 const PATH_REFRESH := 0.5
 ## Distance minimale entre deux combattants (ils se poussent un peu pour ne pas se chevaucher).
 const PERSONAL_SPACE := 0.75
+## Déplacements (cahier, « Combat v2 », section 3 ; étape C1) : coûts ajoutés aux cases pour la recherche de
+## chemin (voir _refresh_costs) : une case où quelqu'un se tient immobile (CROWD_STILL_COST) ou passe
+## (CROWD_MOVING_COST) ; pour les héros, une case à portée d'un tireur ennemi (DANGER_COST par tireur,
+## DANGER_MAX_COST au plus). Champs de flux des monstres (voir _follow_flow) : recalculés au plus toutes les
+## FLOW_REFRESH secondes si leur cible a changé de case, et toutes les FLOW_MAX_AGE secondes (la foule bouge) ;
+## à moins de FLOW_NEAR cases du but, le monstre prend son propre chemin. Bloqué plus de REPATH_BLOCKED
+## secondes : nouveau chemin qui évite le passage bouché (un monstre quitte alors le flux de la horde pendant
+## DETOUR_SECONDS : il essaie une autre ruelle). Chiffres provisoires.
+const CROWD_STILL_COST := 3.0
+const CROWD_MOVING_COST := 0.5
+const DANGER_COST := 1.0
+const DANGER_MAX_COST := 2.0
+const FLOW_REFRESH := 0.5
+const FLOW_MAX_AGE := 2.0
+const FLOW_NEAR := 3.0
+const REPATH_BLOCKED := 1.0
+const DETOUR_SECONDS := 3.0
+const BLOCKED_PATH_COST := 50.0
 
 # --- États ---
 
@@ -218,6 +236,14 @@ var _wave_announced := 0
 ## a-t-il déjà été annoncé ?
 var ranges_covered := false
 var _wall_announced := false
+## Déplacements (voir « Déplacements » plus bas) : qui se tient immobile dans chaque case ({indice: numéro}),
+## les cases où se tient quelqu'un ({indice: vrai}), les cases d'attaque réservées ({indice: numéro}), les champs
+## de flux des monstres ({numéro de la cible: {"cell", "time", "dist"}}), prochain calcul des coûts.
+var _still_at := {}
+var _taken := {}
+var _slots := {}
+var _flows := {}
+var _costs_due := 0.0
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
@@ -544,7 +570,7 @@ func _follow_order(unit: Dictionary, foes: Array) -> bool:
 	if _in_reach(unit, target, unit["reach"]):
 		_try_attack(unit, target, foes)
 	else:
-		_move_towards(unit, target["pos"])
+		_approach(unit, target)
 	return true
 
 
@@ -617,6 +643,12 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"post": Vector2.ZERO,      # poste que le héros tient
 		"path": PackedVector2Array(),
 		"path_timer": 0.0,
+		"path_goal": Vector2i(-1, -1),  # case visée par son chemin (un nouveau but : nouveau chemin)
+		"still": false,           # immobile pendant le dernier pas
+		"blocked": 0.0,           # temps passé bloqué (quelqu'un d'immobile sur son chemin)
+		"detour_until": 0.0,      # monstre : suit son propre chemin (autre ruelle) jusqu'à ce moment
+		"slot": -1,               # case d'attaque réservée autour de sa cible (indice ; -1 : aucune)
+		"slot_seen": -1.0,        # dernier moment où il s'en est servi
 		"cooldown": randf_range(0.2, 0.8),  # temps avant la prochaine attaque
 		"contribution": 0,  # dégâts infligés + soins donnés, pour désigner le MVP
 		"killer": "",       # cause de la mort, s'il tombe
@@ -858,6 +890,8 @@ func _covered(target: Dictionary, shooter: Dictionary) -> bool:
 # ---------------------------------------------------------------------------
 
 func _step() -> void:
+	_update_crowd()
+	_refresh_costs()
 	_update_formations()
 	if not _defense_organized and not alley_exits.is_empty():
 		_organize_defense()
@@ -1019,6 +1053,15 @@ func _think(unit: Dictionary) -> void:
 			else:
 				_move_towards(unit, Vector2(unit["pos"].x, wall_row - 0.5))
 			return
+		if not unit["ranged"]:
+			# Un héros lui barre la route : c'est lui qu'il attaque (pas un autre, plus loin : il hésiterait sans
+			# fin entre le rempart et sa cible).
+			unit["target_id"] = nearest["id"]
+			if _in_reach(unit, nearest, unit["reach"]):
+				_try_attack(unit, nearest, foes)
+			else:
+				_approach(unit, nearest)
+			return
 
 	# Protecteur : un allié proche en danger passe avant l'ennemi ; il va se placer à son côté.
 	if unit["is_hero"] and not quest.get("duel", false) and GameData.has_trait(unit["source"], "Protecteur"):
@@ -1057,12 +1100,12 @@ func _think(unit: Dictionary) -> void:
 		if _in_reach(unit, target, unit["reach"]):
 			_try_attack(unit, target, foes)
 		else:
-			_move_towards(unit, target["pos"])
+			_approach(unit, target)
 	else:
 		if _in_reach(unit, target, unit["reach"]):
 			_try_attack(unit, target, foes)
 		else:
-			_move_towards(unit, target["pos"])
+			_approach(unit, target)
 
 
 ## Le choix de la cible, selon la classe. Sinon : l'adversaire le plus proche,
@@ -1292,13 +1335,15 @@ func _fear(unit: Dictionary) -> float:
 
 
 ## Avance vers un point en suivant un chemin sur la grille 3D (voir BattleMap.find_path) : il contourne le
-## décor, prend les escaliers et les échelles, et va moins vite en montant (voir _passage_speed).
+## décor, prend les escaliers et les échelles, et va moins vite en montant (voir _passage_speed). Le chemin
+## est recalculé toutes les PATH_REFRESH secondes, ou tout de suite si le but change de case.
 func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 	unit["path_timer"] -= TICK
 	var goal_cell := _cell_of(goal)
-	if unit["path"].is_empty() or unit["path_timer"] <= 0:
+	if unit["path"].is_empty() or unit["path_timer"] <= 0 or unit["path_goal"] != goal_cell:
 		unit["path_timer"] = PATH_REFRESH
-		var path := map.find_path(_cell_of(unit["pos"]), goal_cell)
+		unit["path_goal"] = goal_cell
+		var path := map.find_path(_cell_of(unit["pos"]), goal_cell, _side(unit))
 		if not map.walkable(goal_cell):
 			pass  # (on va au plus près)
 		elif path.is_empty():
@@ -1310,13 +1355,21 @@ func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 	_walk_path(unit)
 
 
+## Le camp d'un combattant pour la recherche de chemin (voir BattleMap.SIDE_HEROES).
+func _side(unit: Dictionary) -> int:
+	return BattleMap.SIDE_HEROES if unit["is_hero"] else BattleMap.SIDE_ENEMIES
+
+
 ## Avance le long de unit["path"] pendant ce pas. Chaque passage d'une case à l'autre se fait à la vitesse
-## qui va avec (marche, escalier, échelle, escalade). Un passage impossible (il a été bousculé hors de son
-## chemin) : il cherchera un nouveau chemin au prochain pas.
+## qui va avec (marche, escalier, échelle, escalade). Évitement local (cahier, section 3) : si quelqu'un
+## d'immobile occupe la case suivante, il le contourne par une case voisine libre ; s'il ne peut pas, il
+## attend, et au bout de REPATH_BLOCKED secondes il cherche un autre chemin (voir _blocked). Un passage
+## impossible (il a été bousculé hors de son chemin) : il cherchera un nouveau chemin au prochain pas.
 func _walk_path(unit: Dictionary) -> void:
 	var budget := _move_speed(unit) * TICK
 	var start: Vector2 = unit["pos"]
 	var path: PackedVector2Array = unit["path"]
+	var detours := 0
 	while budget > 0.0001 and not path.is_empty():
 		var next: Vector2 = path[0]
 		var here := _cell_of(unit["pos"])
@@ -1327,6 +1380,15 @@ func _walk_path(unit: Dictionary) -> void:
 				path = PackedVector2Array()
 				unit["path_timer"] = 0.0
 				break
+			if _stands_in(there, unit) and there != unit["path_goal"]:
+				var around := _sidestep(unit, here, there, path[1] if path.size() > 1 else next)
+				if around == Vector2i(-1, -1) or detours > 0:
+					unit["path"] = path
+					_blocked(unit, there)
+					return
+				detours += 1
+				path.insert(0, BattleMap.center(around))
+				continue
 			factor = _passage_speed(unit, map.step_link(here, there))
 		var reach := budget * factor
 		var distance: float = unit["pos"].distance_to(next)
@@ -1338,7 +1400,203 @@ func _walk_path(unit: Dictionary) -> void:
 			unit["pos"] += (next - unit["pos"]).normalized() * reach
 			budget = 0.0
 	unit["path"] = path
+	unit["blocked"] = 0.0
 	_spend_stamina(unit, start.distance_to(unit["pos"]) * GameData.STAMINA_MOVE_COST)
+
+
+## Quelqu'un d'autre se tient-il immobile dans cette case ?
+func _stands_in(cell: Vector2i, unit: Dictionary) -> bool:
+	var i := map.index(cell)
+	return _still_at.has(i) and _still_at[i] != unit["id"]
+
+
+## Contourner : une case voisine libre (où personne ne se tient), où l'on passe sans monter (à plat, escalier,
+## saut d'un niveau), et qui rapproche de « toward ». Vector2i(-1, -1) s'il n'y en a pas.
+func _sidestep(unit: Dictionary, here: Vector2i, blocked: Vector2i, toward: Vector2) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_distance: float = unit["pos"].distance_to(toward) - 0.05
+	for d in BattleMap.DIRECTIONS:
+		var cell: Vector2i = here + d
+		if cell == blocked or not map.in_bounds(cell) or _taken.has(map.index(cell)):
+			continue
+		var passage := map.step_link(here, cell)
+		if not passage in [BattleMap.Link.WALK, BattleMap.Link.STAIRS, BattleMap.Link.DROP]:
+			continue
+		var distance := BattleMap.center(cell).distance_to(toward)
+		if distance < best_distance:
+			best = cell
+			best_distance = distance
+	return best
+
+
+## Bloqué devant « cell » (quelqu'un d'immobile, et pas de case pour le contourner) : il attend. Au bout de
+## REPATH_BLOCKED secondes, il cherche un chemin qui évite ce passage ; un monstre quitte alors le flux de
+## la horde pendant DETOUR_SECONDS (cahier : « si une ruelle est bouchée, la horde essaie une autre ruelle »).
+func _blocked(unit: Dictionary, cell: Vector2i) -> void:
+	unit["blocked"] += TICK
+	if unit["blocked"] < REPATH_BLOCKED:
+		return
+	unit["blocked"] = 0.0
+	var goal: Vector2i = unit["path_goal"]
+	if goal == Vector2i(-1, -1):
+		return
+	var side := _side(unit)
+	var i := map.index(cell)
+	var cost: float = map.costs[side][i]
+	map.set_cost(cell, cost + BLOCKED_PATH_COST, side)
+	unit["path"] = map.find_path(_cell_of(unit["pos"]), goal, side)
+	map.set_cost(cell, cost, side)
+	unit["path_timer"] = PATH_REFRESH * 2
+	if not unit["is_hero"]:
+		unit["detour_until"] = time + DETOUR_SECONDS
+
+
+## Aller attaquer « target » : au corps à corps, vers une case d'attaque libre autour d'elle (réservée, voir
+## _attack_slot), puis droit sur elle ; un monstre loin de son but suit le champ de flux de la horde
+## (_follow_flow), sauf s'il fait un détour.
+func _approach(unit: Dictionary, target: Dictionary) -> void:
+	var goal: Vector2 = target["pos"]
+	if not unit["ranged"]:
+		var slot := _attack_slot(unit, target)
+		if slot >= 0 and _cell_of(unit["pos"]) != map.cell_at(slot):
+			goal = BattleMap.center(map.cell_at(slot))
+	if not unit["is_hero"] and not quest.get("duel", false) and time >= unit["detour_until"] \
+			and unit["pos"].distance_to(goal) > FLOW_NEAR:
+		_follow_flow(unit, target)
+	elif unit["detour_until"] > time and not unit["path"].is_empty() and _cell_of(unit["path"][unit["path"].size() - 1]) == _cell_of(goal):
+		unit["path_timer"] -= TICK
+		_walk_path(unit)  # (détour en cours : il garde le chemin qui évite le passage bouché)
+	else:
+		_move_towards(unit, goal)
+
+
+## Réservation des cases (cahier, section 3) : une case de corps à corps autour de la cible est « prise » par
+## un seul attaquant ; les suivants en cherchent une autre, ce qui crée de vrais encerclements. On garde sa
+## case tant qu'elle convient ; sinon la plus proche des cases libres (au plus un niveau d'écart avec la
+## cible, personne d'autre immobile dessus). Renvoie son indice, ou -1 s'il n'y en a plus (il s'approche
+## quand même).
+func _attack_slot(unit: Dictionary, target: Dictionary) -> int:
+	var center := _cell_of(target["pos"])
+	var current: int = unit["slot"]
+	if current >= 0 and _slot_free(current, unit, target, center):
+		_slots[current] = unit["id"]
+		unit["slot_seen"] = time
+		return current
+	if current >= 0 and _slots.get(current, -1) == unit["id"]:
+		_slots.erase(current)
+	var best := -1
+	var best_distance := INF
+	for d in BattleMap.DIRECTIONS:
+		var cell: Vector2i = center + d
+		if not map.in_bounds(cell):
+			continue
+		var i := map.index(cell)
+		if not _slot_free(i, unit, target, center):
+			continue
+		var distance: float = unit["pos"].distance_to(BattleMap.center(cell)) + (0.3 if d.x != 0 and d.y != 0 else 0.0)
+		if distance < best_distance:
+			best = i
+			best_distance = distance
+	unit["slot"] = best
+	if best >= 0:
+		_slots[best] = unit["id"]
+		unit["slot_seen"] = time
+	return best
+
+
+func _slot_free(i: int, unit: Dictionary, target: Dictionary, center: Vector2i) -> bool:
+	var cell := map.cell_at(i)
+	if absi(cell.x - center.x) > 1 or absi(cell.y - center.y) > 1 or cell == center or not map.walkable(cell):
+		return false
+	if absi(map.height_at(cell) - height_of(target)) > GameData.MELEE_MAX_LEVELS:
+		return false
+	if _slots.get(i, unit["id"]) != unit["id"]:
+		return false
+	return not _still_at.has(i) or _still_at[i] == unit["id"] or _still_at[i] == target["id"]
+
+
+## Champ de flux (cahier, section 3) : au lieu d'un chemin par monstre, une carte des distances vers chaque
+## cible, calculée pour toute la horde (BattleMap.flow_field), que chaque monstre descend case par case en
+## contournant ceux qui se tiennent immobiles. Recalculée au plus toutes les FLOW_REFRESH secondes si la
+## cible a changé de case, et toutes les FLOW_MAX_AGE secondes (la foule bouge).
+func _follow_flow(unit: Dictionary, target: Dictionary) -> void:
+	unit["path_timer"] -= TICK
+	var goal := _cell_of(target["pos"])
+	var flow: Dictionary = _flows.get(target["id"], {})
+	if flow.is_empty() or (time - flow["time"] >= FLOW_REFRESH and flow["cell"] != goal) or time - flow["time"] >= FLOW_MAX_AGE:
+		flow = {"cell": goal, "time": time, "dist": map.flow_field([goal], BattleMap.SIDE_ENEMIES)}
+		_flows[target["id"]] = flow
+	var here := _cell_of(unit["pos"])
+	var avoid := {}
+	for i in _still_at:
+		if _still_at[i] != unit["id"] and _still_at[i] != target["id"]:
+			avoid[i] = true
+	unit["path_goal"] = goal
+	var next := map.flow_step(flow["dist"], here, BattleMap.SIDE_ENEMIES, avoid)
+	if next == Vector2i(-1, -1):
+		var ahead := map.flow_step(flow["dist"], here, BattleMap.SIDE_ENEMIES)
+		if ahead == Vector2i(-1, -1):
+			_move_towards(unit, target["pos"])  # (le flux ne mène nulle part d'ici : chemin à lui)
+		else:
+			unit["path"] = PackedVector2Array([BattleMap.center(ahead)])
+			_blocked(unit, ahead)
+		return
+	unit["path"] = PackedVector2Array([BattleMap.center(next)])
+	_walk_path(unit)
+
+
+## Au début de chaque pas : qui se tient où (cases prises, cases où quelqu'un est immobile), et les cases
+## d'attaque encore réservées (celles dont l'attaquant s'est servi au pas précédent).
+func _update_crowd() -> void:
+	_still_at.clear()
+	_taken.clear()
+	for unit in units:
+		if not unit["present"] or unit["hp"] <= 0:
+			continue
+		var i := map.index(_cell_of(unit["pos"]))
+		_taken[i] = true
+		if unit["still"]:
+			_still_at[i] = unit["id"]
+	for i in _slots.keys():
+		var holder: Dictionary = units[_slots[i]]
+		if holder["hp"] <= 0 or not holder["present"] or holder["slot"] != i or time - holder["slot_seen"] > TICK * 1.5:
+			_slots.erase(i)
+			if holder["slot"] == i:
+				holder["slot"] = -1
+
+
+## Coûts des cases pour la recherche de chemin, toutes les PATH_REFRESH secondes (cahier, section 3 : « coût
+## selon la pente, les échelles, la foule et le danger ») : terrain (BattleMap.TERRAIN_COSTS), foule (quelqu'un
+## d'immobile ou qui passe), et, pour les héros, les cases à portée d'un tireur ennemi.
+func _refresh_costs() -> void:
+	if time < _costs_due:
+		return
+	_costs_due = time + PATH_REFRESH
+	var crowd := PackedFloat32Array()
+	crowd.resize(map.heights.size())
+	crowd.fill(0.0)
+	for unit in units:
+		if unit["present"] and unit["hp"] > 0:
+			crowd[map.index(_cell_of(unit["pos"]))] += CROWD_STILL_COST if unit["still"] else CROWD_MOVING_COST
+	var danger := PackedFloat32Array()
+	danger.resize(map.heights.size())
+	danger.fill(0.0)
+	for shooter in enemies:
+		if not shooter["present"] or shooter["hp"] <= 0 or not shooter["ranged"]:
+			continue
+		var reach: float = shooter["reach"]
+		var c := _cell_of(shooter["pos"])
+		var r := ceili(reach)
+		for x in range(maxi(0, c.x - r), mini(GRID_W, c.x + r + 1)):
+			for y in range(maxi(0, c.y - r), mini(GRID_H, c.y + r + 1)):
+				if BattleMap.center(Vector2i(x, y)).distance_to(shooter["pos"]) <= reach:
+					var i := map.index(Vector2i(x, y))
+					danger[i] = minf(DANGER_MAX_COST, danger[i] + DANGER_COST)
+	for i in map.heights.size():
+		var cell := map.cell_at(i)
+		var base: float = map.base_costs[i]
+		map.set_cost(cell, base + crowd[i] + danger[i], BattleMap.SIDE_HEROES)
+		map.set_cost(cell, base + crowd[i], BattleMap.SIDE_ENEMIES)
 
 
 ## Vitesse d'un passage d'une case à l'autre (part de sa vitesse de marche ; voir GameData, tower.gd,
@@ -1396,6 +1654,7 @@ func _land() -> void:
 	for unit in units:
 		if not unit["present"] or unit["hp"] <= 0:
 			continue
+		unit["still"] = unit["pos"].distance_to(unit["prev_pos"]) < 0.02  # (immobile : voir _update_crowd)
 		var cell := _cell_of(unit["pos"])
 		if cell == unit["cell"]:
 			continue

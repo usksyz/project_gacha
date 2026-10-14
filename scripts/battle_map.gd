@@ -47,8 +47,26 @@ var size := Vector2i.ZERO
 var heights := PackedInt32Array()
 var kinds := PackedInt32Array()
 
-## Graphe des chemins (cases où l'on se tient, passages permis ; voir build_graph).
-var _graph := AStar3D.new()
+## Les deux camps (graphes et coûts des chemins : voir build_graph, set_cost).
+const SIDE_HEROES := 0
+const SIDE_ENEMIES := 1
+## Coût de base d'une case pour la recherche de chemin (cahier : « coût selon la pente, les échelles ») : on
+## monte sur un muret ou un rocher en escaladant (4 fois plus lent que marcher) : on le contourne plutôt ;
+## les autres : 1. La foule et le danger s'y ajoutent pendant le combat (voir Battle._refresh_costs).
+const TERRAIN_COSTS := {Kind.STAIRS: 1.15, Kind.LADDER: 2.0, Kind.GRASS: 1.05, Kind.LOW_WALL: 3.0, Kind.ROCK: 2.0}
+## Champs de flux : précision de la file par seaux (seaux par unité de coût).
+const FLOW_BUCKETS := 4.0
+
+## Graphes des chemins, un par camp (cases où l'on se tient, passages permis ; voir build_graph).
+var _graphs: Array[AStar3D] = [AStar3D.new(), AStar3D.new()]
+## Coût de chaque case : de base (terrain), puis pour chaque camp (base + foule + danger).
+var base_costs := PackedFloat32Array()
+var costs: Array[PackedFloat32Array] = []
+## Liens entre cases (indices) et leurs longueurs, vers l'avant et vers l'arrière (champs de flux).
+var out_links: Array[PackedInt32Array] = []
+var out_lengths: Array[PackedFloat32Array] = []
+var in_links: Array[PackedInt32Array] = []
+var in_lengths: Array[PackedFloat32Array] = []
 
 
 func _init(width := 0, length := 0) -> void:
@@ -136,49 +154,144 @@ func step_link(a: Vector2i, b: Vector2i) -> int:
 	return Link.WALK
 
 
-## Construit le graphe des chemins (à appeler une fois la carte finie). Chaque case où l'on se tient est un
+## Construit les graphes des chemins (à appeler une fois la carte finie). Chaque case où l'on se tient est un
 ## point, placé à sa hauteur (un niveau compte VERTICAL_COST cases) ; chaque passage permis, un lien à sens
-## unique (on saute d'un toit, on n'y remonte pas sans échelle).
+## unique (on saute d'un toit, on n'y remonte pas sans échelle). Un graphe par camp (SIDE_HEROES,
+## SIDE_ENEMIES) : mêmes passages, mais chaque camp a ses coûts (le danger des tirs ennemis, voir set_cost).
+## Garde aussi les liens et leurs longueurs pour les champs de flux (flow_field).
 func build_graph() -> void:
-	_graph.clear()
-	for i in heights.size():
-		var cell := cell_at(i)
-		if walkable(cell):
-			_graph.add_point(i, Vector3(cell.x + 0.5, heights[i] * VERTICAL_COST, cell.y + 0.5))
-	for i in heights.size():
+	var count := heights.size()
+	base_costs = PackedFloat32Array()
+	base_costs.resize(count)
+	out_links.clear()
+	out_lengths.clear()
+	in_links.clear()
+	in_lengths.clear()
+	for i in count:
+		out_links.append(PackedInt32Array())
+		out_lengths.append(PackedFloat32Array())
+		in_links.append(PackedInt32Array())
+		in_lengths.append(PackedFloat32Array())
+		base_costs[i] = TERRAIN_COSTS.get(kinds[i], 1.0)
+	costs.clear()
+	for side in 2:
+		var graph := _graphs[side]
+		graph.clear()
+		costs.append(base_costs.duplicate())
+		for i in count:
+			var cell := cell_at(i)
+			if walkable(cell):
+				graph.add_point(i, _point(i), base_costs[i])
+	for i in count:
 		var cell := cell_at(i)
 		if not walkable(cell):
 			continue
 		for d in DIRECTIONS:
 			var next: Vector2i = cell + d
 			if in_bounds(next) and step_link(cell, next) != Link.NONE:
-				_graph.connect_points(i, index(next), false)
+				var j := index(next)
+				var length := _point(i).distance_to(_point(j))
+				for graph in _graphs:
+					graph.connect_points(i, j, false)
+				out_links[i].append(j)
+				out_lengths[i].append(length)
+				in_links[j].append(i)
+				in_lengths[j].append(length)
 
 
-## Le graphe (pour régler le coût des cases, voir set_cost).
-func graph() -> AStar3D:
-	return _graph
+func _point(i: int) -> Vector3:
+	var cell := cell_at(i)
+	return Vector3(cell.x + 0.5, heights[i] * VERTICAL_COST, cell.y + 0.5)
 
 
-## Coût d'entrée dans une case pour la recherche de chemin (1 = normal ; plus : foule, danger...).
-func set_cost(cell: Vector2i, cost: float) -> void:
+## Coût d'entrée dans une case pour la recherche de chemin d'un camp (1 = normal ; plus : pente, foule,
+## danger...). Ne change rien si le coût est le même.
+func set_cost(cell: Vector2i, cost: float, side: int) -> void:
 	var i := index(cell)
-	if _graph.has_point(i):
-		_graph.set_point_weight_scale(i, cost)
+	if costs[side][i] == cost or not _graphs[side].has_point(i):
+		return
+	costs[side][i] = cost
+	_graphs[side].set_point_weight_scale(i, cost)
 
 
-## Le chemin de « from » à « to » : centres des cases à traverser (sans la case de départ). Si « to » est
-## inaccessible, le chemin va au plus près. Vide si l'on est déjà dans la case d'arrivée.
-func find_path(from: Vector2i, to: Vector2i) -> PackedVector2Array:
+## Le chemin de « from » à « to » pour un camp : centres des cases à traverser (sans la case de départ). Si
+## « to » est inaccessible, le chemin va au plus près. Vide si l'on est déjà dans la case d'arrivée.
+func find_path(from: Vector2i, to: Vector2i, side := SIDE_HEROES) -> PackedVector2Array:
 	var path := PackedVector2Array()
 	from = nearest_walkable(from)
 	to = nearest_walkable(to)
 	if from == to:
 		return path
-	var ids := _graph.get_id_path(index(from), index(to), true)
+	var ids := _graphs[side].get_id_path(index(from), index(to), true)
 	for k in range(1, ids.size()):
 		path.append(center(cell_at(ids[k])))
 	return path
+
+
+## Champ de flux (cahier, « Combat v2 », section 3) : pour chaque case, le coût du chemin le plus court
+## jusqu'à l'une des cases « goals », avec les coûts du camp « side » (INF : on ne peut pas y aller). Un seul
+## calcul sert à toute une horde (voir flow_step). Parcours de Dijkstra à l'envers, file par seaux.
+func flow_field(goals: Array, side: int) -> PackedFloat32Array:
+	var dist := PackedFloat32Array()
+	dist.resize(heights.size())
+	dist.fill(INF)
+	var buckets := {}
+	for goal in goals:
+		if walkable(goal):
+			dist[index(goal)] = 0.0
+			if not buckets.has(0):
+				buckets[0] = PackedInt32Array()
+			buckets[0].append(index(goal))
+	var side_costs: PackedFloat32Array = costs[side]
+	var bucket := 0
+	var last := 0
+	while bucket <= last:
+		if buckets.has(bucket):
+			var list: PackedInt32Array = buckets[bucket]
+			var k := 0
+			while k < list.size():
+				var c: int = list[k]
+				k += 1
+				var dc := dist[c]
+				if int(dc * FLOW_BUCKETS) != bucket:
+					continue  # déjà vue plus près
+				var links: PackedInt32Array = in_links[c]
+				var lengths: PackedFloat32Array = in_lengths[c]
+				for n in links.size():
+					var m: int = links[n]
+					var nd := dc + lengths[n] * side_costs[c]
+					if nd < dist[m]:
+						dist[m] = nd
+						var b := int(nd * FLOW_BUCKETS)
+						if not buckets.has(b):
+							buckets[b] = PackedInt32Array()
+						buckets[b].append(m)
+						last = maxi(last, b)
+						if b == bucket:
+							list = buckets[bucket]
+			buckets.erase(bucket)
+		bucket += 1
+	return dist
+
+
+## Le pas suivant dans un champ de flux : la case voisine de « from » qui rapproche le plus du but (coût du
+## pas compris), sauf celles de « avoid » ({indice: vrai}, cases prises). Vector2i(-1, -1) s'il n'y en a pas
+## qui rapproche.
+func flow_step(dist: PackedFloat32Array, from: Vector2i, side: int, avoid := {}) -> Vector2i:
+	var i := index(nearest_walkable(from))
+	var best := -1
+	var best_cost := INF
+	var links: PackedInt32Array = out_links[i]
+	var lengths: PackedFloat32Array = out_lengths[i]
+	for n in links.size():
+		var j: int = links[n]
+		if avoid.has(j) or dist[j] >= dist[i]:
+			continue
+		var cost: float = lengths[n] * costs[side][j] + dist[j]
+		if cost < best_cost:
+			best = j
+			best_cost = cost
+	return cell_at(best) if best >= 0 else Vector2i(-1, -1)
 
 
 ## La case où l'on peut se tenir la plus proche (elle-même si c'est possible).
