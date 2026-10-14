@@ -51,17 +51,51 @@ const SURVIVAL_WAVE_MONSTERS := 1
 
 ## Terrain des quêtes de survie (phase 1.2 ; œuvre, ch. 9 et 11) : une rangée de maisons coupe la carte,
 ## percée de SURVIVAL_ALLEYS ruelles larges d'une case (peu d'ennemis peuvent attaquer en même temps) ;
-## côté héros, près de la sortie des ruelles, des hauteurs (toits, plateformes) que l'on doit escalader :
-## y monter se fait à CLIMB_SPEED_FACTOR de sa vitesse. Un combattant en hauteur frappe un adversaire en
-## contrebas HEIGHT_ATTACK_BONUS plus fort, en encaisse HEIGHT_DEFENSE_BONUS de moins, et tire
-## HEIGHT_REACH_BONUS case plus loin. Le Maître y envoie un héros par un ordre (toucher la hauteur).
-## Chiffres provisoires.
+## côté héros, près de la sortie des ruelles, HEIGHT_COUNT hauteurs. Le Maître y envoie un héros par un ordre
+## (toucher la hauteur). Chiffres provisoires.
 const SURVIVAL_ALLEYS := 3
 const HEIGHT_COUNT := 2
-const CLIMB_SPEED_FACTOR := 0.35
-const HEIGHT_ATTACK_BONUS := 0.2
-const HEIGHT_DEFENSE_BONUS := 0.25
-const HEIGHT_REACH_BONUS := 1.0
+
+# --- Verticalité (cahier, « Combat v2 », section 2 ; étape C1) ---
+# Chaque case a une hauteur de 0 à 4 niveaux (battle_map.gd). Monter : escalier ou rampe à STAIRS_SPEED de sa
+# vitesse, échelle à LADDER_SPEED, escalade d'un niveau sans aide à CLIMB_SPEED (x (1 + (Dextérité - 10) x
+# CLIMB_DEX_BONUS), entre CLIMB_SKILL_MIN et CLIMB_SKILL_MAX ; l'Audace passera par PersonalityEngine.modifier,
+# neutre pour l'instant) ; deux niveaux sans échelle : impossible. Descendre : sauter d'un niveau sans risque ;
+# de deux, FALL_DAMAGE[2] de sa vie maximum ; plus (en tombant), FALL_DAMAGE[3], puis + FALL_DAMAGE_PER_LEVEL
+# par niveau en plus. Avantage de hauteur, par niveau au-dessus de l'adversaire (HEIGHT_MAX_LEVELS au plus) :
+# +HEIGHT_DAMAGE_PER_LEVEL de dégâts infligés, -HEIGHT_DEFENSE_PER_LEVEL de dégâts subis, et les tireurs
+# HEIGHT_REACH_PER_LEVEL case de portée en plus. Au corps à corps, on ne frappe pas plus de MELEE_MAX_LEVELS
+# niveau au-dessus ou en dessous. Pousser : un coup au contact puissant (critique, ou au moins PUSH_MIN_HIT de
+# la vie maximum) sur une cible au bord d'une case plus basse la fait tomber à PUSH_CHANCE (jamais un boss).
+# Couvert : derrière un muret, une clôture ou un rocher plus haut que lui, un tir s'y arrête à COVER_CHANCE,
+# sauf si le tireur est COVER_IGNORE_LEVELS niveaux au-dessus du couvert. Avant C1 : hauteurs de 1 niveau
+# seulement, +20 % de dégâts, -25 % subis, escalade à 0,35. Chiffres provisoires.
+const STAIRS_SPEED := 0.8
+const LADDER_SPEED := 0.45
+const CLIMB_SPEED := 0.25
+const CLIMB_DEX_BONUS := 0.02
+const CLIMB_SKILL_MIN := 0.6
+const CLIMB_SKILL_MAX := 1.6
+const FALL_DAMAGE := {2: 0.05, 3: 0.25}
+const FALL_DAMAGE_PER_LEVEL := 0.1
+const HEIGHT_DAMAGE_PER_LEVEL := 0.1
+const HEIGHT_DEFENSE_PER_LEVEL := 0.1
+const HEIGHT_MAX_LEVELS := 3
+const HEIGHT_REACH_PER_LEVEL := 1.0
+const MELEE_MAX_LEVELS := 1
+const PUSH_MIN_HIT := 0.2
+const PUSH_CHANCE := 0.35
+const COVER_CHANCE := 0.35
+const COVER_IGNORE_LEVELS := 2
+
+
+## Part de la vie maximum perdue en tombant de « levels » niveaux (0 pour un seul niveau).
+func fall_damage(levels: int) -> float:
+	if levels < 2:
+		return 0.0
+	if levels == 2:
+		return FALL_DAMAGE[2]
+	return FALL_DAMAGE[3] + (levels - 3) * FALL_DAMAGE_PER_LEVEL
 
 ## Solidité des remparts d'une quête de défense : chaque coup d'un ennemi arrivé
 ## au pied des remparts leur retire 1 point. À 0, la cité tombe.

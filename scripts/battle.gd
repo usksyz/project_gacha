@@ -206,7 +206,6 @@ var duration := 0.0
 var potions := 0
 var potions_used := 0
 
-var _grid := AStarGrid2D.new()
 ## Qui va aider qui (agonie, soin d'urgence) : {numéro de l'aidant: numéro du blessé}, recalculé à chaque pas.
 var _helpers := {}
 ## Moment où chaque place d'ennemi s'est libérée (pour faire venir un renfort après un délai).
@@ -253,6 +252,7 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 ## Prépare le champ de bataille et place tout le monde. À appeler une fois, avant step().
 func start() -> void:
 	_build_map()
+	map.build_graph()
 	_place_units()
 	# Défense de la cité : le triple avertissement pèse sur les esprits dès le début.
 	if quest.get("warnings", 0) > 0:
@@ -610,6 +610,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"ranged": reach > MELEE_REACH_MAX,           # tireur : reste derrière et recule au contact
 		"present": false,          # sur le terrain (les renforts arrivent plus tard)
 		"pos": Vector2.ZERO,       # position, en cases (0.5 = milieu de la première case)
+		"cell": Vector2i.ZERO,     # sa case, et la hauteur où il se tient (niveaux, voir BattleMap et _land)
+		"z": 0,
 		"prev_pos": Vector2.ZERO,  # position au pas précédent (pour que l'écran glisse en douceur)
 		"order": {},               # ordre du joueur en cours (voir order_move, order_attack)
 		"post": Vector2.ZERO,      # poste que le héros tient
@@ -707,10 +709,6 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 ## en ruelles pour les quêtes de survie), et les remparts de la cité en bas pour la défense.
 ## On vérifie toujours qu'un chemin relie le haut et le bas de la carte.
 func _build_map() -> void:
-	_grid.region = Rect2i(0, 0, GRID_W, GRID_H)
-	_grid.cell_size = Vector2.ONE
-	_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	_grid.update()
 	map.setup(GRID_W, GRID_H)
 
 	if quest["walls"] > 0:
@@ -767,10 +765,9 @@ func _build_alleys() -> void:
 		_try_obstacle(Rect2i(Vector2i(randi_range(0, GRID_W - 2), randi_range(3, top - 2)), Vector2i(randi_range(1, 2), 1)), "rock")
 
 
-## Vrai si ce combattant se tient en hauteur (terrain de survie).
+## Vrai si ce combattant se tient en hauteur (au-dessus du sol).
 func is_high(unit: Dictionary) -> bool:
-	var cell := _cell_of(unit["pos"])
-	return map.walkable(cell) and map.height_at(cell) > 0
+	return height_of(unit) > 0
 
 
 ## Le centre de chaque case en hauteur (pour un ordre « monte là-haut »).
@@ -791,20 +788,14 @@ const OBSTACLE_HEIGHTS := {"rock": 1, "wall": 2, "house": 2, "rampart": 2}
 ## Ajoute un morceau de décor s'il ne coupe pas la carte en deux ; sinon on l'enlève.
 func _try_obstacle(rect: Rect2i, kind: String) -> void:
 	_add_obstacle(rect, kind)
-	var top := Vector2i(GRID_W / 2, 1)
-	var bottom := Vector2i(GRID_W / 2, GRID_H - 4)
-	if _grid.get_id_path(top, bottom).is_empty():
-		for x in range(rect.position.x, rect.end.x):
-			for y in range(rect.position.y, rect.end.y):
-				_grid.set_point_solid(Vector2i(x, y), false)
+	var top := map.nearest_walkable(Vector2i(GRID_W / 2, 1))
+	var bottom := map.nearest_walkable(Vector2i(GRID_W / 2, GRID_H - 4))
+	if not map.connected(top, bottom) or not map.connected(bottom, top):
 		map.fill(rect, BattleMap.Kind.GROUND, 0)
 		obstacles.pop_back()
 
 
 func _add_obstacle(rect: Rect2i, kind: String) -> void:
-	for x in range(rect.position.x, rect.end.x):
-		for y in range(rect.position.y, rect.end.y):
-			_grid.set_point_solid(Vector2i(x, y), true)
 	map.fill(rect, BattleMap.Kind.BLOCK, OBSTACLE_HEIGHTS.get(kind, 1))
 	obstacles.append({"rect": rect, "kind": kind})
 
@@ -834,6 +825,7 @@ func _place_row(fighters: Array[Dictionary], row: int) -> void:
 		fighters[i]["pos"] = _free_cell_near(Vector2i(clampi(x, 0, GRID_W - 1), row))
 		fighters[i]["prev_pos"] = fighters[i]["pos"]
 		fighters[i]["present"] = true
+		_settle(fighters[i])
 
 
 ## Fait entrer un ennemi sur le terrain, sur une case libre de la ligne donnée.
@@ -841,6 +833,13 @@ func _spawn_enemy(enemy: Dictionary, row: int) -> void:
 	enemy["pos"] = _free_cell_near(Vector2i(randi_range(1, GRID_W - 2), row))
 	enemy["prev_pos"] = enemy["pos"]
 	enemy["present"] = true
+	_settle(enemy)
+
+
+## Note la case et la hauteur où se tient un combattant (à son arrivée sur le terrain).
+func _settle(unit: Dictionary) -> void:
+	unit["cell"] = _cell_of(unit["pos"])
+	unit["z"] = map.height_at(unit["cell"])
 
 
 ## La case libre la plus proche d'une case donnée (son centre).
@@ -849,9 +848,9 @@ func _free_cell_near(cell: Vector2i) -> Vector2:
 		for dx in range(-radius, radius + 1):
 			for dy in range(-radius, radius + 1):
 				var c := cell + Vector2i(dx, dy)
-				if _grid.is_in_boundsv(c) and not _grid.is_point_solid(c) and not _occupied(c):
+				if map.walkable(c) and not _occupied(c):
 					return Vector2(c) + Vector2(0.5, 0.5)
-	return Vector2(cell) + Vector2(0.5, 0.5)
+	return Vector2(map.nearest_walkable(cell)) + Vector2(0.5, 0.5)
 
 
 func _occupied(cell: Vector2i) -> bool:
@@ -862,21 +861,53 @@ func _occupied(cell: Vector2i) -> bool:
 
 
 func _cell_of(pos: Vector2) -> Vector2i:
-	return Vector2i(clampi(int(pos.x), 0, GRID_W - 1), clampi(int(pos.y), 0, GRID_H - 1))
+	return map.cell_of(pos)
 
 
 func _is_blocked(pos: Vector2) -> bool:
-	var cell := Vector2i(floori(pos.x), floori(pos.y))
-	return not _grid.is_in_boundsv(cell) or _grid.is_point_solid(cell)
+	return not map.walkable(Vector2i(floori(pos.x), floori(pos.y)))
 
 
-## Vrai si rien dans le décor ne cache « to » depuis « from » (pour les tirs et les sorts).
-func _line_of_sight(from: Vector2, to: Vector2) -> bool:
-	var steps := int(from.distance_to(to) / 0.3) + 1
-	for i in range(1, steps):
-		if _is_blocked(from.lerp(to, float(i) / steps)):
-			return false
-	return true
+## Hauteur où se tient un combattant (niveau de sa case).
+func height_of(unit: Dictionary) -> int:
+	return unit.get("z", 0)
+
+
+## Peut-il glisser de « from » à « to » (une bousculade, un pas en arrière) ? Dans la même case, ou vers une
+## case voisine à la même hauteur, par un escalier, ou (« drop » vrai) en sautant d'un niveau.
+func _can_shift(from: Vector2, to: Vector2, drop := false) -> bool:
+	var a := _cell_of(from)
+	var b := Vector2i(floori(to.x), floori(to.y))
+	if a == b:
+		return map.walkable(b)
+	if not map.in_bounds(b) or absi(a.x - b.x) > 1 or absi(a.y - b.y) > 1:
+		return false
+	var passage := map.step_link(a, b)
+	return passage == BattleMap.Link.WALK or passage == BattleMap.Link.STAIRS or (drop and passage == BattleMap.Link.DROP)
+
+
+## Vrai si « unit » voit « target » : ligne de vue en 3D, de ses yeux au corps de la cible (voir BattleMap).
+func _sees(unit: Dictionary, target: Dictionary) -> bool:
+	return map.line_of_sight(unit["pos"], height_of(unit), target["pos"], height_of(target))
+
+
+## Couvert (cahier, « Combat v2 », section 2) : la cible est-elle derrière un muret, une clôture ou un rocher
+## plus haut qu'elle, du côté du tireur ? Un tireur bien plus haut que le couvert (COVER_IGNORE_LEVELS) tire
+## par-dessus.
+func _covered(target: Dictionary, shooter: Dictionary) -> bool:
+	var cell := _cell_of(target["pos"])
+	var toward: Vector2 = shooter["pos"] - target["pos"]
+	for d in BattleMap.DIRECTIONS:
+		var c: Vector2i = cell + d
+		var kind := map.kind_at(c)
+		if not kind in [BattleMap.Kind.LOW_WALL, BattleMap.Kind.ROCK, BattleMap.Kind.BLOCK] or not map.in_bounds(c):
+			continue
+		var top := maxi(map.height_at(c), 1)
+		if top <= height_of(target) or height_of(shooter) >= top + GameData.COVER_IGNORE_LEVELS:
+			continue
+		if Vector2(d).normalized().dot(toward.normalized()) > 0.7:
+			return true
+	return false
 
 
 # ---------------------------------------------------------------------------
@@ -921,6 +952,7 @@ func _step() -> void:
 		if _check_end():
 			return
 	_separate()
+	_land()
 
 
 ## Survie par vagues (voir GameData, tower.gd, SURVIVAL_WAVES) : la vague en cours (0 = la première).
@@ -1244,13 +1276,19 @@ func _formation_defense(unit: Dictionary) -> float:
 ## Assez près (et, pour un tir, sans décor entre les deux) ?
 func _in_reach(unit: Dictionary, target: Dictionary, reach: float) -> bool:
 	var distance: float = unit["pos"].distance_to(target["pos"])
-	if unit["weapon"] == "Lance" and _behind_shield(unit, target):
-		reach += GameData.SPEAR_WALL_REACH  # par-dessus le mur de boucliers
-	if reach > MELEE_REACH_MAX and is_high(unit):
-		reach += GameData.HEIGHT_REACH_BONUS  # en hauteur, un tireur voit et tire plus loin
+	var above := height_of(unit) - height_of(target)
+	if reach <= MELEE_REACH_MAX:
+		# Au corps à corps, on ne frappe pas plus d'un niveau au-dessus ou en dessous (il faut monter, ou descendre).
+		if absi(above) > GameData.MELEE_MAX_LEVELS:
+			return false
+		if unit["weapon"] == "Lance" and _behind_shield(unit, target):
+			reach += GameData.SPEAR_WALL_REACH  # par-dessus le mur de boucliers
+		return distance <= reach + 0.05
+	# Un tireur au-dessus de sa cible voit et tire plus loin (par niveau, HEIGHT_MAX_LEVELS au plus).
+	reach += clampi(above, 0, GameData.HEIGHT_MAX_LEVELS) * GameData.HEIGHT_REACH_PER_LEVEL
 	if distance > reach + 0.05:
 		return false
-	return reach <= MELEE_REACH_MAX or _line_of_sight(unit["pos"], target["pos"])
+	return _sees(unit, target)
 
 
 ## Temps entre deux attaques : plus court avec de la dextérité, et selon l'arme (dague rapide, lance lente).
@@ -1305,55 +1343,92 @@ func _fear(unit: Dictionary) -> float:
 	return GameData.FEAR_STAT_FACTOR if afraid(unit) else 1.0
 
 
-## Avance vers un point en suivant un chemin qui contourne le décor.
+## Avance vers un point en suivant un chemin sur la grille 3D (voir BattleMap.find_path) : il contourne le
+## décor, prend les escaliers et les échelles, et va moins vite en montant (voir _passage_speed).
 func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 	unit["path_timer"] -= TICK
+	var goal_cell := _cell_of(goal)
 	if unit["path"].is_empty() or unit["path_timer"] <= 0:
 		unit["path_timer"] = PATH_REFRESH
-		var ids := _grid.get_id_path(_cell_of(unit["pos"]), _cell_of(goal), true)
-		var path := PackedVector2Array()
-		for i in range(1, ids.size()):
-			path.append(Vector2(ids[i]) + Vector2(0.5, 0.5))
-		if not path.is_empty():
-			path[path.size() - 1] = goal if not _is_blocked(goal) else path[path.size() - 1]
+		var path := map.find_path(_cell_of(unit["pos"]), goal_cell)
+		if not map.walkable(goal_cell):
+			pass  # (on va au plus près)
+		elif path.is_empty():
+			if _cell_of(unit["pos"]) == goal_cell:
+				path.append(goal)  # déjà dans la bonne case : droit au but
+		elif _cell_of(path[path.size() - 1]) == goal_cell:
+			path[path.size() - 1] = goal
 		unit["path"] = path
-	var step := _move_speed(unit) * TICK
+	_walk_path(unit)
+
+
+## Avance le long de unit["path"] pendant ce pas. Chaque passage d'une case à l'autre se fait à la vitesse
+## qui va avec (marche, escalier, échelle, escalade). Un passage impossible (il a été bousculé hors de son
+## chemin) : il cherchera un nouveau chemin au prochain pas.
+func _walk_path(unit: Dictionary) -> void:
+	var budget := _move_speed(unit) * TICK
 	var start: Vector2 = unit["pos"]
 	var path: PackedVector2Array = unit["path"]
-	# Escalader une hauteur (terrain de survie) : bien plus lent que marcher.
-	if not path.is_empty() and map.walkable(_cell_of(path[0])) and map.height_at(_cell_of(path[0])) > 0 and not is_high(unit):
-		step *= GameData.CLIMB_SPEED_FACTOR
-	while step > 0 and not path.is_empty():
+	while budget > 0.0001 and not path.is_empty():
 		var next: Vector2 = path[0]
+		var here := _cell_of(unit["pos"])
+		var there := _cell_of(next)
+		var factor := 1.0
+		if here != there:
+			if absi(here.x - there.x) > 1 or absi(here.y - there.y) > 1 or map.step_link(here, there) == BattleMap.Link.NONE:
+				path = PackedVector2Array()
+				unit["path_timer"] = 0.0
+				break
+			factor = _passage_speed(unit, map.step_link(here, there))
+		var reach := budget * factor
 		var distance: float = unit["pos"].distance_to(next)
-		if distance <= step:
+		if distance <= reach:
 			unit["pos"] = next
 			path.remove_at(0)
-			step -= distance
+			budget -= distance / factor
 		else:
-			unit["pos"] += (next - unit["pos"]).normalized() * step
-			step = 0
+			unit["pos"] += (next - unit["pos"]).normalized() * reach
+			budget = 0.0
 	unit["path"] = path
 	_spend_stamina(unit, start.distance_to(unit["pos"]) * GameData.STAMINA_MOVE_COST)
 
 
-## Recule d'un pas, à l'opposé d'une menace, si la place est libre.
+## Vitesse d'un passage d'une case à l'autre (part de sa vitesse de marche ; voir GameData, tower.gd,
+## « Verticalité ») : escalier, échelle, escalade d'un niveau (plus vite avec de la Dextérité).
+func _passage_speed(unit: Dictionary, passage: int) -> float:
+	match passage:
+		BattleMap.Link.STAIRS:
+			return GameData.STAIRS_SPEED
+		BattleMap.Link.LADDER:
+			return GameData.LADDER_SPEED
+		BattleMap.Link.CLIMB:
+			var skill: float = 1.0 + (unit["spd"] - 10) * GameData.CLIMB_DEX_BONUS
+			if unit["is_hero"]:
+				skill *= PersonalityEngine.modifier("climb", unit["source"])  # l'Audace (neutre pour l'instant)
+			return GameData.CLIMB_SPEED * clampf(skill, GameData.CLIMB_SKILL_MIN, GameData.CLIMB_SKILL_MAX)
+	return 1.0
+
+
+## Recule d'un pas, à l'opposé d'une menace, si la place est libre (il peut sauter d'un niveau, pas plus).
 func _step_away(unit: Dictionary, threat: Vector2) -> void:
 	var direction: Vector2 = (unit["pos"] - threat).normalized()
 	var next: Vector2 = unit["pos"] + direction * _move_speed(unit) * TICK
-	if not _is_blocked(next):
+	if _can_shift(unit["pos"], next, true):
 		_spend_stamina(unit, _move_speed(unit) * TICK * GameData.STAMINA_MOVE_COST)
 		unit["pos"] = next
 		unit["path"] = PackedVector2Array()
 
 
-## Les combattants trop proches se poussent un peu, sans entrer dans le décor.
+## Les combattants trop proches (à la même hauteur) se poussent un peu, sans entrer dans le décor ni changer
+## de niveau (une bousculade ne fait pas tomber d'un toit : seul un coup puissant le fait, voir _push).
 func _separate() -> void:
 	var present := _alive(units)
 	for i in present.size():
 		for j in range(i + 1, present.size()):
 			var a: Dictionary = present[i]
 			var b: Dictionary = present[j]
+			if height_of(a) != height_of(b):
+				continue
 			var offset: Vector2 = b["pos"] - a["pos"]
 			var distance := offset.length()
 			if distance >= PERSONAL_SPACE:
@@ -1361,10 +1436,60 @@ func _separate() -> void:
 			if distance < 0.01:
 				offset = Vector2(randf_range(-1, 1), randf_range(-1, 1))
 			var push := offset.normalized() * (PERSONAL_SPACE - distance) * 0.5
-			if not _is_blocked(a["pos"] - push):
+			if _can_shift(a["pos"], a["pos"] - push):
 				a["pos"] -= push
-			if not _is_blocked(b["pos"] + push):
+			if _can_shift(b["pos"], b["pos"] + push):
 				b["pos"] += push
+
+
+## Après les déplacements du pas : chacun prend la hauteur de sa case. Qui descend de deux niveaux ou plus
+## sans échelle (un saut, une chute) se blesse (voir GameData.fall_damage).
+func _land() -> void:
+	for unit in units:
+		if not unit["present"] or unit["hp"] <= 0:
+			continue
+		var cell := _cell_of(unit["pos"])
+		if cell == unit["cell"]:
+			continue
+		var levels: int = unit["z"] - map.height_at(cell)
+		var by_ladder := map.kind_at(cell) == BattleMap.Kind.LADDER or map.kind_at(unit["cell"]) == BattleMap.Kind.LADDER
+		unit["cell"] = cell
+		unit["z"] = map.height_at(cell)
+		if levels >= 2 and not by_ladder:
+			_fall(unit, levels)
+
+
+## Une chute (ou un saut) de « levels » niveaux : dégâts, et peut-être la mise à terre.
+func _fall(unit: Dictionary, levels: int) -> void:
+	var amount := roundi(unit["max_hp"] * GameData.fall_damage(levels))
+	if amount <= 0:
+		return
+	amount = _hold_on(unit, mini(amount, unit["hp"]))  # rage d'éveil : il refuse de mourir
+	unit["hp"] -= amount
+	_effect("bleed", unit, unit, "-%d" % amount, levels >= 3)
+	_log("%s tombe de %d niveaux (-%d)." % [_name_with_stars(unit), levels, amount], "bleed" if levels >= 3 else "")
+	if unit["hp"] <= 0:
+		_announce_fall(unit, "tombé de %d niveaux" % levels)
+	else:
+		_check_critical_state(unit)
+
+
+## Un coup puissant au contact près d'un bord peut faire tomber la cible (cahier : « pousser ») : la case
+## derrière elle, dans le sens du coup, est plus basse. Jamais un boss.
+func _push(attacker: Dictionary, target: Dictionary, amount: int, critical: bool) -> void:
+	if target["boss"] or target["hp"] <= 0 or not target["present"] or (not critical and amount < target["max_hp"] * GameData.PUSH_MIN_HIT):
+		return
+	var direction: Vector2 = (target["pos"] - attacker["pos"]).normalized()
+	var behind := Vector2i((target["pos"] + direction).floor())
+	var cell := _cell_of(target["pos"])
+	if behind == cell or not map.walkable(behind) or absi(behind.x - cell.x) > 1 or absi(behind.y - cell.y) > 1 \
+			or map.height_at(behind) >= height_of(target):
+		return
+	if randf() >= GameData.PUSH_CHANCE:
+		return
+	target["pos"] = BattleMap.center(behind)
+	target["path"] = PackedVector2Array()
+	_log("%s est poussé dans le vide par %s !" % [_name_with_stars(target), attacker["name"]], "bleed")
 
 
 # ---------------------------------------------------------------------------
@@ -1508,14 +1633,16 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 	target["engaged"] = true
 	# Activité (croissance) : l'esquive exerce la Dextérité ; le coup porté, la stat de l'attaque ;
 	# le coup encaissé, la Santé.
-	if amount < 0:
+	if amount == -1:
 		target["acts"]["dex"] += 1
-	else:
+	elif amount >= 0:
 		attacker["acts"][ACT_STAT.get(kind, "str")] += 1
 		target["acts"]["vit"] += 1
-	var text := "esquive !" if amount < 0 else "-%d" % amount
+	var text := "esquive !" if amount == -1 else ("couvert !" if amount < 0 else "-%d" % amount)
 	_effect(kind, attacker, target, text, critical and amount >= 0)
-	_journal_hit(attacker, target, amount, critical)
+	_journal_hit(attacker, target, maxi(amount, -1), critical)
+	if kind == "hit" and amount > 0:
+		_push(attacker, target, amount, critical)
 	if target["hp"] <= 0 and target["killer"] == "":
 		_announce_fall(target, "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]], false, {"attacker": attacker, "kind": kind})
 		if attacker["is_hero"]:
@@ -1536,6 +1663,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 		dodge -= GameData.skill_level(attacker["skills"], "Œil de faucon") * GameData.HAWK_EYE_PRECISION_PER_LEVEL
 	if randf() < dodge:
 		return -1
+	# Couvert : derrière un muret ou un rocher, un tir peut s'y arrêter (voir _covered).
+	if kind != "hit" and _covered(target, attacker) and randf() < GameData.COVER_CHANCE:
+		return -2
 	# Maîtrise de l'arme que tient l'attaquant (épée, arc...) : chaque niveau renforce ses coups.
 	if kind != "spell" and attacker["weapon_skill"] != "":
 		power *= 1.0 + GameData.skill_level(attacker["skills"], attacker["weapon_skill"]) * GameData.WEAPON_SKILL_BONUS_PER_LEVEL
@@ -1551,11 +1681,11 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Migraine (après une rage Berserk) : l'attaquant frappe moins fort.
 	if has_migraine(attacker):
 		power *= GameData.MIGRAINE_DAMAGE_FACTOR
-	# Hauteurs (terrain de survie) : d'en haut, on frappe plus fort et on encaisse moins.
-	var high_attacker := is_high(attacker)
-	var high_target := is_high(target)
-	if high_attacker and not high_target:
-		power *= 1.0 + GameData.HEIGHT_ATTACK_BONUS
+	# Avantage de hauteur : par niveau au-dessus de l'autre (HEIGHT_MAX_LEVELS au plus), on frappe plus fort
+	# et on encaisse moins (voir GameData, tower.gd, « Verticalité »).
+	var above := clampi(height_of(attacker) - height_of(target), -GameData.HEIGHT_MAX_LEVELS, GameData.HEIGHT_MAX_LEVELS)
+	if above > 0:
+		power *= 1.0 + above * GameData.HEIGHT_DAMAGE_PER_LEVEL
 	# Santé mentale basse : l'attaquant frappe moins fort, la cible se défend moins bien (voir _mind).
 	# Un ami ou un frère d'armes tout près : l'inverse (voir _bond).
 	# Formations (trois portées, mur de boucliers) : voir _formation_attack et _formation_defense.
@@ -1565,8 +1695,8 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	if kind == "spell" and attacker["element"] == "Feu":
 		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
 		target["took_fire"] = true
-	if high_target and not high_attacker:
-		raw *= 1.0 - GameData.HEIGHT_DEFENSE_BONUS
+	if above < 0:
+		raw *= 1.0 + above * GameData.HEIGHT_DEFENSE_PER_LEVEL
 	# Peau de pierre (compétence de promotion) : la cible encaisse mieux.
 	raw *= 1.0 - GameData.skill_level(target["skills"], "Peau de pierre") * GameData.STONE_SKIN_PER_LEVEL
 	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.
