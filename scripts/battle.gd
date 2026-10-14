@@ -106,8 +106,8 @@ const PERSONAL_SPACE := 0.75
 ## (CROWD_MOVING_COST) ; pour les héros, une case à portée d'un tireur ennemi (DANGER_COST par tireur,
 ## DANGER_MAX_COST au plus). Champs de flux des monstres (voir _follow_flow) : recalculés au plus toutes les
 ## FLOW_REFRESH secondes si leur cible a changé de case, et toutes les FLOW_MAX_AGE secondes (la foule bouge) ;
-## à moins de FLOW_NEAR cases du but, le monstre prend son propre chemin. Bloqué plus de REPATH_BLOCKED
-## secondes : nouveau chemin qui évite le passage bouché (un monstre quitte alors le flux de la horde pendant
+## à moins de FLOW_NEAR du but en marchant (NEAR_MARGIN de plus une fois près, voir _near), le monstre prend son
+## propre chemin. Bloqué plus de REPATH_BLOCKED secondes : nouveau chemin qui évite le passage bouché (un monstre quitte alors le flux de la horde pendant
 ## DETOUR_SECONDS : il essaie une autre ruelle). Chiffres provisoires.
 const CROWD_STILL_COST := 3.0
 const CROWD_MOVING_COST := 0.5
@@ -116,6 +116,7 @@ const DANGER_MAX_COST := 2.0
 const FLOW_REFRESH := 0.5
 const FLOW_MAX_AGE := 2.0
 const FLOW_NEAR := 3.0
+const NEAR_MARGIN := 2.0
 const REPATH_BLOCKED := 1.0
 const DETOUR_SECONDS := 3.0
 const BLOCKED_PATH_COST := 50.0
@@ -658,6 +659,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"still": false,           # immobile pendant le dernier pas
 		"blocked": 0.0,           # temps passé bloqué (quelqu'un d'immobile sur son chemin)
 		"detour_until": 0.0,      # monstre : suit son propre chemin (autre ruelle) jusqu'à ce moment
+		"near": false,            # monstre : assez près de sa cible pour prendre son propre chemin (voir _near)
 		"slot": -1,               # case d'attaque réservée autour de sa cible (indice ; -1 : aucune)
 		"slot_seen": -1.0,        # dernier moment où il s'en est servi
 		"cooldown": randf_range(0.2, 0.8),  # temps avant la prochaine attaque
@@ -1468,8 +1470,7 @@ func _approach(unit: Dictionary, target: Dictionary) -> void:
 		var slot := _attack_slot(unit, target)
 		if slot >= 0 and _cell_of(unit["pos"]) != map.cell_at(slot):
 			goal = BattleMap.center(map.cell_at(slot))
-	if not unit["is_hero"] and not quest.get("duel", false) and time >= unit["detour_until"] \
-			and unit["pos"].distance_to(goal) > FLOW_NEAR:
+	if not unit["is_hero"] and not quest.get("duel", false) and time >= unit["detour_until"] and not _near(unit, target):
 		_follow_flow(unit, target)
 	elif unit["detour_until"] > time and not unit["path"].is_empty() and _cell_of(unit["path"][unit["path"].size() - 1]) == _cell_of(goal):
 		unit["path_timer"] -= TICK
@@ -1523,6 +1524,27 @@ func _slot_free(i: int, unit: Dictionary, target: Dictionary, center: Vector2i) 
 	return not _still_at.has(i) or _still_at[i] == unit["id"] or _still_at[i] == target["id"]
 
 
+## Le champ de flux d'une cible (partagé par toute la horde) : recalculé au plus toutes les FLOW_REFRESH
+## secondes si la cible a changé de case, et toutes les FLOW_MAX_AGE secondes (la foule bouge).
+func _flow_for(target: Dictionary) -> Dictionary:
+	var goal := _cell_of(target["pos"])
+	var flow: Dictionary = _flows.get(target["id"], {})
+	if flow.is_empty() or (time - flow["time"] >= FLOW_REFRESH and flow["cell"] != goal) or time - flow["time"] >= FLOW_MAX_AGE:
+		flow = {"cell": goal, "time": time, "dist": map.flow_field([goal], BattleMap.SIDE_ENEMIES)}
+		_flows[target["id"]] = flow
+	return flow
+
+
+## Le monstre est-il assez près de sa cible pour prendre son propre chemin (vers sa case d'attaque) ? Près
+## en marchant (distance lue dans le champ de flux, pas à vol d'oiseau : sinon, de part et d'autre d'un
+## obstacle, il hésiterait sans fin entre le flux, qui contourne d'un côté, et son chemin, qui contourne de
+## l'autre) ; une fois près, il le reste jusqu'à NEAR_MARGIN de plus.
+func _near(unit: Dictionary, target: Dictionary) -> bool:
+	var dist: float = _flow_for(target)["dist"][map.index(map.nearest_walkable(_cell_of(unit["pos"])))]
+	unit["near"] = dist <= FLOW_NEAR + (NEAR_MARGIN if unit["near"] else 0.0)
+	return unit["near"]
+
+
 ## Champ de flux (cahier, section 3) : au lieu d'un chemin par monstre, une carte des distances vers chaque
 ## cible, calculée pour toute la horde (BattleMap.flow_field), que chaque monstre descend case par case en
 ## contournant ceux qui se tiennent immobiles. Recalculée au plus toutes les FLOW_REFRESH secondes si la
@@ -1530,10 +1552,7 @@ func _slot_free(i: int, unit: Dictionary, target: Dictionary, center: Vector2i) 
 func _follow_flow(unit: Dictionary, target: Dictionary) -> void:
 	unit["path_timer"] -= TICK
 	var goal := _cell_of(target["pos"])
-	var flow: Dictionary = _flows.get(target["id"], {})
-	if flow.is_empty() or (time - flow["time"] >= FLOW_REFRESH and flow["cell"] != goal) or time - flow["time"] >= FLOW_MAX_AGE:
-		flow = {"cell": goal, "time": time, "dist": map.flow_field([goal], BattleMap.SIDE_ENEMIES)}
-		_flows[target["id"]] = flow
+	var flow := _flow_for(target)
 	var here := _cell_of(unit["pos"])
 	var avoid := {}
 	for i in _still_at:
