@@ -117,6 +117,9 @@ var tutorial_step := ""
 var library: Dictionary = Library.new_library()
 ## Mémorial du Maître : le savoir des morts (voir memorial.gd, Memorial). P1b : données seulement.
 var memorial: Dictionary = Memorial.new_memorial()
+## Étages de la Tour déjà visités, figés (Combat v2, C1 ; voir floor_layout, tower.gd) : {étage: {"version",
+## "seed", "map", "enemies"}}. Enregistré « etages ».
+var floors: Dictionary = {}
 
 
 ## Enregistre la partie. La vraie fonction est plus haut dans la pile (save.gd) et remplace

@@ -22,6 +22,7 @@ func _ready() -> void:
 	_check_verticality()
 	_check_movement()
 	_check_generator()
+	_check_frozen_floors()
 	print("BILAN : %s" % ("tout est bon" if problems == 0 else "%d problème(s)" % problems))
 	get_tree().quit()
 
@@ -271,6 +272,41 @@ func _check_generator() -> void:
 		_ok(var_to_str(a) == var_to_str(b), "%s : même graine, même carte" % template)
 		if args["voir"] == "oui":
 			print(draw(a))
+
+
+## Étages figés (section 8 bis, tranché par le porteur du projet) : MapGenerator.generate donne carte et
+## ennemis ; GameData.floor_layout les fige à la première visite, la sauvegarde les garde à l'identique.
+## (Lit et réécrit user://sauvegarde.cfg : lancer dans une copie du projet.)
+func _check_frozen_floors() -> void:
+	print("Étages figés (section 8 bis)")
+	var quest := GameData.floor_quest(5)
+	var a := MapGenerator.generate(5, quest, 777)
+	var b := MapGenerator.generate(5, quest, 777)
+	_ok(var_to_str(a) == var_to_str(b), "même graine : même carte et mêmes ennemis (espèces, niveaux, vagues, places)")
+	var c := MapGenerator.generate(5, quest, 778)
+	_ok(var_to_str(a["enemies"]) != var_to_str(c["enemies"]) or var_to_str(a["map"]) != var_to_str(c["map"]), "autre graine : autre étage")
+	var placed: Array = a["enemies"].filter(func(e): return e["wave"] == 0)
+	_ok(placed.all(func(e): return e.has("start")) and a["enemies"].all(func(e): return e.has("entry") and e["elite"] == false)
+		and a["enemies"].any(func(e): return e.get("boss", false)),
+		"chaque ennemi a sa place (départ ou entrée), le chef est là, pas encore d'élites")
+	GameData.floors = {}
+	var first := GameData.floor_layout(3)
+	var again := GameData.floor_layout(3)
+	_ok(var_to_str(first) == var_to_str(again), "un étage visité ne change plus")
+	var before := var_to_str(GameData.floors)
+	GameData.save_game()
+	GameData.floors = {}
+	GameData.load_game()
+	_ok(var_to_str(GameData.floors) == before, "relu de la sauvegarde à l'identique")
+	var team: Array = [GameData._create_hero(3)]
+	var enemies: Array = first["enemies"].duplicate(true)
+	var battle := Battle.new(team, enemies, GameData.floor_quest(3))
+	battle.map_data = first["map"]
+	battle.start()
+	var at_start := battle.enemies.filter(func(e): return e["present"]).all(func(e): return battle._cell_of(e["pos"]) == e["source"]["start"])
+	_ok(at_start, "au combat, chaque ennemi part de sa case")
+	battle.run()
+	_ok(var_to_str(GameData.floors[3]) == var_to_str(first), "après le combat, l'étage est toujours le même")
 
 
 ## Une carte en lettres (pour la regarder dans la console) : chiffre = hauteur du sol ; # obstacle ; H échelle ;

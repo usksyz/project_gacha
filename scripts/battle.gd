@@ -788,8 +788,12 @@ func _place_units() -> void:
 	# (Survie : seulement la première vague ; les autres attendent leur tour, voir current_wave.)
 	var first := enemies.filter(func(e): return e["wave"] == 0)
 	for i in mini(ENEMY_SLOTS, first.size()):
-		var enemy_rows: Vector2i = map_data.get("enemy_rows", MapGenerator.ENEMY_ROWS)
-		_spawn_enemy(first[i], randi_range(enemy_rows.x, enemy_rows.y))
+		var start = first[i]["source"].get("start")  # (place fixée par l'étage, voir MapGenerator.generate)
+		if start != null:
+			_spawn_enemy(first[i], start.y, start.x)
+		else:
+			var enemy_rows: Vector2i = map_data.get("enemy_rows", MapGenerator.ENEMY_ROWS)
+			_spawn_enemy(first[i], randi_range(enemy_rows.x, enemy_rows.y))
 
 
 ## Aligne des combattants sur une ligne, centrés, sur des cases libres.
@@ -802,9 +806,14 @@ func _place_row(fighters: Array[Dictionary], row: int) -> void:
 		_settle(fighters[i])
 
 
-## Fait entrer un ennemi sur le terrain, sur une case libre de la ligne donnée.
-func _spawn_enemy(enemy: Dictionary, row: int) -> void:
-	enemy["pos"] = _free_cell_near(Vector2i(randi_range(1, GRID_W - 2), row))
+## Fait entrer un ennemi sur le terrain, sur une case libre de la ligne donnée : à la colonne « column », sinon
+## à sa colonne d'entrée fixée par l'étage (« entry », voir MapGenerator.generate), sinon au hasard.
+func _spawn_enemy(enemy: Dictionary, row: int, column := -1) -> void:
+	if column < 0:
+		column = enemy["source"].get("entry", -1)
+	if column < 0:
+		column = randi_range(1, GRID_W - 2)
+	enemy["pos"] = _free_cell_near(Vector2i(column, row))
 	enemy["prev_pos"] = enemy["pos"]
 	enemy["present"] = true
 	_settle(enemy)

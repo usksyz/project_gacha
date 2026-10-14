@@ -49,6 +49,8 @@ var fight_button: Button
 
 ## Ennemis de l'étage qu'on s'apprête à affronter.
 var floor_enemies: Array[Dictionary] = []
+## Carte de cet étage (figée, voir GameData.floor_layout).
+var floor_map: Dictionary = {}
 ## Étage qu'on s'apprête à jouer (l'étage actuel, ou un étage déjà conquis qu'on refait).
 var chosen_floor := 1
 var replay_button: Button
@@ -662,7 +664,10 @@ func _confirm_replay(floor_number: int) -> void:
 func _open_tower(floor_number: int) -> void:
 	chosen_floor = floor_number
 	floor_quest = GameData.floor_quest(floor_number)
-	floor_enemies = GameData.tower_enemies(floor_number)
+	# L'étage est figé à sa première visite (carte et ennemis, voir GameData.floor_layout) : on en fait une copie.
+	var layout := GameData.floor_layout(floor_number)
+	floor_enemies.assign(layout["enemies"].duplicate(true))
+	floor_map = layout["map"]
 	selected_ids.clear()
 
 	team_title.text = "Étage %d — %s" % [floor_number, floor_quest["name"]]
@@ -859,8 +864,9 @@ func _start_fight() -> void:
 	# Le combat est noté dans la sauvegarde : si le jeu est fermé en plein combat,
 	# les héros se débrouillent seuls et le résultat est appliqué au lancement suivant.
 	# C'est aussi là que les héros prennent leurs armes dans l'arsenal : avant de créer le combat.
-	GameData.start_tower_battle(team, floor_enemies, floor_quest, floor_number)
+	GameData.start_tower_battle(team, floor_enemies, floor_quest, floor_number, floor_map)
 	var battle := Battle.new(team, floor_enemies, floor_quest)
+	battle.map_data = floor_map
 	battle.start()
 
 	_show_page(battle_view)

@@ -24,7 +24,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     hero["revealed_traits"] ; les héros secrets prennent leur profil écrit à la main.
 ## 5 : P1b, structures de la personnalité (8 briques, cercles, sujets ; PersonalityEngine.migrate), journal
 ##     des derniers combats (hero["recent_battles"]), bibliothèque et mémorial du Maître (absents = vides).
-const SAVE_VERSION := 5
+## 6 : Combat v2, C1 : étages de la Tour figés (« etages » : carte et ennemis, voir floor_layout ; absents =
+##     générés au prochain passage), carte du combat en cours (pending_battle["map"]).
+const SAVE_VERSION := 6
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -60,6 +62,7 @@ func save_game() -> void:
 	file.set_value("partie", "tutoriel", tutorial_step)
 	file.set_value("partie", "bibliotheque", library)
 	file.set_value("partie", "memorial", memorial)
+	file.set_value("partie", "etages", floors)
 	file.save(SAVE_PATH)
 
 
@@ -101,6 +104,8 @@ func load_game() -> bool:
 	# Bibliothèque (version 5) : absente d'une ancienne sauvegarde = vide.
 	library = Library.migrate(file.get_value("partie", "bibliotheque", Library.new_library()))
 	memorial = Memorial.migrate(file.get_value("partie", "memorial", Memorial.new_memorial()))
+	# Étages figés (version 6) : absents d'une ancienne sauvegarde = générés au prochain passage.
+	floors = file.get_value("partie", "etages", {})
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):
@@ -173,4 +178,5 @@ func _new_game() -> void:
 	seen_tips = []  # partie neuve : le Système accueille le Maître (voir show_tip)
 	library = Library.new_library()
 	memorial = Memorial.new_memorial()
+	floors = {}
 	# On commence sans héros : les héros secrets (Han compris) s'obtiennent par code.

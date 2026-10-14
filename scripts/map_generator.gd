@@ -60,6 +60,38 @@ static func template_for(floor_number: int, quest: Dictionary) -> String:
 	return "relief"
 
 
+## Un étage de la Tour entier, en donnée (cahier, section 8 bis, « Préparation dès C1 ») : la carte
+## (generate_map) et la liste des ennemis (GameData.tower_enemies : espèces, nombre, niveaux, chef, vagues),
+## avec leur position de départ : « start » (case de départ, pour ceux qui sont sur le terrain dès le début) et
+## « entry » (colonne d'entrée par le haut, pour les renforts et les vagues suivantes). « elite » : pas encore
+## d'élites (étape C5), toujours faux. Même graine, même étage. Voir GameData.floor_layout : l'étage est figé à
+## sa première visite. Renvoie {"version", "seed", "map", "enemies"}.
+static func generate(floor_number: int, quest: Dictionary, floor_seed: int) -> Dictionary:
+	var map := generate_map(floor_number, quest, floor_seed)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([floor_seed, "ennemis"])
+	var enemies: Array[Dictionary] = GameData.tower_enemies(floor_number, rng)
+	var cells := BattleMap.new()
+	cells.size = map["size"]
+	cells.heights = PackedInt32Array(map["heights"])
+	cells.kinds = PackedInt32Array(map["kinds"])
+	var starts := []
+	for row in range(map["enemy_rows"].x, map["enemy_rows"].y + 1):
+		for x in WIDTH:
+			if cells.walkable(Vector2i(x, row)) and cells.height_at(Vector2i(x, row)) == 0:
+				starts.append(Vector2i(x, row))
+	var entries := []
+	for x in range(1, WIDTH - 1):
+		if cells.walkable(Vector2i(x, map["entry_row"])):
+			entries.append(x)
+	for enemy in enemies:
+		enemy["elite"] = false
+		enemy["entry"] = entries[rng.randi_range(0, entries.size() - 1)]
+		if enemy.get("wave", 0) == 0 and not starts.is_empty():
+			enemy["start"] = starts.pop_at(rng.randi_range(0, starts.size() - 1))
+	return {"version": MAP_VERSION, "seed": floor_seed, "map": map, "enemies": enemies}
+
+
 ## La carte d'un combat : une donnée (Dictionary) que Battle reprend telle quelle (voir Battle.map_data) :
 ## {"version", "seed", "template", "size", "heights", "kinds", "structures": [{"kind", "rect", "height"}],
 ##  "hero_rows": [première ligne, ligne des tireurs], "enemy_rows", "entry_row", "alley_exits": [Vector2],

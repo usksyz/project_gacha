@@ -374,7 +374,12 @@ func floor_quest(floor_number: int) -> Dictionary:
 ## le boss prend la place de 2 monstres (il en reste toujours au moins 2 pour l'escorter).
 ## Au combat, 6 ennemis au plus se battent en même temps : les autres arrivent en renfort
 ## (annihilation : quelques-uns ; survie et défense : toute une horde).
-func tower_enemies(floor_number: int) -> Array[Dictionary]:
+## « rng » : le tirage à suivre (MapGenerator.generate en donne un, tiré de la graine de l'étage) ; sans, le
+## hasard de Godot.
+func tower_enemies(floor_number: int, rng: RandomNumberGenerator = null) -> Array[Dictionary]:
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.seed = randi()
 	var quest := floor_quest(floor_number)
 	var level := floor_enemy_level(floor_number)
 	var enemies: Array[Dictionary] = []
@@ -382,7 +387,7 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 	var monster_count := mini(maxi(2 + floor_number / 2, early[0]), 6)
 	if is_boss_floor(floor_number):
 		var boss_index := mini(floor_number / BOSS_EVERY - 1, BOSS_TYPES.size() - 1)
-		enemies.append(_create_enemy(BOSS_TYPES[boss_index], level + 2))
+		enemies.append(_create_enemy(BOSS_TYPES[boss_index], level + 2, rng))
 		enemies[0]["boss"] = true
 		monster_count = maxi(2, monster_count - 2)
 	match quest["type"]:
@@ -402,25 +407,25 @@ func tower_enemies(floor_number: int) -> Array[Dictionary]:
 					chief["wave"] = wave
 					enemies.append(chief)
 			for i in SURVIVAL_WAVE_MONSTERS + floor_number / 5:
-				var monster := _create_enemy(known_types.pick_random(), level)
+				var monster := _create_enemy(known_types[rng.randi_range(0, known_types.size() - 1)], level, rng)
 				monster["wave"] = wave
 				enemies.append(monster)
 	else:
 		for i in monster_count:
-			enemies.append(_create_enemy(known_types.pick_random(), level))
+			enemies.append(_create_enemy(known_types[rng.randi_range(0, known_types.size() - 1)], level, rng))
 	_number_duplicates(enemies)
 	return enemies
 
 
 ## Crée un ennemi à partir d'un modèle, renforcé selon son niveau.
-func _create_enemy(template: Dictionary, level: int) -> Dictionary:
+func _create_enemy(template: Dictionary, level: int, rng: RandomNumberGenerator = null) -> Dictionary:
 	var multiplier := 1.0 + (level - 1) * ENEMY_BONUS_PER_LEVEL
 	var stats := {}
 	for stat in STAT_NAMES:
 		var value: float = template[stat]
 		if stat != "dex":  # la vitesse change peu, pour que l'ordre d'action reste lisible
 			value *= multiplier
-		stats[stat] = maxi(1, roundi(value * randf_range(0.9, 1.1)))
+		stats[stat] = maxi(1, roundi(value * (rng.randf_range(0.9, 1.1) if rng != null else randf_range(0.9, 1.1))))
 	# « base_name » garde le nom sans lettre (Gobelin), pour regrouper les ennemis à l'affichage.
 	return {"name": template["name"], "base_name": template["name"], "class": template["class"],
 		"level": level, "stats": stats, "element": template.get("element", "")}
@@ -441,16 +446,33 @@ func _number_duplicates(enemies: Array[Dictionary]) -> void:
 			enemy["name"] = "%s %s" % [base_name, char(65 + index)]
 
 
+## Un étage de la Tour, figé (cahier, « Combat v2 », section 8 bis, tranché par le porteur du projet) : à la
+## première visite, la carte et les ennemis (espèces, nombre, niveaux, élites, chef, vagues, positions de
+## départ) sont générés (MapGenerator.generate, avec une graine tirée au hasard) puis enregistrés dans la
+## sauvegarde (floors) ; ensuite l'étage n'est plus jamais modifié et se rejoue à l'identique, perdu ou gagné.
+## Seul le déroulé du combat change. Une ancienne sauvegarde (sans étages enregistrés) : chaque étage est
+## généré et figé à son prochain passage. La quête, elle, suit toujours les règles du jeu (floor_quest).
+## Renvoie {"version", "seed", "map", "enemies"} : ne pas le modifier (les ennemis sont à copier pour un combat).
+func floor_layout(floor_number: int) -> Dictionary:
+	if not floors.has(floor_number):
+		floors[floor_number] = MapGenerator.generate(floor_number, floor_quest(floor_number), randi())
+		save_game()
+	return floors[floor_number]
+
+
 ## Début d'un combat de la Tour : on le note dans la sauvegarde (voir pending_battle).
 ## « floor_number » : l'étage joué (un étage déjà conquis peut être rejoué, voir REPLAY_GOLD_RATE).
 ## Les héros prennent leurs armes dans l'arsenal au départ (gear_up) : à appeler avant Battle.new.
-func start_tower_battle(team: Array, enemies: Array, quest: Dictionary, floor_number: int) -> void:
+## « map » : la carte de l'étage (floor_layout), notée aussi : un combat repris au lancement suivant se joue
+## sur la même carte.
+func start_tower_battle(team: Array, enemies: Array, quest: Dictionary, floor_number: int, map := {}) -> void:
 	update_training()  # les séances terminées avant le départ sont comptées
 	pending_battle = {
 		"floor": floor_number,
 		"team": team.map(func(hero): return hero["id"]),
 		"enemies": enemies.duplicate(true),
 		"quest": quest,
+		"map": map,
 	}
 	gear_up(team)  # sauvegarde aussi la partie
 
@@ -468,6 +490,7 @@ func _resolve_pending_battle() -> void:
 		save_game()
 		return
 	var battle := Battle.new(team, pending_battle["enemies"], pending_battle["quest"])
+	battle.map_data = pending_battle.get("map", {})  # (combat d'avant C1 : une carte neuve)
 	battle.run()
 	absence_report = {"floor": floor_number, "report": finish_tower_battle(battle)}
 
