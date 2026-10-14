@@ -121,6 +121,19 @@ func _ready() -> void:
 		GameData.dev_all_plans()
 		return "Tu as tous les plans de forge."]])
 
+	# Personnalité P1b : bibliothèque et mémorial du Maître (données seulement, pas encore de salle).
+	_add_section(content, "Bibliothèque et mémorial")
+	_add_note(content, "Personnalité P1b : les données, sans salle ni écran. Un héros consigne ce qu'il rapporte depuis sa fiche (outils de la personnalité).")
+	_add_row(content, [["Voir la bibliothèque", func():
+			_show_library()
+			return ""],
+		["Voir le mémorial", func():
+			_show_memorial()
+			return ""]])
+	_add_row(content, [["Enregistrer les morts au mémorial", func(): return GameData.dev_memorial_record_dead()]])
+	_add_row(content, [["Mémorial : +1 niveau de places", func(): return GameData.dev_memorial_upgrade(true)],
+		["Mémorial : +1 niveau de mémoire", func(): return GameData.dev_memorial_upgrade(false)]])
+
 	var quit := UI.make_button("Quitter le mode dev", func():
 		Settings.change("dev_mode", false)
 		visible = false, 24)
@@ -172,6 +185,129 @@ func _add_row(parent: Control, entries: Array) -> void:
 		button.custom_minimum_size.y = 64
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(button)
+
+
+# ---------------------------------------------------------------------------
+# Bibliothèque et mémorial (personnalité P1b)
+# ---------------------------------------------------------------------------
+
+## Une fenêtre par-dessus le panneau : un titre, des lignes (textes, ou rangées [[texte, action]] de
+## boutons), et « Fermer ». Renvoie la fenêtre (elle se retire d'elle-même en fermant).
+func _open_window(title: String, lines: Array) -> Control:
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 48)
+	overlay.add_child(margin)
+	var panel := PanelContainer.new()
+	var style := UI.make_panel_style(Color("15121f"), Color("9b6be0"), 3)
+	style.set_content_margin_all(20)
+	panel.add_theme_stylebox_override("panel", style)
+	margin.add_child(panel)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	panel.add_child(layout)
+	var title_label := UI.make_label(title.to_upper(), 28)
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_color_override("font_color", Color("c9a8ff"))
+	layout.add_child(title_label)
+	var scroll := UI.make_scroll()
+	layout.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 8)
+	scroll.add_child(content)
+	for line in lines:
+		if line is Array:
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 8)
+			content.add_child(row)
+			for entry in line:
+				var action: Callable = entry[1]
+				var button := UI.make_button(entry[0], action, 18)
+				button.custom_minimum_size.y = 56
+				button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				row.add_child(button)
+		else:
+			var label := UI.make_label(str(line), 18)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			content.add_child(label)
+	var close := UI.make_button("Fermer", func(): overlay.queue_free(), 22)
+	close.custom_minimum_size.y = 64
+	layout.add_child(close)
+	return overlay
+
+
+func _show_library() -> void:
+	var library: Dictionary = GameData.library
+	var lines: Array = ["Niveau de la salle : %d · fiches vérifiées : %d" % [library["level"], Library.verified_count(library)]]
+	lines.append("BESTIAIRE")
+	for subject in library["bestiary"]:
+		var card: Dictionary = library["bestiary"][subject]
+		var notes: Array[String] = []
+		notes.append("vérifiée" if card["verified"] else "non vérifiée")
+		if card["told"]:
+			notes.append("racontée par un illettré")
+		if card["omission"]:
+			notes.append("omission possible (Ruse)")
+		if card["prior"]:
+			notes.append("connu avant l'invocation")
+		lines.append("• %s : connaissance %d, détail %d, danger écrit %.0f ; par %s (%s)" % [PersonalityData.SUBJECTS.get(subject, {}).get("name", subject),
+			card["knowledge"], card["detail"], card["danger"], ", ".join(card["authors"].map(func(a): return a["name"])), ", ".join(notes)])
+	lines.append("CARNETS D'ÉTAGE")
+	for key in library["floors"]:
+		var notes_floor: Dictionary = library["floors"][key]
+		lines.append("• Étage %d : %d passage(s), %d victoire(s), vagues %d ; tués par : %s ; a marché : %s ; par %s%s" % [notes_floor["floor"],
+			notes_floor["visits"], notes_floor["victories"], notes_floor["waves"], ", ".join(notes_floor["killed_by"]) if notes_floor["killed_by"] else "-",
+			", ".join(notes_floor["worked"]) if notes_floor["worked"] else "-", ", ".join(notes_floor["authors"].map(func(a): return a["name"])),
+			" (rôle exagéré)" if notes_floor["exaggerated"] else ""])
+	lines.append("FORMATIONS : %d · STRATÉGIES : %s" % [library["formations"].size(), ", ".join(library["strategies"].keys()) if library["strategies"] else "aucune"])
+	lines.append("REGISTRE DES COMPÉTENCES")
+	for skill_name in library["skills"]:
+		var entry: Dictionary = library["skills"][skill_name]
+		lines.append("• %s : %s" % [skill_name, Library.SKILL_STATE_NAMES.get(entry["state"], entry["state"])])
+	_open_window("Bibliothèque", lines)
+
+
+func _show_memorial() -> void:
+	var memorial: Dictionary = GameData.memorial
+	var lines: Array = ["%d / %d places (niveau %d) · mémoire niveau %d" % [memorial["entries"].size(), Memorial.capacity(memorial),
+		memorial["capacity_level"], memorial["memory_level"]]]
+	var holder := {}  # (la fenêtre n'existe qu'après la boucle : les boutons la retrouvent ici)
+	for item in memorial["entries"]:
+		var kept := Memorial.view(memorial, item)
+		var battle_text := "aucun combat gardé"
+		if not kept["battles"].is_empty():
+			var last: Dictionary = kept["battles"].back()
+			battle_text = "%d combat(s) gardé(s) ; le dernier : étage %d, %s" % [kept["battles"].size(), last["floor"],
+				", ".join(last.get("events", []).map(func(event): return "%s %.0fs" % [event["kind"], event["t"]]))]
+		lines.append("%s (%s) — %s. %s. Sujets gardés : %s%s" % [item["name"], "★".repeat(item["rarity"]), item["cause"], battle_text,
+			", ".join(kept["subjects"].keys().map(func(s): return "%s %d" % [PersonalityData.SUBJECTS.get(s, {}).get("name", s), kept["subjects"][s]])) if kept["subjects"] else "aucun",
+			"" if kept["past"] == "" else " ; passé : " + PersonalityData.METIERS.get(kept["past"], {}).get("name", kept["past"])])
+		var hero_id: int = item["id"]
+		var hero_name: String = item["name"]
+		lines.append([["Retirer", func(): _confirm_memorial_removal(hero_id, hero_name, holder.get("window"))]])
+	holder["window"] = _open_window("Mémorial", lines)
+
+
+## Fenêtre de validation, puis « [Nom] sera oublié à jamais. »
+func _confirm_memorial_removal(hero_id: int, hero_name: String, memorial_window) -> void:
+	var holder := {}
+	holder["window"] = _open_window("Retirer du mémorial", ["Retirer %s du mémorial ?" % hero_name,
+		[["Oui, retirer", func():
+			var message := GameData.dev_memorial_remove(hero_id)
+			holder["window"].queue_free()
+			if is_instance_valid(memorial_window):
+				memorial_window.queue_free()
+			_open_window("Mémorial", [message])],
+		["Non", func(): holder["window"].queue_free()]]])
 
 
 func _make_menu(items: Array) -> OptionButton:

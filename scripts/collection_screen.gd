@@ -374,6 +374,92 @@ func _add_personality_tools(content: VBoxContainer, hero: Dictionary) -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(label)
 	_add_dev_row(content, [["Nouveau tirage de la personnalité", func(): GameData.dev_reroll_personality(hero)]])
+	_add_p1b_tools(content, hero)
+
+
+## Mode dev, personnalité P1b (structures sans effet en jeu) : les 8 briques, les cercles et le visage du
+## héros cercle par cercle, ses sujets (appréhension, connaissance), ses dernières décisions et leurs
+## raisons, son dernier combat ; et de quoi tester (rencontre simulée, bibliothèque, mémorial).
+func _add_p1b_tools(content: VBoxContainer, hero: Dictionary) -> void:
+	var D := PersonalityData
+	var E := PersonalityEngine
+	var lines: Array[String] = []
+	# Les 8 briques.
+	var mind := E.mind(hero)
+	var need_parts: Array[String] = []
+	for need_id in D.NEEDS:
+		need_parts.append("%s %.0f (poids x%.2f)" % [D.NEEDS[need_id]["name"], E.need(hero, need_id), E.need_weight(hero, need_id)])
+	var expectation_parts: Array[String] = []
+	for expectation_id in D.EXPECTATIONS:
+		expectation_parts.append("%s %.0f" % [D.EXPECTATIONS[expectation_id]["name"], mind.get("expectations", {}).get(expectation_id, 0.0)])
+	var opinion_parts: Array[String] = []
+	for other_id in mind.get("opinions", {}):
+		var others := GameData.roster.filter(func(other): return str(other["id"]) == other_id)
+		opinion_parts.append("%s %+.0f" % [others[0]["name"] if not others.is_empty() else "#" + other_id, mind["opinions"][other_id]])
+	lines.append("BRIQUES — Besoins : " + ", ".join(need_parts))
+	lines.append("Pensées : %d · Attentes : %s · Dissonance : %.1f · Souvenirs : %d" % [mind.get("thoughts", []).size(),
+		", ".join(expectation_parts), mind.get("dissonance", 0.0), mind.get("memories", []).size()])
+	lines.append("Opinions : %s · Confiance envers le Maître : %+.0f" % [", ".join(opinion_parts) if not opinion_parts.is_empty() else "aucune", E.trust(hero)])
+	lines.append("Adaptation : %s · Désirs : %s" % [mind.get("coping", {}).get("habits", {}), ", ".join(mind.get("desires", [])) if mind.get("desires", []) else "aucun"])
+	# Les cercles.
+	var stance: Dictionary = D.HIERARCHY_STANCES.get(E.hierarchy_stance(hero), {})
+	var debt_names: Array = E.debts(hero).map(func(debt):
+		var savior := GameData.roster.filter(func(other): return other["id"] == debt["id"])
+		return savior[0]["name"] if not savior.is_empty() else "#%d" % debt["id"])
+	lines.append("CERCLES — Rapport à la hiérarchie : %s · Dettes de vie : %s" % [stance.get("name", "?"),
+		", ".join(debt_names) if not debt_names.is_empty() else "aucune"])
+	for circle_id in D.CIRCLES:
+		var face := E.circle_face(hero, circle_id)
+		var face_parts: Array[String] = []
+		for axis_id in face:
+			face_parts.append("%s %+d → %+d" % [D.AXES[axis_id]["name"], face[axis_id][0] * 10, face[axis_id][1] * 10])
+		lines.append("  %s : %s" % [D.CIRCLES[circle_id], ", ".join(face_parts) if not face_parts.is_empty() else "comme d'habitude"])
+	var circle_parts: Array[String] = []
+	for other in GameData.alive_heroes():
+		if other["id"] != hero["id"]:
+			circle_parts.append("%s : %s" % [other["name"], E.circle(hero, other)])
+	if not circle_parts.is_empty():
+		lines.append("  Les autres héros pour lui : " + ", ".join(circle_parts.slice(0, 12)))
+	# Les sujets.
+	var subject_parts: Array[String] = []
+	for subject in E.subjects(hero):
+		var entry: Dictionary = E.subjects(hero)[subject]
+		var level: int = entry["knowledge"]
+		var marks: Array[String] = []
+		if entry.get("prior", false):
+			marks.append("connu avant l'invocation")
+		if entry.get("scar", false):
+			marks.append("cicatrice")
+		if entry.get("hate", false):
+			marks.append("haine")
+		subject_parts.append("%s : appréhension %.0f, connaissance %d%s%s" % [D.SUBJECTS.get(subject, {}).get("name", subject),
+			E.apprehension(hero, subject), level, " (" + D.KNOWLEDGE_LEVELS[level]["name"] + ")" if level > 0 else "",
+			" — " + ", ".join(marks) if not marks.is_empty() else ""])
+	lines.append("SUJETS — " + ("\n".join(subject_parts) if not subject_parts.is_empty() else "aucun encore"))
+	lines.append("À consigner à la bibliothèque : %d élément(s)" % E.pending_report(hero).size())
+	# Le pourquoi des décisions, et le dernier combat.
+	for decision in E.decisions(hero).slice(-3):
+		lines.append("DÉCISION « %s » → %s : %s" % [decision["what"], decision["chosen"],
+			" ; ".join(decision["reasons"].map(func(reason): return "%s (%+.1f)" % [reason["why"], reason["weight"]]))])
+	var battles: Array = hero.get("recent_battles", [])
+	if not battles.is_empty():
+		var last: Dictionary = battles.back()
+		lines.append("DERNIER COMBAT — étage %d, %s, %s ; formations : %s ; %s ; %d événements : %s" % [last["floor"],
+			"victoire" if last["victory"] else "défaite", "survécu" if last["survived"] else "mort",
+			", ".join(last["formation"]) if not last["formation"].is_empty() else "aucune", last["counts"], last["events"].size(),
+			", ".join(last["events"].slice(0, 6).map(func(event): return "%s %.0fs" % [event["kind"], event["t"]]))])
+	for line in lines:
+		var label := UI.make_label(line, 16)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(label)
+	_add_dev_row(content, [
+		["Combat facile (gobelins)", func(): _dev_message(GameData.dev_subject_encounter(hero, "monster:gobelin", 5.0))],
+		["Combat dur (gobelins)", func(): _dev_message(GameData.dev_subject_encounter(hero, "monster:gobelin", 95.0))],
+	])
+	_add_dev_row(content, [
+		["Consigner à la bibliothèque", func(): _dev_message(GameData.dev_deposit(hero))],
+		["Étudier le bestiaire", func(): _dev_message(GameData.dev_study(hero))],
+	])
 
 
 ## Une ligne de curseur : « Audace +30 (Penchant) · évo 4 / 10 », puis − / + / évo− / évo+.
@@ -399,6 +485,12 @@ func _add_axis_slider(content: VBoxContainer, hero: Dictionary, axis_id: String)
 		button.size_flags_horizontal = Control.SIZE_FILL
 		button.custom_minimum_size.x = 58 if entry[0].length() == 1 else 64
 		row.add_child(button)
+
+
+## Fenêtre du mode dev après un outil de la personnalité P1b.
+func _dev_message(text: String) -> void:
+	_dev_notice_title = "Personnalité (P1b)"
+	_dev_notice = [text]
 
 
 func _dev_evolution(hero: Dictionary, axis_id: String, points: float) -> void:

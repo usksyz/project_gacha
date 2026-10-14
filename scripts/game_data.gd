@@ -295,3 +295,65 @@ func dev_all_plans() -> void:
 		if not weapon_type in plans:
 			plans.append(weapon_type)
 	save_game()
+
+
+# --- Personnalité P1b : sujets, bibliothèque, mémorial (aucun effet en jeu ; pour voir les données) ---
+
+## Une rencontre simulée avec un sujet (« danger » vécu de 0 à 100), comme les combats le feront en P2.
+func dev_subject_encounter(hero: Dictionary, subject: String, danger: float) -> String:
+	var result := PersonalityEngine.after_encounter(hero, subject, {"danger": danger, "mode": "fought", "hits": 3, "dodges": 1})
+	save_game()
+	return "%s, %s : appréhension %.0f → %.0f, connaissance %d → %d%s%s" % [hero["name"],
+		PersonalityData.SUBJECTS[subject]["name"], result["apprehension_before"], result["apprehension"],
+		result["knowledge_before"], result["knowledge"], " ; cicatrice" if result["scar"] else "", " ; haine" if result["hate"] else ""]
+
+
+## Le héros écrit à la bibliothèque ce qu'il rapporte (comme il le fera seul au retour, en P5).
+func dev_deposit(hero: Dictionary) -> String:
+	var written := Library.deposit(library, hero)
+	save_game()
+	return "%s consigne : %s" % [hero["name"], ", ".join(written) if not written.is_empty() else "rien à écrire"]
+
+
+## Le héros étudie toutes les fiches du bestiaire une fois (activité du lobby, en P5).
+func dev_study(hero: Dictionary) -> String:
+	var gained := 0
+	for subject in library["bestiary"]:
+		gained += Library.study(library, hero, subject)
+	save_game()
+	return "%s étudie le bestiaire : %d niveau(x) de connaissance gagné(s)." % [hero["name"], gained]
+
+
+## Enregistre au mémorial tous les héros tombés qui n'y sont pas encore (tant qu'il reste des places).
+func dev_memorial_record_dead() -> String:
+	var dead := roster.filter(func(hero): return not hero["alive"] and not Memorial.has_entry(memorial, hero["id"]))
+	var result := Memorial.record(memorial, dead)
+	save_game()
+	return "Enregistrés : %s. Refusés (plus de place) : %s." % [", ".join(result["recorded"]) if result["recorded"] else "personne",
+		", ".join(result["refused"]) if result["refused"] else "personne"]
+
+
+func dev_memorial_upgrade(capacity_upgrade: bool) -> String:
+	if capacity_upgrade:
+		Memorial.upgrade_capacity(memorial)
+	else:
+		Memorial.upgrade_memory(memorial)
+	save_game()
+	return "Mémorial : %d places (niveau %d), mémoire niveau %d." % [Memorial.capacity(memorial), memorial["capacity_level"], memorial["memory_level"]]
+
+
+## Retire un héros du mémorial (après la fenêtre de confirmation) : renvoie « [Nom] sera oublié à jamais. »
+func dev_memorial_remove(hero_id: int) -> String:
+	var message := Memorial.remove(memorial, hero_id)
+	save_game()
+	return message
+
+
+## Un héros vivant revit un souvenir du mémorial (connaissance gagnée ; stress et réaction seulement affichés).
+func dev_memorial_relive(hero: Dictionary, hero_id: int) -> String:
+	var result := Memorial.relive(memorial, hero, hero_id)
+	save_game()
+	if result.is_empty():
+		return "Rien à revivre."
+	return "%s revit le souvenir : %d sujet(s) appris ; stress %.1f, réaction : %s (appliqués en P4)." % [hero["name"],
+		result["subjects"].size(), result["stress"], result["reaction"]]
