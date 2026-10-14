@@ -1,4 +1,4 @@
-﻿class_name BattleView
+class_name BattleView
 extends Control
 ## Écran de combat, en direct et vu du dessus.
 ## En haut le titre, le chrono et la barre de vie du boss ; au milieu le champ de bataille ;
