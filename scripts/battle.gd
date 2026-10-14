@@ -163,6 +163,9 @@ var units: Array[Dictionary] = []
 var heroes: Array[Dictionary] = []
 var enemies: Array[Dictionary] = []
 
+## Le champ de bataille « 3D sur grille » (voir BattleMap) : hauteur et type de chaque case.
+var map := BattleMap.new()
+
 ## Cases bloquées par le décor, et les morceaux de décor à dessiner :
 ## [{"rect": Rect2i, "kind": "rock" / "wall" / "house" / "rampart"}].
 var obstacles: Array[Dictionary] = []
@@ -172,8 +175,6 @@ var walls := 0
 
 ## Hauteurs du terrain de survie (toits, plateformes : on les escalade, voir is_high), à dessiner.
 var heights: Array[Rect2i] = []
-## Les cases en hauteur : {Vector2i: true}.
-var _high := {}
 ## Terrain de survie : la sortie de chaque ruelle côté héros (de gauche à droite ; vide hors de la survie),
 ## et si un Meneur a déjà organisé la défense (voir _organize_defense).
 var alley_exits: Array[Vector2] = []
@@ -710,6 +711,7 @@ func _build_map() -> void:
 	_grid.cell_size = Vector2.ONE
 	_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
 	_grid.update()
+	map.setup(GRID_W, GRID_H)
 
 	if quest["walls"] > 0:
 		_add_obstacle(Rect2i(0, GRID_H - 1, GRID_W, 1), "rampart")
@@ -759,9 +761,7 @@ func _build_alleys() -> void:
 		var side := 1 if alley + 3 < GRID_W and (alley < 2 or randf() < 0.5) else -2
 		var rect := Rect2i(alley + side, top + ALLEY_LENGTH, 2, 2)
 		heights.append(rect)
-		for hx in range(rect.position.x, rect.end.x):
-			for hy in range(rect.position.y, rect.end.y):
-				_high[Vector2i(hx, hy)] = true
+		map.fill(rect, BattleMap.Kind.ROOF, 1)
 	# Quelques rochers côté ennemis, pour que la horde n'arrive pas en ligne droite.
 	for i in randi_range(2, 4):
 		_try_obstacle(Rect2i(Vector2i(randi_range(0, GRID_W - 2), randi_range(3, top - 2)), Vector2i(randi_range(1, 2), 1)), "rock")
@@ -769,12 +769,23 @@ func _build_alleys() -> void:
 
 ## Vrai si ce combattant se tient en hauteur (terrain de survie).
 func is_high(unit: Dictionary) -> bool:
-	return _high.has(_cell_of(unit["pos"]))
+	var cell := _cell_of(unit["pos"])
+	return map.walkable(cell) and map.height_at(cell) > 0
 
 
 ## Le centre de chaque case en hauteur (pour un ordre « monte là-haut »).
 func height_cells() -> Array:
-	return _high.keys().map(func(c): return Vector2(c) + Vector2(0.5, 0.5))
+	var cells := []
+	for rect in heights:
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				if map.walkable(Vector2i(x, y)) and map.height_at(Vector2i(x, y)) > 0 and not Vector2(x + 0.5, y + 0.5) in cells:
+					cells.append(Vector2(x + 0.5, y + 0.5))
+	return cells
+
+
+## Hauteur d'un morceau de décor (pour la carte « 3D sur grille »).
+const OBSTACLE_HEIGHTS := {"rock": 1, "wall": 2, "house": 2, "rampart": 2}
 
 
 ## Ajoute un morceau de décor s'il ne coupe pas la carte en deux ; sinon on l'enlève.
@@ -786,6 +797,7 @@ func _try_obstacle(rect: Rect2i, kind: String) -> void:
 		for x in range(rect.position.x, rect.end.x):
 			for y in range(rect.position.y, rect.end.y):
 				_grid.set_point_solid(Vector2i(x, y), false)
+		map.fill(rect, BattleMap.Kind.GROUND, 0)
 		obstacles.pop_back()
 
 
@@ -793,6 +805,7 @@ func _add_obstacle(rect: Rect2i, kind: String) -> void:
 	for x in range(rect.position.x, rect.end.x):
 		for y in range(rect.position.y, rect.end.y):
 			_grid.set_point_solid(Vector2i(x, y), true)
+	map.fill(rect, BattleMap.Kind.BLOCK, OBSTACLE_HEIGHTS.get(kind, 1))
 	obstacles.append({"rect": rect, "kind": kind})
 
 
@@ -1041,7 +1054,7 @@ func _think(unit: Dictionary) -> void:
 
 	# Posté sur une hauteur (le Maître l'y a envoyé) : il tient la position, sans courir après les ennemis ;
 	# il frappe ou tire sur ceux qui sont à sa portée (la cible choisie d'abord).
-	if unit["is_hero"] and is_high(unit) and _high.has(_cell_of(unit["post"])):
+	if unit["is_hero"] and is_high(unit) and map.walkable(_cell_of(unit["post"])) and map.height_at(_cell_of(unit["post"])) > 0:
 		if not _in_reach(unit, target, unit["reach"]):
 			var near := foes.filter(func(foe): return _in_reach(unit, foe, unit["reach"]))
 			target = _nearest(unit, near) if not near.is_empty() else {}
@@ -1308,7 +1321,7 @@ func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 	var start: Vector2 = unit["pos"]
 	var path: PackedVector2Array = unit["path"]
 	# Escalader une hauteur (terrain de survie) : bien plus lent que marcher.
-	if not path.is_empty() and _high.has(_cell_of(path[0])) and not is_high(unit):
+	if not path.is_empty() and map.walkable(_cell_of(path[0])) and map.height_at(_cell_of(path[0])) > 0 and not is_high(unit):
 		step *= GameData.CLIMB_SPEED_FACTOR
 	while step > 0 and not path.is_empty():
 		var next: Vector2 = path[0]
