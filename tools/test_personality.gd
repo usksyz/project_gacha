@@ -290,7 +290,11 @@ func _check_modifiers() -> void:
 			in_bounds = in_bounds and value >= data["low"] - 0.0001 and value <= data["high"] + 0.0001
 		for hero in [high, low]:
 			for base in [0.0, 0.1, 0.5, 0.95, 1.0, 100.0]:
-				in_bounds = in_bounds and _within(effect, hero, E.modified(effect, hero, base))
+				var result := E.modified(effect, hero, base)
+				if data.get("with_base", false) and base == 0.0:
+					in_bounds = in_bounds and result == 0.0  # pas de risque sans base
+				else:
+					in_bounds = in_bounds and _within(effect, hero, result)
 	_check(right_way, "chaque effet va dans le sens de son coefficient (palier +100 contre -100)")
 	_check(in_bounds, "chaque effet reste dans ses bornes (écart, facteur, résultat)")
 
@@ -323,6 +327,22 @@ func _check_modifiers() -> void:
 		and is_equal_approx(E.modified("stamina_cost", _plain_hero(912, "scribe", {"VIT": -7}), 1.0), 0.75)
 		and E.modified("stamina_floor", _plain_hero(913, "scribe", {"PER": -7}), 0.0) == 1.0,
 		"Infatigable +30 %, Économe -25 %, Sens de la limite : jamais épuisé")
+
+	# Berserk et éveils (P2e).
+	var unshakable := _plain_hero(914, "scribe", {"STA": 9})
+	_check(E.modified("awakening_rage", unshakable, 1.0) == 0.0 and E.modified("rupture_awaken", unshakable, 0.15) == 0.0,
+		"Stabilité 90 (Inébranlable) : ni rage d'éveil, ni éveil en rupture")
+	var raw := _plain_hero(915, "scribe", {"STA": -7})
+	_check(is_equal_approx(E.modified("awakening_chance", raw, 0.35), 0.6), "Vulnérabilité 70 (À fleur de peau) : éveil doublé (35 % + 14 points, x2, 60 % au plus)")
+	var tough := _plain_hero(916, "scribe", {"PER": 7, "CON": 5, "DOU": 5})
+	_check(E.has_access(tough, "increvable") and is_equal_approx(E.modified("berserk_door", tough, 0.1), 0.2), "Increvable : éveil du Berserk doublé")
+	_check(E.modified("berserk_int_malus", _plain_hero(917, "scribe", {"COL": 6, "MAI": 6}), 1.0) == 0.0, "Rage maîtrisée : Berserk sans perte d'Intelligence")
+	var hothead := _plain_hero(918, "scribe", {"COL": 10, "AUD": 10, "MAI": -10})
+	var careful := _plain_hero(919, "scribe", {"COL": -10, "AUD": -10, "MAI": 10})
+	_check(E.modified("berserk_trigger_hp", hothead, 0.3) > E.modified("berserk_trigger_hp", careful, 0.3)
+		and E.modified("berserk_stop_hp", hothead, 0.15) < E.modified("berserk_stop_hp", careful, 0.15)
+		and E.modified("berserk_stop_mental", hothead, 25.0) < E.modified("berserk_stop_mental", careful, 25.0),
+		"Berserk : le colérique entre en rage plus tôt et la garde plus longtemps ; le prudent et maître de lui la coupe tôt")
 
 	# Sur des héros tirés au hasard : tout reste dans les bornes, et les effets varient d'un héros à l'autre.
 	var rng := RandomNumberGenerator.new()

@@ -210,8 +210,8 @@ const BERSERK_ORDER_HOLD := 15.0
 ## Dans l'œuvre, la compétence coûte de la vie : cette part de la vie maximum par seconde en rage.
 const BERSERK_DRAIN_PER_SECOND := 0.01
 ## (Ajout du projet) Sous cette santé mentale, ou sous BERSERK_STOP_HP de sa vie, le héros coupe la rage
-## de lui-même (sur ordre du Maître, il la garde quand même). Plus tard, ces seuils dépendront du
-## caractère (Maîtrise de soi).
+## de lui-même (sur ordre du Maître, il la garde quand même). Depuis P2, ces seuils (et BERSERK_DANGER_HP)
+## dépendent du caractère : Maîtrise de soi, Prudence, Colère (PersonalityData.MODIFIERS « berserk_* »).
 const BERSERK_STOP_MENTAL := 25.0
 const BERSERK_STOP_HP := 0.15
 ## « Allié en danger » : un allié (ou lui-même) sous cette part de sa vie, à moins de BERSERK_ALLY_RANGE cases.

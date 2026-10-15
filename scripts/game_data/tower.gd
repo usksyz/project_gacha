@@ -709,6 +709,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 ## (« Force 16 / 11 (+5) »), ou [] s'il n'a pas Berserk. Mêmes chiffres que battle.gd (_enter_berserk).
 func berserk_preview(hero: Dictionary) -> Array:
 	var changes := berserk_stat_changes(hero["skills"])
+	if changes.has("int"):  # Rage maîtrisée : pas de perte d'Intelligence (P2)
+		changes["int"] = roundi(changes["int"] * PersonalityEngine.modified("berserk_int_malus", hero, 1.0))
 	var rows := []
 	for stat in changes:
 		var base: int = hero["stats"][stat]

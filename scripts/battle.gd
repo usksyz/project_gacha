@@ -690,6 +690,10 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 			GameData.STAMINA_NOVICE_FACTOR if is_hero and GameData.is_combat_novice(source) else 1.0),
 		"stamina_regen": PersonalityEngine.modified("stamina_regen", source, GameData.STAMINA_REGEN_PER_SECOND),
 		"stamina_floor": PersonalityEngine.modified("stamina_floor", source, 0.0),
+		# Berserk selon le caractère (P2) : Colère (déclenche), Prudence (coupe tôt), Maîtrise de soi (bon moment).
+		"berserk_trigger_hp": PersonalityEngine.modified("berserk_trigger_hp", source, GameData.BERSERK_DANGER_HP),
+		"berserk_stop_hp": PersonalityEngine.modified("berserk_stop_hp", source, GameData.BERSERK_STOP_HP),
+		"berserk_stop_mental": PersonalityEngine.modified("berserk_stop_mental", source, GameData.BERSERK_STOP_MENTAL),
 		"exposed": {},             # sujets de stress vécus (sang, mort, boss...) : accoutumance en fin de combat
 		"foes": {},                # sortes d'ennemis affrontées (coups, esquives) : ce qu'il en apprend (P2)
 		"exhausted": false,        # endurance tombée à 0, pas encore remontée à STAMINA_RECOVERED
@@ -2083,7 +2087,9 @@ func _check_critical_state(fighter: Dictionary) -> void:
 		ratio = float(fighter["hp"]) / fighter["max_hp"]
 	if ratio <= CRITICAL_HP and not fighter["awakening_tried"]:
 		fighter["awakening_tried"] = true
-		var chance := HAN_AWAKENING_CHANCE if GameData.is_han(fighter["source"]) else AWAKENING_CHANCE
+		# Personnalité (P2) : la Vulnérabilité s'éveille plus souvent, la Stabilité moins.
+		var chance := HAN_AWAKENING_CHANCE if GameData.is_han(fighter["source"]) \
+			else PersonalityEngine.modified("awakening_chance", fighter["source"], AWAKENING_CHANCE)
 		if randf() < chance:
 			_awaken(fighter, ratio)
 	# Acquisition de Berserk (une seule fois) : aux portes de la mort, avec la rage de vivre.
@@ -2111,8 +2117,8 @@ func _berserk_door(fighter: Dictionary) -> bool:
 	if not PersonalityEngine.has_affinity(source, "Berserk"):
 		return false
 	source["berserk_door_tried"] = true  # une seule fois dans sa vie (enregistré avec le héros)
-	if randf() >= GameData.BERSERK_AWAKEN_CHANCE:
-		return false
+	if randf() >= PersonalityEngine.modified("berserk_door", source, GameData.BERSERK_AWAKEN_CHANCE):
+		return false  # (Increvable : chance doublée)
 	for trait_name in GameData.BERSERK_AWAKEN_TRAITS:
 		_reveal(fighter, trait_name)  # c'est sa volonté (courage, ambition) qui l'éveille (sans le trait : rien)
 	return true
@@ -2161,6 +2167,8 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 func _awakening_rage(fighter: Dictionary) -> void:
 	if quest.get("duel", false) or not can_berserk(fighter) or fighter["berserk"]:
 		return
+	if PersonalityEngine.modified("awakening_rage", fighter["source"], 1.0) <= 0.0:
+		return  # Stabilité 90 (Inébranlable) : jamais de rage d'éveil
 	fighter["awakening_rage"] = true
 	fighter["refuse_death_until"] = time + GameData.AWAKENING_RAGE_SECONDS
 	_enter_berserk(fighter)
@@ -2189,7 +2197,7 @@ func _in_danger(unit: Dictionary) -> bool:
 	if _alive(enemies if unit["is_hero"] else heroes).is_empty():
 		return false
 	for ally in _alive(heroes if unit["is_hero"] else enemies):
-		if float(ally["hp"]) / ally["max_hp"] < GameData.BERSERK_DANGER_HP \
+		if float(ally["hp"]) / ally["max_hp"] < unit["berserk_trigger_hp"] \
 				and unit["pos"].distance_to(ally["pos"]) <= GameData.BERSERK_ALLY_RANGE:
 			return true
 	return false
@@ -2200,16 +2208,17 @@ func _in_danger(unit: Dictionary) -> bool:
 ## migraine, sous BERSERK_STOP_MENTAL de santé mentale, ou juste après que le Maître la lui a fait couper.
 ## Il en sort quand le danger est passé (après BERSERK_MIN_SECONDS au moins), sous BERSERK_STOP_MENTAL,
 ## sous BERSERK_STOP_HP de sa vie (SURPASS_STOP_HP en Surpassement). Une rage ordonnée par le Maître n'est
-## coupée que sur ordre. (Plus tard, ces coupures dépendront du caractère : Maîtrise de soi.)
+## coupée que sur ordre. Ces seuils dépendent du caractère (P2, lus au début du combat : fighter
+## « berserk_trigger_hp » (Colère), « berserk_stop_hp » (Prudence), « berserk_stop_mental » (Maîtrise de soi)).
 func _berserk_think(unit: Dictionary) -> void:
 	if not can_berserk(unit) or panicking(unit) or afraid(unit):
 		return
 	if not unit["berserk"]:
 		var surpass_ready := GameData.skill_level(unit["skills"], "Surpassement") > 0 \
 			or GameData.fusion_ready(unit["skills"], "Surpassement")
-		var min_hp := GameData.SURPASS_STOP_HP if surpass_ready else GameData.BERSERK_STOP_HP
+		var min_hp: float = GameData.SURPASS_STOP_HP if surpass_ready else unit["berserk_stop_hp"]
 		if time >= unit["berserk_hold_until"] and time >= unit["migraine_until"] \
-				and unit["mental"] >= GameData.BERSERK_STOP_MENTAL \
+				and unit["mental"] >= unit["berserk_stop_mental"] \
 				and float(unit["hp"]) / unit["max_hp"] >= min_hp and _in_danger(unit):
 			_enter_berserk(unit)
 		return
@@ -2217,9 +2226,9 @@ func _berserk_think(unit: Dictionary) -> void:
 		return
 	if unit["awakening_rage"] and time < unit["refuse_death_until"]:
 		return  # rage d'éveil : pas de coupure automatique pendant le refus de mourir
-	var stop_hp := GameData.SURPASS_STOP_HP if unit.get("surpass", false) else GameData.BERSERK_STOP_HP
+	var stop_hp: float = GameData.SURPASS_STOP_HP if unit.get("surpass", false) else unit["berserk_stop_hp"]
 	var worn_out: bool = float(unit["hp"]) / unit["max_hp"] < stop_hp
-	if worn_out or unit["mental"] < GameData.BERSERK_STOP_MENTAL or not _in_danger(unit):
+	if worn_out or unit["mental"] < unit["berserk_stop_mental"] or not _in_danger(unit):
 		_exit_berserk(unit)
 
 
@@ -2231,6 +2240,8 @@ func _enter_berserk(fighter: Dictionary) -> void:
 	if GameData.fusion_ready(fighter["skills"], "Surpassement"):
 		_announce_fusion(fighter, GameData.fuse_skills(fighter["skills"], "Surpassement"))
 	var stats := GameData.berserk_stat_changes(fighter["skills"])
+	# Rage maîtrisée (accès croisé Colère 60 et Maîtrise 60) : pas de perte d'Intelligence.
+	stats["int"] = roundi(stats["int"] * PersonalityEngine.modified("berserk_int_malus", fighter["source"], 1.0))
 	var magic: bool = fighter["class"] in ["Mage", "Soigneur"]  # leur attaque vient de l'Intelligence
 	var changes := {
 		"atk": maxi(1 - fighter["atk"], stats["int"]) if magic else stats["str"],

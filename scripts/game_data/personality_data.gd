@@ -583,6 +583,21 @@ const MODIFIERS := {
 	"stamina_regen": {"name": "Récupération d'endurance", "op": "mul", "axis": "VIT", "m": 0.03, "low": 0.7,
 		"high": 1.3, "source": "projet"},
 	"stamina_cost": {"name": "Endurance dépensée", "op": "none", "source": "projet"},
+	# Berserk (document de référence : « Compétences actives (Berserk...) : Maîtrise de soi (bon moment), Colère
+	# (déclenche), Prudence (coupe tôt) »). Seuils de heroes.gd : BERSERK_DANGER_HP, BERSERK_STOP_HP,
+	# BERSERK_STOP_MENTAL (« plus tard, ces seuils dépendront du caractère »).
+	"berserk_trigger_hp": {"name": "Rage : seuil « allié en danger »", "op": "add", "axis": "COL", "k": 0.02,
+		"low": -0.20, "high": 0.20, "min": 0.1, "max": 0.5, "source": "projet"},
+	"berserk_stop_hp": {"name": "Rage : coupée sous cette vie", "op": "add", "axis": "AUD", "k": -0.01,
+		"low": -0.10, "high": 0.10, "min": 0.05, "max": 0.3, "source": "projet"},
+	"berserk_stop_mental": {"name": "Rage : coupée sous cette santé mentale", "op": "add", "axis": "MAI", "k": 1.5,
+		"low": -15.0, "high": 15.0, "min": 10.0, "max": 40.0, "source": "projet"},
+	"berserk_door": {"name": "Éveil de Berserk aux portes de la mort", "op": "none", "source": "cahier"},
+	"berserk_int_malus": {"name": "Rage : perte d'Intelligence", "op": "none", "source": "cahier"},
+	# Éveil en situation critique (document de référence : « Éveils : Stabilité (-) plus fréquents »).
+	"awakening_chance": {"name": "Éveil en situation critique", "op": "add", "axis": "STA", "k": -0.02,
+		"low": -0.20, "high": 0.20, "min": 0.1, "max": 0.6, "with_base": true, "source": "projet"},
+	"awakening_rage": {"name": "Rage d'éveil", "op": "none", "source": "cahier"},
 	# Planchers (seuls certains accès les relèvent) : santé mentale qui ne tombe jamais à 0 (pas de rupture),
 	# endurance qui ne tombe jamais à 0 (jamais épuisé).
 	"mental_floor": {"name": "Plancher de santé mentale", "op": "none", "source": "cahier"},
@@ -601,8 +616,12 @@ const ACCESS_MODIFIERS := {
 	"infatigable": {"stamina_max": {"mul": 1.3}},                         # Vitalité 70 : endurance +30 %
 	"econome": {"stamina_cost": {"mul": 0.75}},                           # Retenue 70 : -25 % d'endurance dépensée
 	"sens_de_la_limite": {"stamina_floor": {"set": 1.0}},                 # Abandon 70 : jamais d'épuisement total
-	"inebranlable": {"mental_floor": {"set": 1.0}},                       # Stabilité 90 : jamais de rupture
+	# Stabilité 90 : jamais de rupture ; compulsion : jamais d'éveil sous le stress (pas de rage d'éveil).
+	"inebranlable": {"mental_floor": {"set": 1.0}, "rupture_awaken": {"set": 0.0}, "awakening_rage": {"set": 0.0}},
 	"esprit_d_acier": {"mental_floor": {"set": 1.0, "if": {"STA": 1}}},   # Maîtrise 90 : pas de rupture si Stabilité positive
+	"a_fleur_de_peau": {"awakening_chance": {"mul": 2.0}, "rupture_awaken": {"mul": 2.0}},  # Vulnérabilité 70 : éveil doublé
+	"increvable": {"berserk_door": {"mul": 2.0}},                         # accès croisé : éveil du Berserk doublé
+	"rage_maitrisee": {"berserk_int_malus": {"set": 0.0}},                # accès croisé : Berserk sans perte d'Intelligence
 }
 
 
