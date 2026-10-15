@@ -2090,7 +2090,7 @@ func _check_critical_state(fighter: Dictionary) -> void:
 	# (Son utilisation, ensuite, est à part : voir _berserk_think.)
 	if ratio <= BERSERK_LEARN_HP and not fighter["death_door_tried"]:
 		fighter["death_door_tried"] = true
-		if _berserk_door(fighter) and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Berserk"):
+		if _berserk_door(fighter) and PersonalityEngine.can_learn(fighter["source"], "Berserk", fighter["skills"]):
 			fighter["skills"].append(GameData.new_skill("Berserk"))
 			_log("Aux portes de la mort, %s refuse de mourir... Nouvelle compétence : Berserk !" \
 				% _name_with_stars(fighter), "awaken")
@@ -2099,24 +2099,22 @@ func _check_critical_state(fighter: Dictionary) -> void:
 
 
 ## Aux portes de la mort : Berserk s'éveille-t-il ? (Voir GameData, heroes.gd, BERSERK_AWAKEN_CHANCE.)
-## Han : DEATH_DOOR_CHANCE, à chaque combat. Les autres : seulement Courageux ou Ambitieux, une seule fois
-## dans leur vie (la chance est tentée, puis plus jamais), BERSERK_AWAKEN_CHANCE.
+## Han : DEATH_DOOR_CHANCE, à chaque combat. Les autres : seulement si leur caractère y donne accès (P2,
+## PersonalityData.SKILL_CONDITIONS : Colère, Ambition ou Courage hauts, jamais un craintif ; avant : Courageux
+## ou Ambitieux), une seule fois dans leur vie (la chance est tentée, puis plus jamais), BERSERK_AWAKEN_CHANCE.
 func _berserk_door(fighter: Dictionary) -> bool:
 	var source: Dictionary = fighter["source"]
 	if GameData.is_han(source):
 		return randf() < DEATH_DOOR_CHANCE
 	if GameData.skill_level(fighter["skills"], "Berserk") > 0 or source.get("berserk_door_tried", false):
 		return false
-	var will := ""
-	for trait_name in GameData.BERSERK_AWAKEN_TRAITS:
-		if GameData.has_trait(source, trait_name):
-			will = trait_name
-	if will == "":
+	if not PersonalityEngine.has_affinity(source, "Berserk"):
 		return false
 	source["berserk_door_tried"] = true  # une seule fois dans sa vie (enregistré avec le héros)
 	if randf() >= GameData.BERSERK_AWAKEN_CHANCE:
 		return false
-	_reveal(fighter, will)  # c'est sa volonté (courage, ambition) qui l'éveille
+	for trait_name in GameData.BERSERK_AWAKEN_TRAITS:
+		_reveal(fighter, trait_name)  # c'est sa volonté (courage, ambition) qui l'éveille (sans le trait : rien)
 	return true
 
 
@@ -2134,10 +2132,11 @@ func _awaken(fighter: Dictionary, ratio: float) -> void:
 	for skill_name in GameData.AWAKENING_SKILLS:
 		if skill_name == "Berserk" and not han:
 			continue  # hors Han, Berserk ne vient qu'aux portes de la mort, et rarement (_berserk_door)
-		if GameData.can_learn_skill(fighter["source"], fighter["skills"], skill_name):
+		# Les éveils suivent les affinités (P2) : un craintif n'éveille pas Berserk, un volatil n'éveille pas Calme.
+		if PersonalityEngine.can_learn(fighter["source"], skill_name, fighter["skills"]):
 			candidates.append(skill_name)
 	# Indomptable : candidate seulement si le héros saigne au moment de la situation critique.
-	if fighter["bleed"]["ticks"] > 0 and GameData.can_learn_skill(fighter["source"], fighter["skills"], "Indomptable"):
+	if fighter["bleed"]["ticks"] > 0 and PersonalityEngine.can_learn(fighter["source"], "Indomptable", fighter["skills"]):
 		candidates.append("Indomptable")
 	# Han apprend toujours une nouvelle compétence s'il peut, et Berserk en priorité.
 	if not candidates.is_empty() and (news.is_empty() or han or randf() < 0.5):
@@ -2296,7 +2295,7 @@ func _improve_skill(fighter: Dictionary, skill_name: String, how: String) -> voi
 	var level := GameData.skill_level(fighter["skills"], skill_name)
 	var line := ""
 	if level == 0:
-		if not GameData.can_learn_skill(fighter["source"], fighter["skills"], skill_name):
+		if not PersonalityEngine.can_learn(fighter["source"], skill_name, fighter["skills"]):
 			return
 		fighter["skills"].append(GameData.new_skill(skill_name))
 		line = "nouvelle compétence : %s" % skill_name
@@ -2381,6 +2380,8 @@ func _after_fight() -> void:
 		var level := GameData.skill_level(fighter["skills"], skill_name)
 		var line := ""
 		if level == 0:
+			if not PersonalityEngine.can_learn(fighter["source"], skill_name, fighter["skills"]):
+				continue  # hors de ses affinités (P2) : il n'en tire rien
 			fighter["skills"].append(GameData.new_skill(skill_name))
 			line = "nouvelle compétence : %s" % skill_name
 		elif level < GameData.SKILL_MAX_LEVEL:

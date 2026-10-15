@@ -659,6 +659,35 @@ const STRESS_ACCESS := {
 
 
 # ---------------------------------------------------------------------------
+# Qui peut apprendre quoi (catalogue des compétences, colonne « Qui » ; feuille de route v2, « Affinités de
+# compétences ») — P2, PersonalityEngine.can_learn
+# ---------------------------------------------------------------------------
+# Une compétence hors des affinités du héros ne s'apprend pas (ni éveil, ni entraînement, ni usage) : il
+# « stagne ». La synthèse et la promotion passent outre (comme Han qui reçoit Calme par synthèse).
+# Le catalogue écrit les seuils sur l'ancienne échelle 0 à 100 (« Stabilité 75+ ») : ils sont réécrits ici
+# sur l'échelle des paliers (-100 à +100), adaptés au sens de chaque compétence (choix du porteur du projet :
+# « recréer et adapter » ; repère : ancien 50 = 0, 60 = +20, 75 = +50).
+# Conditions : [lecture, opération, palier] ; lecture = un axe ou un composite ; « all » : toutes ; « any » :
+# au moins une ; « none » : aucune (un craintif n'éveille pas Berserk). Les compétences absentes : tout le monde.
+const SKILL_CONDITIONS := {
+	# Catalogue : « Stabilité 75+ (sauf synthèse) » ; c'est l'exclusive du pôle Stabilité (palier 50).
+	"Calme": {"all": [["STA", ">=", 5]], "text": "Stabilité +50"},
+	# Catalogue : « Colère ou ambition haute » ; feuille de route : « courage ou ambition haute » ; onglet Axes :
+	# Sauvagerie (Colère +50) donne accès à Berserk ; « un craintif n'éveille pas Berserk ».
+	"Berserk": {"any": [["COL", ">=", 5], ["AMB", ">=", 5], ["courage", ">=", 4]], "none": [["courage", "<=", -4]],
+		"text": "Colère +50, Ambition +50 ou Courage +40 ; jamais un craintif (Courage -40)"},
+	# Catalogue : « Constitution basse ou curiosité haute ».
+	"Mouvement souple": {"any": [["CON", "<=", -3], ["CUR", ">=", 3]], "text": "Constitution -30 ou Curiosité +30"},
+	# Catalogue : « Audace ou persévérance 50+ » (ancienne échelle : au-dessus du milieu).
+	"Résistance à la douleur": {"any": [["AUD", ">=", 0], ["PER", ">=", 0]], "text": "pas à la fois prudent et sans persévérance"},
+	# Catalogue : « Seuil de douleur haut » (évolution de Résistance à la douleur).
+	"Esprit combatif": {"all": [["DOU", ">=", 2]], "text": "Seuil de douleur +20"},
+	# Catalogue : « Déterminés » (feuille de route : courage ou discipline haute).
+	"Résistance aux flammes": {"any": [["courage", ">=", 2], ["discipline", ">=", 2]], "text": "Courage +20 ou Discipline +20"},
+}
+
+
+# ---------------------------------------------------------------------------
 # Évolution (« 1. Paliers », section 8)
 # ---------------------------------------------------------------------------
 ## Coût en points d'évolution pour atteindre un palier (en valeur absolue) en s'éloignant de zéro.

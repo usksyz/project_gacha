@@ -190,11 +190,12 @@ const MAGIC_ELEMENTS := ["Feu", "Vent", "Froid"]
 # Les noms de l'œuvre (Force, Endurance, Agilité) sont ceux du jeu : Force, Santé, Dextérité.
 
 ## Éveil de Berserk : il doit rester rare (feuille de route v2 ; dans l'œuvre, seul Han l'éveille, par une volonté
-## de vivre exceptionnelle). Hors Han, seul un héros Courageux ou Ambitieux (BERSERK_AWAKEN_TRAITS, trait révélé
-## s'il l'éveille) le peut, aux portes de la mort (battle.gd), avec BERSERK_AWAKEN_CHANCE, et une seule fois dans
-## sa vie : la chance est tentée une fois, puis plus jamais (hero["berserk_door_tried"], enregistré ; absent
-## d'une ancienne sauvegarde = pas encore tentée). Avant : tout héros, 30 % à chaque combat, plus l'éveil. Han
-## garde ses chances (battle.gd, DEATH_DOOR_CHANCE et HAN_AWAKENING_CHANCE). Chiffre provisoire.
+## de vivre exceptionnelle). Hors Han, seul un héros dont le caractère y donne accès (P2 : Colère, Ambition ou
+## Courage hauts, jamais un craintif, PersonalityData.SKILL_CONDITIONS ; avant P2 : Courageux ou Ambitieux) le
+## peut, aux portes de la mort (battle.gd), avec BERSERK_AWAKEN_CHANCE, et une seule fois dans sa vie : la chance
+## est tentée une fois, puis plus jamais (hero["berserk_door_tried"], enregistré ; absent d'une ancienne
+## sauvegarde = pas encore tentée). S'il l'éveille, ses traits BERSERK_AWAKEN_TRAITS se révèlent. Han garde ses
+## chances (battle.gd, DEATH_DOOR_CHANCE et HAN_AWAKENING_CHANCE). Chiffre provisoire.
 const BERSERK_AWAKEN_TRAITS := ["Courageux", "Ambitieux"]
 const BERSERK_AWAKEN_CHANCE := 0.1
 
@@ -396,6 +397,16 @@ func add_skill_progress(hero: Dictionary, skill_name: String, points: int, per_l
 	var news: Array[String] = []
 	if not hero.has("skill_progress"):
 		hero["skill_progress"] = {}  # anciennes sauvegardes
+	# Hors de ses affinités (P2, PersonalityEngine.has_affinity) : il ne progresse pas. Le Maître ne voit pas
+	# pourquoi, seulement qu'il stagne (annoncé une fois, hero["stalled_skills"]).
+	var stalled: Array = hero.get("stalled_skills", [])
+	if skill_level(hero["skills"], skill_name) == 0 and not PersonalityEngine.has_affinity(hero, skill_name):
+		if not skill_name in stalled:
+			stalled.append(skill_name)
+			hero["stalled_skills"] = stalled
+			news.append("%s stagne : %s ne vient pas." % [hero["name"], skill_name])
+		return news
+	stalled.erase(skill_name)
 	var total: int = hero["skill_progress"].get(skill_name, 0) + points
 	while total >= per_level:
 		var level := skill_level(hero["skills"], skill_name)

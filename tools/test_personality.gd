@@ -22,6 +22,7 @@ func _initialize() -> void:
 		if only_p2:
 			_check_modifiers()
 			_check_stress()
+			_check_affinities()
 		print("")
 		print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 		quit(1 if failures > 0 else 0)
@@ -29,6 +30,7 @@ func _initialize() -> void:
 	_check_structures()
 	_check_modifiers()
 	_check_stress()
+	_check_affinities()
 	_check_distribution()
 	_check_facettes_examples()
 	_check_evolution()
@@ -391,6 +393,33 @@ func _check_stress() -> void:
 			var factor := E.stress_factor(hero, type, {"subject": "monster:chef_gobelin"})
 			all_ok = all_ok and factor >= 0.0 and factor <= D.STRESS_FACTOR_MAX
 	_check(all_ok, "1 000 héros tirés au hasard : le facteur de stress reste entre 0 et x%.0f" % D.STRESS_FACTOR_MAX)
+
+
+## P2 : qui peut apprendre quoi (SKILL_CONDITIONS, can_learn).
+func _check_affinities() -> void:
+	print("Affinités des compétences (P2)")
+	_check(E.has_affinity(_plain_hero(940), "Maîtrise de l'épée") and E.has_affinity({"id": 1}, "Calme"),
+		"sans condition (ou sans profil) : tout le monde")
+	_check(E.has_affinity(_plain_hero(941, "scribe", {"STA": 5}), "Calme") and not E.has_affinity(_plain_hero(942, "scribe", {"STA": 4}), "Calme")
+		and not E.has_affinity(_plain_hero(943, "scribe", {"STA": -6}), "Calme"), "Calme : Stabilité +50 ; un volatil ne l'éveille pas")
+	_check(E.has_affinity(_plain_hero(944, "scribe", {"COL": 5}), "Berserk") and E.has_affinity(_plain_hero(945, "scribe", {"AMB": 6}), "Berserk")
+		and E.has_affinity(_plain_hero(946, "scribe", {"AUD": 5, "STA": 3, "DOU": 3, "OPT": 3}), "Berserk")
+		and not E.has_affinity(_plain_hero(947), "Berserk"), "Berserk : Colère, Ambition ou Courage hauts")
+	_check(not E.has_affinity(_plain_hero(948, "scribe", {"COL": 8, "AUD": -8, "STA": -4, "DOU": -4, "OPT": -4}), "Berserk"),
+		"Berserk : jamais un craintif, même colérique")
+	# Part des héros qui y ont accès (pour juger la rareté).
+	var counts := {}
+	for i in 4000:
+		var hero := {"id": i, "rarity": 1 + i % 5, "persona": E.generate(1 + i % 5, "", [], 15000 + i)}
+		for skill_name in D.SKILL_CONDITIONS:
+			if E.has_affinity(hero, skill_name):
+				counts[skill_name] = counts.get(skill_name, 0) + 1
+	var parts: Array[String] = []
+	for skill_name in D.SKILL_CONDITIONS:
+		parts.append("%s %d %%" % [skill_name, roundi(100.0 * counts.get(skill_name, 0) / 4000.0)])
+	print("    héros qui y ont accès (4 000, toutes raretés) : ", ", ".join(parts))
+	_check(D.SKILL_CONDITIONS.keys().all(func(s): return counts.get(s, 0) > 0 and counts.get(s, 0) < 4000),
+		"chaque compétence à condition : ni personne, ni tout le monde")
 
 
 ## Le résultat d'un effet est-il permis : dans ses bornes, ou la valeur imposée par un accès du héros

@@ -371,7 +371,8 @@ func _add_personality_tools(content: VBoxContainer, hero: Dictionary) -> void:
 			"Comportements : " + ", ".join(behaviour_parts),
 			"Accès ouverts :\n" + ("\n".join(access_lines) if not access_lines.is_empty() else "aucun"),
 			"Tensions : " + (", ".join(tension_names) if not tension_names.is_empty() else "aucune"),
-			"Effets en jeu (P2) :\n" + ("\n".join(modifier_lines) if not modifier_lines.is_empty() else "aucun (neutre)")]:
+			"Effets en jeu (P2) :\n" + ("\n".join(modifier_lines) if not modifier_lines.is_empty() else "aucun (neutre)"),
+			"Affinités (compétences à condition) :\n" + "\n".join(PersonalityEngine.affinity_lines(hero).map(func(line): return "• " + line))]:
 		var label := UI.make_label(line, 17)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(label)

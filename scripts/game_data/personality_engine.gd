@@ -1439,12 +1439,43 @@ static func perceived(_hero: Dictionary, _field: String, value):
 	return value
 
 
-## Le héros peut-il apprendre cette compétence ? (P2 : affinités et conditions de la personnalité.) Pour
-## l'instant, la règle actuelle : GameData.can_learn_skill (il ne l'a pas, pas d'incompatibilité, Han à part).
-## GameData est cherché dans l'arbre de scène, pour que ce fichier reste utilisable sans le jeu (banc de test).
+## Le héros peut-il apprendre cette compétence ? La règle de GameData.can_learn_skill (il ne l'a pas, pas
+## d'incompatibilité, Han à part), puis ses affinités (P2, PersonalityData.SKILL_CONDITIONS). La synthèse et la
+## promotion n'appellent pas cette fonction : elles passent outre les affinités. GameData est cherché dans l'arbre
+## de scène, pour que ce fichier reste utilisable sans le jeu (banc de test : seules les affinités comptent).
 static func can_learn(hero: Dictionary, skill_name: String, skills = null) -> bool:
+	if not has_affinity(hero, skill_name):
+		return false
 	var tree := Engine.get_main_loop() as SceneTree
 	var game: Node = tree.root.get_node_or_null("GameData") if tree else null
 	if game == null:
 		return true
 	return game.can_learn_skill(hero, skills if skills != null else hero.get("skills", []), skill_name)
+
+
+## Les affinités du héros lui ouvrent-elles cette compétence ? (Vrai sans profil ou sans condition.)
+static func has_affinity(hero: Dictionary, skill_name: String) -> bool:
+	var rule: Dictionary = D.SKILL_CONDITIONS.get(skill_name, {})
+	if rule.is_empty() or not hero.has("persona"):
+		return true
+	if not rule.get("all", []).all(func(condition): return _condition_met(hero, condition)):
+		return false
+	if rule.has("any") and not rule["any"].any(func(condition): return _condition_met(hero, condition)):
+		return false
+	return not rule.get("none", []).any(func(condition): return _condition_met(hero, condition))
+
+
+## Une condition [lecture, opération, palier] : lecture = un axe (« STA ») ou un composite (« courage »).
+static func _condition_met(hero: Dictionary, condition: Array) -> bool:
+	var key: String = condition[0]
+	var value := roundi(composite(hero, key) / 10.0) if D.COMPOSITES.has(key) else tier(hero, key)
+	return value >= int(condition[2]) if condition[1] == ">=" else value <= int(condition[2])
+
+
+## Les compétences à condition et ce que le héros en a (mode dev) : « Calme (Stabilité +50) : oui ».
+static func affinity_lines(hero: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	for skill_name in D.SKILL_CONDITIONS:
+		lines.append("%s (%s) : %s" % [skill_name, D.SKILL_CONDITIONS[skill_name]["text"],
+			"oui" if has_affinity(hero, skill_name) else "non"])
+	return lines
