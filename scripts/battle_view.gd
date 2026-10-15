@@ -81,6 +81,12 @@ var swap_button: Button
 ## Ordre « Tir de barrage » (un archer tire toutes ses flèches d'un coup), visible quand c'est possible.
 var barrage_button: Button
 
+## La vue isométrique 3D (Combat v2, C2 : BattleView3D), à la place de « arena » quand use_3d est vrai :
+## par défaut avec les nouveaux visuels ; le mode dev a un bouton pour passer de l'une à l'autre en combat.
+var arena3d: BattleView3D
+var use_3d := false
+var view_button: Button
+
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
 var finish_callback := Callable()
@@ -138,6 +144,7 @@ func play(new_battle: Battle, title: String, on_finish := Callable()) -> void:
 		old.queue_free()
 	selected_id = -1
 	paused = false
+	use_3d = Settings.new_visuals
 	_build(title)
 	_update_hint()
 
@@ -156,6 +163,11 @@ func _build(title: String) -> void:
 	clock_label = UI.make_label("", 24)
 	clock_label.add_theme_color_override("font_color", Color("f5b82e"))
 	header.add_child(clock_label)
+	# Mode dev : passer de la vue 3D à la vue de dessus (et retour) en plein combat.
+	view_button = UI.make_button("", _toggle_view, 16)
+	view_button.custom_minimum_size = Vector2(96, 40)
+	view_button.visible = Settings.dev_mode
+	header.add_child(view_button)
 
 	hint_label = UI.make_label("", 20)
 	hint_label.add_theme_color_override("font_color", ORDER_COLOR)
@@ -175,6 +187,13 @@ func _build(title: String) -> void:
 	arena.draw.connect(_draw_arena)
 	arena.gui_input.connect(_on_arena_input)
 	layout.add_child(arena)
+	# Le même champ de bataille en vue isométrique 3D (une seule des deux vues est visible).
+	arena3d = BattleView3D.new()
+	arena3d.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	arena3d.tapped.connect(_arena_tap)
+	layout.add_child(arena3d)
+	arena3d.setup(self)
+	_apply_view()
 
 	# Encart de l'équipe, sous le champ de bataille : les héros côte à côte, avec leurs PV
 	# (actuels / max et pourcentage) et leur mana (mages et soigneurs). Toucher un héros le choisit.
@@ -223,6 +242,20 @@ func _build(title: String) -> void:
 	controls.add_child(pause_button)
 
 
+## Mode dev : vue 3D ↔ vue de dessus (le combat continue, rien ne change dans la simulation).
+func _toggle_view() -> void:
+	use_3d = not use_3d
+	_apply_view()
+
+
+func _apply_view() -> void:
+	arena.visible = not use_3d
+	arena3d.visible = use_3d
+	view_button.text = "Vue de dessus" if use_3d else "Vue 3D"
+	if hint_label != null and battle != null:
+		_update_hint()
+
+
 func _toggle_pause() -> void:
 	paused = not paused
 	pause_button.text = "Reprendre" if paused else "Pause"
@@ -260,7 +293,11 @@ func _advance() -> void:
 		_update_hint()
 	_update_berserk_button()  # (le héros peut entrer en rage ou en sortir de lui-même)
 	_update_clock()
-	arena.queue_redraw()
+	# Les effets trop vieux pour être montrés (coups, chiffres, bulles) : on ne les parcourt plus.
+	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < battle.time - BUBBLE_TIME:
+		first_effect += 1
+	if arena.visible:
+		arena.queue_redraw()
 	portraits.queue_redraw()
 	boss_bar.queue_redraw()
 
@@ -460,7 +497,8 @@ func _update_hint() -> void:
 		hint_label.text = "%s : touche un endroit pour l'y envoyer, un ennemi à attaquer, ou un bouton en bas." \
 			% battle.units[selected_id]["name"]
 		if not battle.height_cells().is_empty():
-			hint_label.text += " Le chiffre d'une case : sa hauteur. On monte par les échelles et les escaliers ; d'en haut, on frappe plus fort et on tire plus loin."
+			hint_label.text += (" Touche un toit pour l'y envoyer." if use_3d else " Le chiffre d'une case : sa hauteur.") \
+				+ " On monte par les échelles et les escaliers ; d'en haut, on frappe plus fort et on tire plus loin."
 	else:
 		hint_label.text = "Touche un héros pour le guider."
 	_update_berserk_button()
@@ -529,8 +567,14 @@ func _on_arena_input(event: InputEvent) -> void:
 	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
 		return  # pas d'ordre pendant la pause, ni pendant un duel
 	var map_pos: Vector2 = (event.position - _origin()) / _cell_size()
-	var touched := _unit_at(map_pos)
+	_arena_tap(_unit_at(map_pos), map_pos, Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos))
 
+
+## Un toucher sur le champ de bataille (vue de dessus ou vue 3D) : « touched » le combattant touché ({} sinon),
+## « map_pos » le point de la carte (en cases), « inside » s'il est sur la carte. Mêmes ordres dans les deux vues.
+func _arena_tap(touched: Dictionary, map_pos: Vector2, inside: bool) -> void:
+	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
+		return  # pas d'ordre pendant la pause, ni pendant un duel
 	if not touched.is_empty() and touched["is_hero"]:
 		# Choisir un héros (ou le relâcher en le touchant à nouveau).
 		selected_id = -1 if selected_id == touched["id"] else touched["id"]
@@ -538,7 +582,7 @@ func _on_arena_input(event: InputEvent) -> void:
 		var hero: Dictionary = battle.units[selected_id]
 		if not touched.is_empty():
 			battle.order_attack(hero, touched)
-		elif Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos):
+		elif inside:
 			battle.order_move(hero, map_pos)
 		else:
 			return
@@ -780,8 +824,6 @@ func _draw_names(positions: Dictionary, cell: float) -> void:
 func _draw_effects(positions: Dictionary, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var now := battle.time
-	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < now - BUBBLE_TIME:
-		first_effect += 1
 	for i in range(first_effect, battle.effects.size()):
 		var effect: Dictionary = battle.effects[i]
 		var age: float = now - effect["t"]
@@ -831,13 +873,18 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 
 ## Bulle de parole (fond blanc, petite pointe vers le bas) centrée au-dessus du point « tip ».
 func _draw_bubble(font: Font, tip: Vector2, text: String, alpha: float) -> void:
-	var size := 18
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 16
+	draw_bubble_on(arena, font, tip, text, alpha)
+
+
+## La même bulle, dessinée sur n'importe quel Control (la vue 3D s'en sert aussi).
+func draw_bubble_on(canvas: Control, font: Font, tip: Vector2, text: String, alpha: float) -> void:
+	var font_size := 18
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 16
 	var box := Rect2(tip + Vector2(-width / 2.0, -34), Vector2(width, 26))
 	var fill := Color(1, 1, 1, 0.92 * alpha)
-	arena.draw_rect(box, fill)
-	arena.draw_colored_polygon(PackedVector2Array([tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), fill)
-	arena.draw_string(font, box.position + Vector2(0, 19), text, HORIZONTAL_ALIGNMENT_CENTER, width, size,
+	canvas.draw_rect(box, fill)
+	canvas.draw_colored_polygon(PackedVector2Array([tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), fill)
+	canvas.draw_string(font, box.position + Vector2(0, 19), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size,
 		Color(0.75, 0.1, 0.1, alpha))
 
 
@@ -856,6 +903,8 @@ func _show_result(report: Dictionary) -> void:
 func _show_windows(windows: Array) -> void:
 	controls.queue_free()
 	arena.visible = false
+	arena3d.visible = false
+	view_button.visible = false
 	hint_label.visible = false
 	boss_bar.visible = false
 	portraits.visible = false
