@@ -53,9 +53,9 @@ const MENTAL_MALUS_MAX := 0.3
 
 ## Les traits et ce qu'ils font (affiché sur la fiche une fois révélés).
 const TRAITS := {
-	"Courageux": "Stresse moitié moins face aux boss. En rupture, s'éveille plus souvent (25 % au lieu de 15 %).",
-	"Lâche": "Stresse deux fois plus face aux boss. En rupture, s'enfuit plus souvent (80 % au lieu de 50 %).",
-	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse (moitié moins de refus).",
+	"Courageux": "Stresse moitié moins face aux boss. Prend peur moins souvent, et fuit moins quand il a peur.",
+	"Lâche": "Stresse deux fois plus face aux boss. Prend peur plus souvent, et fuit plus quand il a peur.",
+	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse.",
 	"Paresseux": "Refuse parfois l'entraînement ou une affectation (1 fois sur 5).",
 	"Querelleur": "Se brouille parfois avec un autre héros à la cité : ils deviennent hostiles (à régler par un duel).",
 	"Protecteur": "Couvre ses alliés en danger (sous 30 % de vie) : il va à leur côté et encaisse 30 % des coups qui leur sont destinés. Stresse deux fois plus quand un allié meurt.",
@@ -150,8 +150,10 @@ func mental(hero: Dictionary) -> float:
 
 ## Change la santé mentale (entre 0 et MENTAL_MAX). Un héros en rupture remonté à BROKEN_RECOVERY
 ## (en pratique, par le repos) est remis d'aplomb. Ne sauvegarde pas.
+## Plancher : certains héros ne tombent jamais à 0 (Stabilité 90, Maîtrise 90 : PersonalityData.ACCESS_MODIFIERS).
 func change_mental(hero: Dictionary, amount: float) -> void:
-	hero["mental"] = clampf(mental(hero) + amount, 0.0, MENTAL_MAX)
+	var floor_value := minf(PersonalityEngine.modified("mental_floor", hero, 0.0), mental(hero))
+	hero["mental"] = clampf(mental(hero) + amount, floor_value, MENTAL_MAX)
 	if is_broken(hero) and mental(hero) >= BROKEN_RECOVERY:
 		hero["broken"] = false
 
@@ -182,19 +184,25 @@ func mental_factor(value: float) -> float:
 
 
 ## Désobéissance en combat : sous DISOBEY_START de santé mentale, un héros peut ignorer un ordre du
-## Maître (au toucher), jusqu'à DISOBEY_MAX de risque à 0. Loyal : risque multiplié par LOYAL_DISOBEY_FACTOR.
+## Maître (au toucher), jusqu'à DISOBEY_MAX de risque à 0. Puis la personnalité (P2, « disobey_chance » :
+## -3 points par palier du composite Discipline, jamais plus de 50 % ; Loyauté 70 « Bouclier des siens » :
+## risque divisé par deux). Avant P2 : Loyal divisait le risque par deux.
 const DISOBEY_START := 60.0
 const DISOBEY_MAX := 0.5
-const LOYAL_DISOBEY_FACTOR := 0.5
 ## Après un refus, le héros boude : il ignore tous les ordres pendant ce temps (secondes de combat).
 const DISOBEY_SULK := 3.0
 
 
-## Risque d'ignorer un ordre, selon la santé mentale (sans compter Loyal). Utilisé par battle.gd.
-func disobey_chance(mental_value: float) -> float:
+## Risque d'ignorer un ordre dû à la santé mentale seule (avant la personnalité).
+func disobey_base(mental_value: float) -> float:
 	if mental_value >= DISOBEY_START:
 		return 0.0
 	return DISOBEY_MAX * (1.0 - mental_value / DISOBEY_START)
+
+
+## Risque d'ignorer un ordre (santé mentale, puis personnalité). Utilisé par battle.gd.
+func disobey_chance(hero: Dictionary, mental_value: float) -> float:
+	return PersonalityEngine.modified("disobey_chance", hero, disobey_base(mental_value))
 
 
 # ---------------------------------------------------------------------------
@@ -608,12 +616,10 @@ func hero_bonds(hero: Dictionary) -> Array[Dictionary]:
 ## pendant un combat (une fois par combat), son esprit lâche. Le plus souvent, effondrement : il panique
 ## PANIC_SECONDS secondes (il fuit, ou frappe au hasard, alliés compris) et ébranle ses alliés proches.
 ## Plus rarement, éveil : l'éveil des compétences, et sa santé mentale remonte à RUPTURE_AWAKEN_MENTAL.
-const RUPTURE_AWAKEN_CHANCE := 0.15
-const BRAVE_AWAKEN_CHANCE := 0.25      # Courageux
+const RUPTURE_AWAKEN_CHANCE := 0.15    # puis la personnalité (rupture_awaken_chance)
 const RUPTURE_AWAKEN_MENTAL := 30.0
 const PANIC_SECONDS := 6.0
-const PANIC_FLEE_CHANCE := 0.5         # sinon, il frappe au hasard
-const COWARD_FLEE_CHANCE := 0.8        # Lâche
+const PANIC_FLEE_CHANCE := 0.5         # sinon, il frappe au hasard ; puis la personnalité (panic_flee_chance)
 const PANIC_RADIUS := 3.0              # en cases : les alliés aussi proches sont ébranlés...
 const PANIC_SPREAD_LOSS := 8.0         # ... de tant de santé mentale
 
@@ -663,14 +669,16 @@ func accepts_work(hero: Dictionary) -> bool:
 	return true
 
 
-## Chance qu'une rupture soit un éveil (sinon un effondrement).
+## Chance qu'une rupture soit un éveil (sinon un effondrement). Personnalité (P2, « rupture_awaken ») : la
+## Vulnérabilité (Stabilité négative) s'éveille plus souvent, la Stabilité moins. Avant P2 : Courageux 25 %.
 func rupture_awaken_chance(hero: Dictionary) -> float:
-	return BRAVE_AWAKEN_CHANCE if has_trait(hero, "Courageux") else RUPTURE_AWAKEN_CHANCE
+	return PersonalityEngine.modified("rupture_awaken", hero, RUPTURE_AWAKEN_CHANCE)
 
 
-## Chance qu'un héros qui s'effondre fuie (sinon il frappe au hasard).
+## Chance qu'un héros qui s'effondre fuie (sinon il frappe au hasard). Personnalité (P2, « panic_flee ») :
+## la Prudence fuit, l'Audace frappe. Avant P2 : Lâche 80 %.
 func panic_flee_chance(hero: Dictionary) -> float:
-	return COWARD_FLEE_CHANCE if has_trait(hero, "Lâche") else PANIC_FLEE_CHANCE
+	return PersonalityEngine.modified("panic_flee", hero, PANIC_FLEE_CHANCE)
 
 
 ## Peur (feuille de route v2 : « -30 % de toutes les stats ; touche les novices, mais aussi des héros forts
@@ -682,7 +690,7 @@ func panic_flee_chance(hero: Dictionary) -> float:
 ## Moments où elle peut le prendre : la vue de l'ennemi (FEAR_SIGHT_ENEMY_CHANCE, sans compter la menace
 ## « novice »), sa première blessure, la chute d'un allié à moins de FEAR_SIGHT cases, l'arrivée d'un boss.
 ## Chance = chance du moment x étoiles (FEAR_RARITY_FACTOR) x expérience (1 / (1 + combats / FEAR_EXPERIENCE_FIGHTS))
-## x menaces (+FEAR_THREAT_STEP par menace au-delà de la première) ; Lâche x2, Courageux /2 (fear_chance).
+## x menaces (+FEAR_THREAT_STEP par menace au-delà de la première), puis la personnalité (fear_chance).
 ## Effet : toutes les stats x FEAR_STAT_FACTOR (attaque, défense, vitesse, critiques), FEAR_MAX_SECONDS au plus.
 ## Il fuit d'abord (FEAR_FLEE_CHANCE) pendant FEAR_SECONDS, sourd aux ordres ; dos tourné, il encaisse plus
 ## (FLEEING_DAMAGE_TAKEN) et les ennemis le prennent pour cible ; sinon il se bat contre sa peur (il obéit).
@@ -712,34 +720,28 @@ const FEAR_MENTAL_LOSS := 10.0
 const FLEEING_DAMAGE_TAKEN := 2.0
 
 
-## Les traits : Lâche double, Courageux divise par deux.
-func _fear_traits(hero: Dictionary, chance: float) -> float:
-	if has_trait(hero, "Lâche"):
-		chance *= 2.0
-	if has_trait(hero, "Courageux"):
-		chance *= 0.5
-	return chance
-
-
 ## Chance de prendre peur à un moment donné : « base » (la chance du moment), « threats » (le nombre de
-## menaces, voir plus haut ; 0 = pas de peur). Étoiles, expérience et traits comptent.
+## menaces, voir plus haut ; 0 = pas de peur). Étoiles et expérience comptent ; puis la personnalité
+## (P2, PersonalityData.MODIFIERS « fear_chance » : -3 points par palier du composite Courage ; Audace 90
+## « Sans peur » : jamais). Avant P2 : Lâche x2, Courageux /2.
 func fear_chance(hero: Dictionary, base: float, threats: int) -> float:
 	if threats <= 0:
 		return 0.0
 	var chance: float = base * FEAR_RARITY_FACTOR.get(hero["rarity"], 0.2)
 	chance /= 1.0 + hero.get("fights", 0) / FEAR_EXPERIENCE_FIGHTS
 	chance *= 1.0 + FEAR_THREAT_STEP * (threats - 1)
-	return minf(_fear_traits(hero, chance), 0.95)
+	return PersonalityEngine.modified("fear_chance", hero, minf(chance, 0.95))
 
 
-## Chance qu'un héros qui prend peur s'enfuie (sinon il se bat contre sa peur).
+## Chance qu'un héros qui prend peur s'enfuie (sinon il se bat contre sa peur). Courage (« fear_flee »).
 func fear_flee_chance(hero: Dictionary) -> float:
-	return minf(_fear_traits(hero, FEAR_FLEE_CHANCE), 0.95)
+	return PersonalityEngine.modified("fear_flee", hero, FEAR_FLEE_CHANCE)
 
 
 ## Chance que la peur revienne après une blessure grave (elle l'avait déjà pris dans ce combat).
+## Courage (« fear_return »).
 func fear_return_chance(hero: Dictionary) -> float:
-	return minf(_fear_traits(hero, FEAR_RETURN_CHANCE), 0.95)
+	return PersonalityEngine.modified("fear_return", hero, FEAR_RETURN_CHANCE)
 
 
 ## Texte court de l'état d'esprit (fiche du héros).
@@ -764,7 +766,7 @@ func mental_text(hero: Dictionary) -> String:
 func mental_after_battle(hero: Dictionary, fighter: Dictionary, victory: bool, news: Array) -> String:
 	news.append_array(fighter["mind_news"])
 	var before := mental(hero)
-	hero["mental"] = clampf(fighter["mental"], 0.0, MENTAL_MAX)
+	hero["mental"] = clampf(fighter["mental"], 0.0, MENTAL_MAX)  # (battle.gd a déjà appliqué le plancher)
 	if not victory:
 		mental_loss(hero, MENTAL_LOSS_DEFEAT)
 	# Fini à 0 : il reste en rupture (avant le gain de la victoire, qui ne suffit pas à le remettre d'aplomb).
@@ -806,5 +808,6 @@ func update_mental() -> void:
 			continue
 		var working: bool = hero.get("post", "") != "" or hero.get("training", "") != ""
 		var rate := MENTAL_WORK_PER_HOUR if working else MENTAL_REST_PER_HOUR
+		rate = PersonalityEngine.modified("mental_regen", hero, rate)  # Résilience (P2)
 		rate -= bad_coworkers(hero) * MAUVAIS_COWORKER_LOSS_PER_HOUR  # un Mauvais au même travail use les autres
 		change_mental(hero, hours * rate)

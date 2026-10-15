@@ -13,14 +13,20 @@ var failures := 0
 
 
 func _initialize() -> void:
-	# « -- p1b » : seulement les structures de P1b (rapide).
-	if "p1b" in OS.get_cmdline_user_args():
-		_check_structures()
+	# « -- p1b » : seulement les structures de P1b (rapide) ; « -- p2 » : seulement les effets de P2.
+	var only_p1b := "p1b" in OS.get_cmdline_user_args()
+	var only_p2 := "p2" in OS.get_cmdline_user_args()
+	if only_p1b or only_p2:
+		if only_p1b:
+			_check_structures()
+		if only_p2:
+			_check_modifiers()
 		print("")
 		print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 		quit(1 if failures > 0 else 0)
 		return
 	_check_structures()
+	_check_modifiers()
 	_check_distribution()
 	_check_facettes_examples()
 	_check_evolution()
@@ -250,6 +256,109 @@ func _check_memorial() -> void:
 	_check(E.decisions(h).size() == E.DECISIONS_KEPT, "seules les dernières décisions sont gardées")
 
 
+## P2 : chaque modificateur va dans le bon sens et reste dans ses bornes (document de référence, section 4,
+## « Tests » : des héros aux profils extrêmes).
+func _check_modifiers() -> void:
+	print("Modificateurs (P2)")
+	var neutral := _plain_hero(900)
+	var all_neutral := true
+	for effect in D.MODIFIERS:
+		var value := E.modifier(effect, neutral)
+		all_neutral = all_neutral and is_equal_approx(value, 0.0 if D.MODIFIERS[effect]["op"] == "add" else 1.0)
+	_check(all_neutral, "héros neutre : tous les effets sont neutres")
+	_check(E.modifier("fear_chance", {"id": 1}) == 0.0 and E.modified("stamina_max", {"id": 1}, 100.0) == 100.0,
+		"sans profil (un monstre) : neutre")
+
+	# Chaque effet qui lit un axe ou un composite, aux deux extrêmes : sens du coefficient et bornes.
+	var right_way := true
+	var in_bounds := true
+	for effect in D.MODIFIERS:
+		var data: Dictionary = D.MODIFIERS[effect]
+		if data["op"] == "none":
+			continue
+		var high := _extreme_hero(901, data, 10)
+		var low := _extreme_hero(902, data, -10)
+		var coefficient: float = data["k"] if data["op"] == "add" else data["m"]
+		var up := E.modifier(effect, high)
+		var down := E.modifier(effect, low)
+		right_way = right_way and (up > down) == (coefficient > 0.0) and not is_equal_approx(up, down)
+		for value in [up, down]:
+			in_bounds = in_bounds and value >= data["low"] - 0.0001 and value <= data["high"] + 0.0001
+		for hero in [high, low]:
+			for base in [0.0, 0.1, 0.5, 0.95, 1.0, 100.0]:
+				in_bounds = in_bounds and _within(effect, hero, E.modified(effect, hero, base))
+	_check(right_way, "chaque effet va dans le sens de son coefficient (palier +100 contre -100)")
+	_check(in_bounds, "chaque effet reste dans ses bornes (écart, facteur, résultat)")
+
+	# Le coefficient du cahier : -3 points de chance de peur par palier de Courage.
+	var brave := _plain_hero(903, "scribe", {"AUD": 3, "STA": 3, "DOU": 3, "OPT": 3})
+	_check(E.composite(brave, "courage") == 30 and is_equal_approx(E.modified("fear_chance", brave, 0.3), 0.21),
+		"peur : Courage +30, 30 % devient 21 % (-3 points par palier)")
+	var coward := _plain_hero(904, "scribe", {"AUD": -10, "STA": -10, "DOU": -10, "OPT": -10})
+	_check(is_equal_approx(E.modified("fear_chance", coward, 0.3), 0.6), "peur : Courage -100, +30 points au plus")
+	_check(E.modified("fear_chance", coward, 0.0) == 0.0, "peur : sans menace (base 0), jamais de peur")
+	var fearless := _plain_hero(905, "scribe", {"AUD": 9})
+	_check(E.modified("fear_chance", fearless, 0.9) == 0.0 and E.modified("panic_flee", fearless, 0.5) == 0.0,
+		"Audace 90 (Sans peur) : jamais de peur, ne fuit jamais")
+
+	# Désobéissance : seulement sous le seuil, jamais au-dessus de 50 %, Loyauté 70 divise par deux.
+	var unruly := _plain_hero(906, "scribe", {"MAI": -10, "PER": -10, "LOY": -10})
+	_check(E.modified("disobey_chance", unruly, 0.0) == 0.0, "désobéissance : rien au-dessus du seuil de santé mentale")
+	_check(E.modified("disobey_chance", unruly, 0.5) == 0.5, "désobéissance : jamais plus de 50 %")
+	var loyal := _plain_hero(907, "scribe", {"LOY": 7})
+	_check(E.has_access(loyal, "bouclier_des_siens") and is_equal_approx(E.modified("disobey_chance", loyal, 0.4), 0.17),
+		"Loyauté 70 (Bouclier des siens) : Discipline +20 (40 % → 34 %), puis divisé par deux (17 %)")
+
+	# Planchers : Stabilité 90 ; Maîtrise 90 seulement si la Stabilité est positive.
+	_check(E.modified("mental_floor", _plain_hero(908, "scribe", {"STA": 9}), 0.0) == 1.0, "Stabilité 90 (Inébranlable) : jamais à 0")
+	var steel := _plain_hero(909, "scribe", {"MAI": 9, "STA": 2})
+	var cracked := _plain_hero(910, "scribe", {"MAI": 9, "STA": -2})
+	_check(E.modified("mental_floor", steel, 0.0) == 1.0 and E.modified("mental_floor", cracked, 0.0) == 0.0,
+		"Maîtrise 90 (Esprit d'acier) : pas de rupture seulement si la Stabilité est positive")
+	_check(is_equal_approx(E.modified("stamina_max", _plain_hero(911, "scribe", {"VIT": 7}), 100.0), 130.0)
+		and is_equal_approx(E.modified("stamina_cost", _plain_hero(912, "scribe", {"VIT": -7}), 1.0), 0.75)
+		and E.modified("stamina_floor", _plain_hero(913, "scribe", {"PER": -7}), 0.0) == 1.0,
+		"Infatigable +30 %, Économe -25 %, Sens de la limite : jamais épuisé")
+
+	# Sur des héros tirés au hasard : tout reste dans les bornes, et les effets varient d'un héros à l'autre.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var spread := {}
+	var all_ok := true
+	for i in 2000:
+		var hero := {"id": i, "rarity": 1 + i % 5, "persona": E.generate(1 + i % 5, "", [], 9000 + i)}
+		for effect in D.MODIFIERS:
+			all_ok = all_ok and _within(effect, hero, E.modified(effect, hero, rng.randf()))
+			if not spread.has(effect):
+				spread[effect] = {}
+			spread[effect][snappedf(E.modifier(effect, hero), 0.001)] = true
+	_check(all_ok, "2 000 héros tirés au hasard : tous les effets dans leurs bornes")
+	_check(D.MODIFIERS.keys().all(func(effect): return D.MODIFIERS[effect]["op"] == "none" or spread[effect].size() >= 5),
+		"les effets varient d'un héros à l'autre (au moins 5 valeurs chacun)")
+
+
+## Le résultat d'un effet est-il permis : dans ses bornes, ou la valeur imposée par un accès du héros
+## (« Sans peur » : fuite 0, sous le minimum de 5 %) ?
+func _within(effect: String, hero: Dictionary, result: float) -> bool:
+	var data: Dictionary = D.MODIFIERS[effect]
+	if result >= data.get("min", -INF) and result <= data.get("max", INF):
+		return true
+	return E.modifier_accesses(effect, hero).any(func(access_id): return D.ACCESS_MODIFIERS[access_id][effect].get("set", NAN) == result)
+
+
+## Un héros poussé à l'extrême (palier « value », -10 ou +10) sur ce que lit un modificateur : son axe, ou
+## chaque axe de son composite dans le sens de son coefficient.
+func _extreme_hero(id: int, data: Dictionary, value: int) -> Dictionary:
+	var tiers := {}
+	if data.has("axis"):
+		tiers[data["axis"]] = value
+	else:
+		var axes: Dictionary = D.COMPOSITES[data["composite"]]["axes"]
+		for axis_id in axes:
+			tiers[axis_id] = value * signi(axes[axis_id])
+	return _plain_hero(id, "scribe", tiers)
+
+
 func _check(ok: bool, text: String) -> void:
 	print(("  ok   " if ok else "  ÉCHEC ") + text)
 	if not ok:
@@ -375,8 +484,8 @@ func _check_effects() -> void:
 	_check(is_equal_approx(E.effect_cross(6, 7), 42.0), "croiser : 6 x 7")
 	_check(is_equal_approx(E.effect_ratio(6, 7), 0.75), "rapporter : 6 / (1 + 7)")
 	_check(is_equal_approx(E.effect_ratio(6, -3), 6.0), "rapporter : une force négative compte pour 0")
+	# (modifier() n'est plus neutre depuis P2 : voir _check_modifiers.)
 	var hero := {"persona": E.generate(2, "", [], 7)}
-	_check(E.modifier("fear_chance", hero) == 1.0, "modifier() neutre")
 	_check(E.decide(hero, ["a", "b"]) == "a", "decide() : la première option")
 	_check(E.decide(hero, ["a", "b"], {"default": "b"}) == "b", "decide() : l'option par défaut")
 	for composite_id in D.COMPOSITES:

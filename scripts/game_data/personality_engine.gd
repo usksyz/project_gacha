@@ -1234,14 +1234,92 @@ static func effect_ratio(a: int, b: int, low := -INF, high := INF) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Modificateurs (P2) : PersonalityData.MODIFIERS et ACCESS_MODIFIERS
+# ---------------------------------------------------------------------------
+
+## Ce que la personnalité fait à un effet nommé (« fear_chance », « stamina_max »...), avant les accès :
+## pour « add », l'écart à ajouter (k x palier, borné) ; pour « mul », le facteur ((1 + m)^palier, borné) ;
+## pour « none », 0 ou 1 (neutre). Un héros sans profil : neutre. « context » : réservé (cible, état du
+## moment : P3).
+static func modifier(effect: String, hero: Dictionary, _context := {}) -> float:
+	var data: Dictionary = D.MODIFIERS[effect]
+	var op: String = data["op"]
+	if op == "none" or not hero.has("persona"):
+		return 0.0 if op == "add" else 1.0
+	var p := modifier_tier(effect, hero)
+	if op == "add":
+		return effect_add(0.0, data["k"], p, data.get("low", -INF), data.get("high", INF))
+	return effect_mul(1.0, data["m"], p, data.get("low", -INF), data.get("high", INF))
+
+
+## Le palier (-10 à +10) que lit un effet : son composite ou son axe.
+static func modifier_tier(effect: String, hero: Dictionary) -> int:
+	var data: Dictionary = D.MODIFIERS[effect]
+	if data.has("composite"):
+		return roundi(composite(hero, data["composite"]) / 10.0)
+	if data.has("axis"):
+		return tier(hero, data["axis"])
+	return 0
+
+
+## Une valeur de jeu (« base ») passée par la personnalité du héros : MODIFIERS (résultat borné par « min » /
+## « max »), puis les accès de ACCESS_MODIFIERS (« set » l'emporte sur les bornes : « ne fuit jamais » vaut 0
+## même si la fuite ne descend jamais sous 5 % autrement ; « mul » reste dans les bornes). C'est par ici que
+## les mécaniques lisent la personnalité (jamais les paliers bruts).
+static func modified(effect: String, hero: Dictionary, base: float, context := {}) -> float:
+	var data: Dictionary = D.MODIFIERS[effect]
+	if data.get("with_base", false) and base == 0.0:
+		return base
+	var low: float = data.get("min", -INF)
+	var high: float = data.get("max", INF)
+	var value := base
+	match data["op"]:
+		"add":
+			value = clampf(base + modifier(effect, hero, context), low, high)
+		"mul":
+			value = clampf(base * modifier(effect, hero, context), low, high)
+	for access_id in accesses(hero):
+		var rule: Dictionary = D.ACCESS_MODIFIERS.get(access_id, {}).get(effect, {})
+		if rule.is_empty() or not _meets(hero["persona"]["tiers"], rule.get("if", {})):
+			continue
+		if rule.has("set"):
+			return rule["set"]
+		if rule.has("mul"):
+			value = clampf(value * rule["mul"], low, high)
+	return value
+
+
+## Les accès du héros qui changent cet effet (pour le mode dev et les fenêtres).
+static func modifier_accesses(effect: String, hero: Dictionary) -> Array:
+	return accesses(hero).filter(func(access_id): return D.ACCESS_MODIFIERS.get(access_id, {}).has(effect))
+
+
+## Une ligne lisible par effet (mode dev) : « Chance d'avoir peur : -9 points (Courage +3) », ou
+## « x1,12 (Constitution +4) », plus les accès qui s'en mêlent ; les effets neutres sont omis.
+static func modifier_lines(hero: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	for effect in D.MODIFIERS:
+		var data: Dictionary = D.MODIFIERS[effect]
+		var parts: Array[String] = []
+		var what: String = D.COMPOSITES[data["composite"]]["name"] if data.has("composite") \
+			else (D.AXES[data["axis"]]["name"] if data.has("axis") else "")
+		var value := modifier(effect, hero)
+		if data["op"] == "add" and not is_zero_approx(value):
+			parts.append("%+d points (%s %+d)" % [roundi(value * 100.0), what, modifier_tier(effect, hero) * 10])
+		elif data["op"] == "mul" and not is_equal_approx(value, 1.0):
+			parts.append("x%.2f (%s %+d)" % [value, what, modifier_tier(effect, hero) * 10])
+		for access_id in modifier_accesses(effect, hero):
+			parts.append(access_text(access_id).get_slice(" —", 0))
+		if not parts.is_empty():
+			lines.append("%s : %s" % [data["name"], ", ".join(parts)])
+	return lines
+
+
+# ---------------------------------------------------------------------------
 # Pour la suite : points d'entrée neutres (document de référence, section 4)
 # ---------------------------------------------------------------------------
 # Ils existent déjà pour que les mécaniques puissent s'y brancher ; ils ne changent rien au jeu tant que
-# leurs données (MODIFIERS, choix notés) ne sont pas écrites (P2 et P3).
-
-## Multiplicateur d'un effet nommé (« fear_chance », « disobey_chance »...) : neutre (1,0) pour l'instant.
-static func modifier(_effect: String, _hero: Dictionary, _context := {}) -> float:
-	return 1.0
+# leurs données (choix notés, filtres du Maître) ne sont pas écrites (P3).
 
 
 ## Choix d'un héros parmi des options : pour l'instant, l'option par défaut (context["default"], sinon

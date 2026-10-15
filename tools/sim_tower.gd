@@ -15,7 +15,7 @@ extends Node
 ## « carte » : graine de carte imposée à tous les combats (sinon une carte par combat, tirée de la graine).
 ## Chaque lancement relit et réécrit user://sauvegarde.cfg : le lancer dans une copie du projet avec un
 ## override.cfg (dossier de sauvegarde à part), voir CLAUDE.md, section P1a-bis.
-## Affiche, par étage : victoires (%), morts par combat, temps de calcul moyen d'un combat (ms), unités
+## Affiche, par étage : victoires (%), morts, peurs et ruptures par combat, temps de calcul moyen d'un combat (ms), unités
 ## bloquées (plus de BLOCK_SECONDS sans avancer alors qu'elles veulent avancer : « sans raison » si aucun
 ## combattant ne leur barre la route, « foule » sinon, « escalade » quand elles grimpent lentement), et les
 ## anciens traits présents dans les équipes.
@@ -58,6 +58,8 @@ func _ready() -> void:
 		var deaths := 0
 		var usec := 0
 		var blocked := {"sans raison": 0, "foule": 0, "escalade": 0}
+		var fears := 0     # héros qui ont eu peur (une fois par combat au plus)
+		var ruptures := 0  # héros dont la santé mentale est tombée à 0 en combat
 		var blocked_examples := []
 		var trait_counts := {}
 		var with_trait := {}  # {trait: [combats où l'équipe l'a, victoires]}
@@ -103,12 +105,15 @@ func _ready() -> void:
 				entry[1] += 1 if battle.victory else 0
 				with_trait[trait_name] = entry
 			deaths += battle.heroes.filter(func(f): return _is_dead(f)).size()
+			fears += battle.heroes.filter(func(f): return f.get("scared", false)).size()
+			ruptures += battle.heroes.filter(func(f): return f.get("ruptured", false)).size()
 		var trait_parts := []
 		for trait_name in TRAIT_NAMES:
 			trait_parts.append("%s %.2f" % [trait_name, trait_counts.get(trait_name, 0) / float(count)])
-		print("RESULTAT equipe=%s maitre=%s etage=%d combats=%d victoires=%.1f%% morts=%.2f temps_ms=%.0f bloques_sans_raison=%d bloques_foule=%d bloques_escalade=%d traits_par_equipe: %s" \
+		print("RESULTAT equipe=%s maitre=%s etage=%d combats=%d victoires=%.1f%% morts=%.2f peurs=%.2f ruptures=%.2f temps_ms=%.0f bloques_sans_raison=%d bloques_foule=%d bloques_escalade=%d traits_par_equipe: %s" \
 			% [args["equipe"], args["maitre"], floor_number, count, 100.0 * wins / count, float(deaths) / count,
-			usec / 1000.0 / count, blocked["sans raison"], blocked["foule"], blocked["escalade"], ", ".join(trait_parts)])
+			float(fears) / count, float(ruptures) / count, usec / 1000.0 / count, blocked["sans raison"], blocked["foule"],
+			blocked["escalade"], ", ".join(trait_parts)])
 		for example in blocked_examples:
 			print("  bloqué : ", example)
 		# Victoires selon que l'équipe a le trait ou non (pour trouver ce qui pèse sur l'équilibre).

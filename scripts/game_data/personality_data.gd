@@ -541,6 +541,72 @@ const COMPOSITES := {
 
 
 # ---------------------------------------------------------------------------
+# Modificateurs (document de référence, section 4 ; « 1. Paliers », section 5) — P2
+# ---------------------------------------------------------------------------
+# Chaque effet nommé dit ce qu'il lit (un composite ou un axe, en palier -10 à +10), comment il compte et
+# ses bornes. Ajouter une mécanique = ajouter une entrée ici (PersonalityEngine.modified l'applique).
+# « op » :
+#   "add" : chances, seuils, délais. Résultat = base + k x palier ; l'écart (k x palier) est borné par
+#           « low » / « high ».
+#   "mul" : vitesses et quantités. Résultat = base x (1 + m)^palier ; le facteur est borné par « low » / « high ».
+#   "none" : rien n'est lu (seuls les accès de ACCESS_MODIFIERS le changent).
+# « min » / « max » : bornes du résultat final (une chance reste entre 0 et 0,95 ; un refus jamais au-dessus de
+# 0,5 : garde-fou de « 4. Interactions », section 6). « with_base » : l'effet ne s'applique que si la base
+# n'est pas nulle (la personnalité aggrave ou adoucit un risque, elle ne le crée pas).
+# « source » : « cahier » si le coefficient est écrit dans le cahier, « projet » s'il est choisi par le projet
+# (provisoire, à régler en jouant). Tous les chiffres sont provisoires.
+const MODIFIERS := {
+	# Peur (cahier : « Chance de peur : -3 points par palier d'Audace, de -30 à +30 points »). Le cahier dit
+	# aussi que les mécaniques lisent d'abord les composites (Courage : « peur, engagement, fuite ») : on lit
+	# donc le composite Courage, qui compte l'Audace deux fois.
+	"fear_chance": {"name": "Chance d'avoir peur", "op": "add", "composite": "courage", "k": -0.03,
+		"low": -0.30, "high": 0.30, "min": 0.0, "max": 0.95, "with_base": true, "source": "cahier"},
+	"fear_flee": {"name": "Fuite quand il a peur", "op": "add", "composite": "courage", "k": -0.03,
+		"low": -0.30, "high": 0.30, "min": 0.0, "max": 0.95, "source": "projet"},
+	"fear_return": {"name": "Retour de la peur après une blessure grave", "op": "add", "composite": "courage",
+		"k": -0.03, "low": -0.30, "high": 0.30, "min": 0.0, "max": 0.95, "source": "projet"},
+	# Désobéissance (Loyauté, confiance, Maîtrise de soi, santé mentale) : composite Discipline (« obéissance »).
+	# Seulement sous le seuil de santé mentale ; la dissonance d'un ordre contre sa nature viendra en P3.
+	"disobey_chance": {"name": "Refus d'un ordre (santé mentale basse)", "op": "add", "composite": "discipline",
+		"k": -0.03, "low": -0.30, "high": 0.30, "min": 0.0, "max": 0.5, "with_base": true, "source": "projet"},
+	# Rupture (document de référence : « Stabilité - : éveil plus probable » ; « Prudence : fuite »).
+	"rupture_awaken": {"name": "Éveil plutôt qu'effondrement (rupture)", "op": "add", "axis": "STA", "k": -0.02,
+		"low": -0.20, "high": 0.20, "min": 0.02, "max": 0.5, "source": "projet"},
+	"panic_flee": {"name": "Fuite plutôt que frénésie (rupture)", "op": "add", "axis": "AUD", "k": -0.03,
+		"low": -0.30, "high": 0.30, "min": 0.05, "max": 0.95, "source": "projet"},
+	# Récupération de la santé mentale à la cité (Résilience : « stress, récupération, cicatrices »).
+	"mental_regen": {"name": "Remontée de la santé mentale", "op": "mul", "composite": "resilience", "m": 0.04,
+		"low": 0.68, "high": 1.48, "source": "projet"},
+	# Endurance (Constitution : réserve ; Vitalité : récupération). Garde-fou des stats de combat : ±30 %.
+	"stamina_max": {"name": "Endurance maximale", "op": "mul", "axis": "CON", "m": 0.03, "low": 0.7, "high": 1.3,
+		"source": "projet"},
+	"stamina_regen": {"name": "Récupération d'endurance", "op": "mul", "axis": "VIT", "m": 0.03, "low": 0.7,
+		"high": 1.3, "source": "projet"},
+	"stamina_cost": {"name": "Endurance dépensée", "op": "none", "source": "projet"},
+	# Planchers (seuls certains accès les relèvent) : santé mentale qui ne tombe jamais à 0 (pas de rupture),
+	# endurance qui ne tombe jamais à 0 (jamais épuisé).
+	"mental_floor": {"name": "Plancher de santé mentale", "op": "none", "source": "cahier"},
+	"stamina_floor": {"name": "Plancher d'endurance", "op": "none", "source": "cahier"},
+}
+
+## Les accès (traits majeurs à 70, signatures à 90) dont l'effet écrit dans le cahier est un simple
+## modificateur d'une mécanique qui existe déjà. Appliqués après MODIFIERS. {accès: {effet: règle}} ;
+## règle : {"set": valeur} (remplace) ou {"mul": facteur} ; « if » : conditions de palier en plus
+## (comme les synergies : {axe: palier minimal dans le sens du pôle}). Les autres accès attendent leur
+## mécanique (P3 : choix ; P4 : événements ; C3 : perception...).
+const ACCESS_MODIFIERS := {
+	"sans_peur": {"fear_chance": {"set": 0.0}, "fear_flee": {"set": 0.0}, "fear_return": {"set": 0.0},
+		"panic_flee": {"set": 0.0}},                                       # Audace 90 : immunisé à la peur, ne fuit jamais
+	"bouclier_des_siens": {"disobey_chance": {"mul": 0.5}},               # Loyauté 70 : obéissance haute
+	"infatigable": {"stamina_max": {"mul": 1.3}},                         # Vitalité 70 : endurance +30 %
+	"econome": {"stamina_cost": {"mul": 0.75}},                           # Retenue 70 : -25 % d'endurance dépensée
+	"sens_de_la_limite": {"stamina_floor": {"set": 1.0}},                 # Abandon 70 : jamais d'épuisement total
+	"inebranlable": {"mental_floor": {"set": 1.0}},                       # Stabilité 90 : jamais de rupture
+	"esprit_d_acier": {"mental_floor": {"set": 1.0, "if": {"STA": 1}}},   # Maîtrise 90 : pas de rupture si Stabilité positive
+}
+
+
+# ---------------------------------------------------------------------------
 # Évolution (« 1. Paliers », section 8)
 # ---------------------------------------------------------------------------
 ## Coût en points d'évolution pour atteindre un palier (en valeur absolue) en s'éloignant de zéro.

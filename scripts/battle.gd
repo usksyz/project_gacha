@@ -529,24 +529,25 @@ func can_berserk(unit: Dictionary) -> bool:
 
 
 ## Le héros obéit-il à l'ordre ? Avec une santé mentale basse, il peut l'ignorer
-## (GameData.disobey_chance), puis il boude : il ignore tous les ordres pendant DISOBEY_SULK secondes.
-## Loyal réduit le risque ; quand c'est sa loyauté qui le fait obéir, le trait se révèle.
+## (GameData.disobey_chance, que sa personnalité aggrave ou adoucit), puis il boude : il ignore tous les
+## ordres pendant DISOBEY_SULK secondes. Quand c'est sa discipline qui le fait obéir et qu'il est Loyal,
+## le trait se révèle.
 func _obeys(hero: Dictionary) -> bool:
 	if time < hero["sulk_until"] or panicking(hero):
 		_effect("refuse", hero, hero, "Non !", false)
 		return false
-	var chance := GameData.disobey_chance(hero["mental"])
-	if chance <= 0.0:
+	var base := GameData.disobey_base(hero["mental"])
+	if base <= 0.0:
 		return true
-	var loyal := GameData.has_trait(hero["source"], "Loyal")
+	var chance := GameData.disobey_chance(hero["source"], hero["mental"])
 	var roll := randf()
-	if roll < chance * (GameData.LOYAL_DISOBEY_FACTOR if loyal else 1.0):
+	if roll < chance:
 		hero["sulk_until"] = time + GameData.DISOBEY_SULK
 		_effect("refuse", hero, hero, "Non !", false)
 		_log("%s, à bout de nerfs, ignore ton ordre." % hero["name"], "disobey")
 		return false
-	if loyal and roll < chance:
-		# Sans sa loyauté, il aurait refusé.
+	if roll < base and GameData.has_trait(hero["source"], "Loyal"):
+		# Sans sa personnalité, il aurait refusé.
 		if _reveal(hero, "Loyal"):
 			_log("%s obéit malgré la peur : il est loyal." % hero["name"], "disobey")
 	return true
@@ -681,9 +682,14 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"migraine_until": GameData.migraine_left(source) if is_hero else 0.0,
 		"person": is_hero,         # un héros (l'adversaire d'un duel aussi) : sa migraine est gardée à la fin
 		# Endurance (voir GameData, tower.gd) : seuls les héros s'épuisent.
-		"stamina": GameData.STAMINA_MAX,
-		"max_stamina": GameData.STAMINA_MAX,
-		"stamina_cost": GameData.STAMINA_NOVICE_FACTOR if is_hero and GameData.is_combat_novice(source) else 1.0,
+		# Personnalité (P2) : Constitution (réserve), Vitalité (récupération), Retenue 70 (dépense), Abandon 70
+		# (jamais à 0). Un ennemi sans profil reste neutre.
+		"stamina": PersonalityEngine.modified("stamina_max", source, GameData.STAMINA_MAX),
+		"max_stamina": PersonalityEngine.modified("stamina_max", source, GameData.STAMINA_MAX),
+		"stamina_cost": PersonalityEngine.modified("stamina_cost", source,
+			GameData.STAMINA_NOVICE_FACTOR if is_hero and GameData.is_combat_novice(source) else 1.0),
+		"stamina_regen": PersonalityEngine.modified("stamina_regen", source, GameData.STAMINA_REGEN_PER_SECOND),
+		"stamina_floor": PersonalityEngine.modified("stamina_floor", source, 0.0),
 		"exhausted": false,        # endurance tombée à 0, pas encore remontée à STAMINA_RECOVERED
 		# Rotation (voir order_swap) : se repose à l'arrière ; vulnérable pendant l'échange jusqu'à « swap_until ».
 		"resting": false,
@@ -1310,7 +1316,7 @@ func _move_speed(unit: Dictionary) -> float:
 func _spend_stamina(unit: Dictionary, amount: float) -> void:
 	if not unit["person"] or amount <= 0.0:
 		return
-	unit["stamina"] = maxf(0.0, unit["stamina"] - amount * unit["stamina_cost"])
+	unit["stamina"] = maxf(minf(unit["stamina_floor"], unit["stamina"]), unit["stamina"] - amount * unit["stamina_cost"])
 	if unit["stamina"] <= 0.0 and not unit["exhausted"]:
 		unit["exhausted"] = true
 		_log("%s est épuisé." % _name_with_stars(unit), "disobey")
@@ -1323,7 +1329,7 @@ func _stamina_tick(unit: Dictionary) -> void:
 	if foes.any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= GameData.STAMINA_CONTACT_RANGE):
 		return
 	# Au repos à l'arrière (rotation, arrivé à son poste de repos) : trois fois plus vite.
-	var rate := GameData.STAMINA_REGEN_PER_SECOND
+	var rate: float = unit["stamina_regen"]
 	if unit["resting"] and unit["order"].is_empty():
 		rate *= GameData.ROTATION_REST_FACTOR
 	unit["stamina"] = minf(unit["max_stamina"], unit["stamina"] + rate * TICK)
@@ -2596,7 +2602,9 @@ func _mind(unit: Dictionary) -> float:
 func _stress(fighter: Dictionary, amount: float) -> void:
 	if not fighter["is_hero"] or fighter["hp"] <= 0 or amount <= 0.0 or quest.get("duel", false):
 		return  # (un duel compte à part, voir GameData.finish_duel)
-	fighter["mental"] = maxf(0.0, fighter["mental"] - amount * (1.0 - GameData.mental_guard(fighter["skills"])))
+	# Plancher : certains héros ne tombent jamais à 0 (Stabilité 90, Maîtrise 90 : pas de rupture).
+	var floor_value := PersonalityEngine.modified("mental_floor", fighter["source"], 0.0)
+	fighter["mental"] = maxf(minf(floor_value, fighter["mental"]), fighter["mental"] - amount * (1.0 - GameData.mental_guard(fighter["skills"])))
 	if fighter["mental"] <= 0.0 and not fighter["ruptured"]:
 		_rupture(fighter)
 
@@ -2640,9 +2648,7 @@ func _rupture(fighter: Dictionary) -> void:
 		], true)
 		return
 	if randf() < GameData.rupture_awaken_chance(source):
-		# Éveil : le « craquage positif ». L'esprit se brise... et se reforge.
-		if GameData.has_trait(source, "Courageux"):
-			_reveal(fighter, "Courageux")
+		# Éveil : le « craquage positif ». L'esprit se brise... et se reforge (plus souvent chez un Vulnérable).
 		fighter["mental"] = GameData.RUPTURE_AWAKEN_MENTAL
 		_log("Rupture ! L'esprit de %s se brise... et se reforge. Éveil !" % who, "awaken")
 		_awaken(fighter, float(fighter["hp"]) / fighter["max_hp"])

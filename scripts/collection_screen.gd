@@ -366,10 +366,12 @@ func _add_personality_tools(content: VBoxContainer, hero: Dictionary) -> void:
 		behaviour_parts.append("%s %+.0f" % [PersonalityData.BEHAVIOURS[behaviour_id]["name"], PersonalityEngine.score(hero, behaviour_id)])
 	var access_lines: Array = PersonalityEngine.accesses(hero).map(func(access_id): return "• " + PersonalityEngine.access_text(access_id))
 	var tension_names: Array = PersonalityEngine.tensions(hero).map(func(tension_id): return PersonalityData.TENSIONS[tension_id]["name"])
+	var modifier_lines: Array = PersonalityEngine.modifier_lines(hero).map(func(line): return "• " + line)
 	for line in ["Composites : " + ", ".join(composite_parts),
 			"Comportements : " + ", ".join(behaviour_parts),
 			"Accès ouverts :\n" + ("\n".join(access_lines) if not access_lines.is_empty() else "aucun"),
-			"Tensions : " + (", ".join(tension_names) if not tension_names.is_empty() else "aucune")]:
+			"Tensions : " + (", ".join(tension_names) if not tension_names.is_empty() else "aucune"),
+			"Effets en jeu (P2) :\n" + ("\n".join(modifier_lines) if not modifier_lines.is_empty() else "aucun (neutre)")]:
 		var label := UI.make_label(line, 17)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(label)
