@@ -615,7 +615,8 @@ static func today() -> int:
 #   "last_seen" (jour, 0 = jamais), "extinguished" (peur perdue, qui peut revenir), "settings" (cadres où
 #   une rencontre a réussi : nuit, lieu...), "encounters", "scar", "scar_floor", "hate", "prior" (connu
 #   avant l'invocation)}} ; hero["persona"]["pending_report"] : ce qu'il rapporte, avant de l'écrire à la
-#   bibliothèque. Aucun effet en combat pour l'instant (P2) : rien ne lit encore ces valeurs.
+#   bibliothèque. Depuis P2 : l'appréhension règle la peur en combat (Battle._dread) et le stress
+#   (accoutumance, stress_factor) ; GameData.learn_from_battle la fait évoluer après chaque combat de la Tour.
 
 ## Appréhension de départ d'un sujet inconnu : son danger, plus la Prudence et le Pessimisme.
 static func start_apprehension(hero: Dictionary, subject: String) -> float:
@@ -684,7 +685,7 @@ static func knowledge(hero: Dictionary, subject: String) -> int:
 ## "hits", "dodges", "grave" (ami mort, quasi-mort), "setting", "day"}. Plus faible qu'attendu : la peur
 ## baisse d'une part de l'écart ; plus fort : elle monte, plus vite. Un événement grave peut laisser une
 ## cicatrice (Vulnérable) ou une haine (Colérique, Persévérant). La connaissance grandit (surtout en touchant
-## et en esquivant). Renvoie ce qui a changé. Sans effet en combat pour l'instant (rien ne lit ces valeurs).
+## et en esquivant). Renvoie ce qui a changé.
 static func after_encounter(hero: Dictionary, subject: String, report: Dictionary) -> Dictionary:
 	if not hero.has("persona"):
 		return {}

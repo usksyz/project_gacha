@@ -542,6 +542,27 @@ func _keep_battle_journals(battle: Battle, floor_number: int, killed_by: Array) 
 				"killed_by": killed_by.duplicate(), "worked": battle.formations_used.duplicate() if battle.victory else []})
 
 
+## Effets des sujets (P2 ; document de référence, section 3 bis) : un survivant compare ce qu'il a vécu à ce
+## qu'il attendait de chaque sorte de monstre affrontée (PersonalityEngine.after_encounter) : sa peur baisse
+## si c'était moins dur qu'attendu, monte sinon ; il apprend à les connaître (coups portés, esquives). Danger
+## vécu : PersonalityData.ENCOUNTER_DANGER. La peur en combat en dépend (Battle._dread).
+func learn_from_battle(hero: Dictionary, fighter: Dictionary, battle: Battle) -> void:
+	var weights: Dictionary = PersonalityData.ENCOUNTER_DANGER
+	var agony: bool = fighter["journal"].any(func(event): return event["kind"] == "agony")
+	var fallen := battle.heroes.filter(func(other): return other["id"] != fighter["id"] and other["hp"] <= 0)
+	var danger: float = (1.0 - float(maxi(0, fighter["hp"])) / fighter["max_hp"]) * weights["hp_lost"] \
+		+ (weights["agony"] if agony else 0.0) + fallen.size() * weights["ally_fallen"] \
+		+ (0.0 if battle.victory else weights["defeat"])
+	var friend_fell := fallen.any(func(other): return fighter["bonds"].get(other["id"], 0) >= BOND_FRIEND)
+	for base_name in fighter.get("foes", {}):
+		var subject := PersonalityEngine.subject_for_enemy(base_name)
+		if subject == "":
+			continue
+		var counts: Dictionary = fighter["foes"][base_name]
+		PersonalityEngine.after_encounter(hero, subject, {"danger": minf(100.0, danger), "mode": "fought",
+			"hits": counts["hits"], "dodges": counts["dodges"], "grave": agony or friend_fell})
+
+
 ## Applique le résultat d'un combat de la Tour et renvoie un rapport pour l'écran de fin :
 ## - les héros tombés meurent pour toujours (sauf un immortel du mode dev) ;
 ## - en cas de victoire : or, gemmes, expérience pour les survivants, étage suivant ;
@@ -641,6 +662,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if fighter["hp"] < fighter["max_hp"] or fighter["mental"] < mental(hero):
 				if not "blessure" in report["tips"]:
 					report["tips"].append("blessure")
+			# Ce qu'il a appris des monstres affrontés (appréhension, connaissance).
+			learn_from_battle(hero, fighter, battle)
 			# Santé mentale : ce que le combat lui a coûté (voir personality.gd).
 			var mental_line := mental_after_battle(hero, fighter, battle.victory, report["mental"])
 			if mental_line != "":

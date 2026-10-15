@@ -375,6 +375,15 @@ func _check_stress() -> void:
 		E.habituate(mourner, "ally_death")
 	_check(E.stress_factor(mourner, "ally_death", {"friend": true}) > E.stress_factor(mourner, "ally_death"),
 		"on s'habitue à la mort, pas à celle d'un ami")
+	# Effets des sujets en combat (Battle._dread) : l'appréhension de l'ennemi, rapportée à son danger.
+	var shepherd := _plain_hero(932, "berger")
+	shepherd["persona"]["subjects"] = E._starting_subjects("berger")
+	var hunter := _plain_hero(933, "chasseur")
+	hunter["persona"]["subjects"] = E._starting_subjects("chasseur")
+	_check(E.habit_factor(shepherd, "monster:loup_noir") > 1.4 and E.habit_factor(hunter, "monster:loup_noir") < 1.0
+		and is_equal_approx(E.habit_factor(neutral, "monster:loup_noir"), 1.0),
+		"face aux loups : le berger redoute plus (x%.2f), le chasseur moins (x%.2f), l'inconnu x1"
+		% [E.habit_factor(shepherd, "monster:loup_noir"), E.habit_factor(hunter, "monster:loup_noir")])
 	var all_ok := true
 	for i in 1000:
 		var hero := {"id": i, "rarity": 1 + i % 5, "persona": E.generate(1 + i % 5, "", [], 12000 + i)}

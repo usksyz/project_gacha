@@ -691,6 +691,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"stamina_regen": PersonalityEngine.modified("stamina_regen", source, GameData.STAMINA_REGEN_PER_SECOND),
 		"stamina_floor": PersonalityEngine.modified("stamina_floor", source, 0.0),
 		"exposed": {},             # sujets de stress vécus (sang, mort, boss...) : accoutumance en fin de combat
+		"foes": {},                # sortes d'ennemis affrontées (coups, esquives) : ce qu'il en apprend (P2)
 		"exhausted": false,        # endurance tombée à 0, pas encore remontée à STAMINA_RECOVERED
 		# Rotation (voir order_swap) : se repose à l'arrière ; vulnérable pendant l'échange jusqu'à « swap_until ».
 		"resting": false,
@@ -1191,6 +1192,12 @@ func _journal_hit(attacker: Dictionary, target: Dictionary, amount: int, critica
 		if hero["is_hero"] and not foe["is_hero"] and not hero["met"].has(foe["id"]):
 			hero["met"][foe["id"]] = true
 			_journal(hero, "contact", {"with": foe["base_name"]})
+			_foe_count(hero, foe["base_name"], "")
+	# Par sorte d'ennemi : coups portés et esquives (ce que le héros en apprend, voir GameData.learn_from_battle).
+	if attacker["is_hero"] and not target["is_hero"] and amount >= 0:
+		_foe_count(attacker, target["base_name"], "hits")
+	if target["is_hero"] and not attacker["is_hero"] and amount < 0:
+		_foe_count(target, attacker["base_name"], "dodges")
 	if attacker["is_hero"] and amount >= 0:
 		attacker["journal_counts"]["hits_given"] += 1
 	if target["is_hero"]:
@@ -1200,6 +1207,15 @@ func _journal_hit(attacker: Dictionary, target: Dictionary, amount: int, critica
 			target["journal_counts"]["hits_taken"] += 1
 			if critical or amount >= target["max_hp"] * BLEED_HIT:
 				_journal(target, "wound", {"by": attacker["base_name"], "amount": amount})
+
+
+## Compte un coup porté (« hits ») ou une esquive (« dodges ») d'un héros contre une sorte d'ennemi ; « » : la
+## rencontre seulement. fighter["foes"] = {nom de base: {"hits", "dodges"}}.
+func _foe_count(hero: Dictionary, base_name: String, what: String) -> void:
+	if not hero["foes"].has(base_name):
+		hero["foes"][base_name] = {"hits": 0, "dodges": 0}
+	if what != "":
+		hero["foes"][base_name][what] += 1
 
 
 ## Une formation entre en jeu : notée pour le combat et dans le journal des héros debout.
@@ -2730,9 +2746,23 @@ func _fear_threats(fighter: Dictionary, novice_counts: bool) -> int:
 func _scare(fighter: Dictionary, base_chance: float, what: String, novice_counts := true) -> void:
 	if not fighter["fearful"] or fighter["scared"] or fighter["hp"] <= 0 or panicking(fighter):
 		return
-	var chance := GameData.fear_chance(fighter["source"], base_chance, _fear_threats(fighter, novice_counts))
+	var chance := GameData.fear_chance(fighter["source"], base_chance * _dread(fighter), _fear_threats(fighter, novice_counts))
 	if randf() < chance:
 		_frighten(fighter, what)
+
+
+## Ce que le héros sait des ennemis à portée (P2, effets des sujets) : l'appréhension du plus redouté,
+## rapportée à son danger habituel (PersonalityEngine.habit_factor : 1 pour qui n'en sait rien, moins pour
+## qui s'y est habitué, plus pour un berger face aux loups). 1 s'il n'y a aucun ennemi connu à portée.
+func _dread(fighter: Dictionary) -> float:
+	var worst := -1.0
+	for foe in _alive(enemies):
+		if fighter["pos"].distance_to(foe["pos"]) > ENGAGE_DISTANCE:
+			continue
+		var subject := PersonalityEngine.subject_for_enemy(foe["base_name"])
+		if subject != "":
+			worst = maxf(worst, PersonalityEngine.habit_factor(fighter["source"], subject))
+	return worst if worst >= 0.0 else 1.0
 
 
 ## Le héros a peur : toutes ses stats baissent (_fear) pendant FEAR_MAX_SECONDS, sauf si un allié la lève

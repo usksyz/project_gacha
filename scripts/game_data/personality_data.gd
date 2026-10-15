@@ -1135,6 +1135,11 @@ const SHARE_POINTS := 8.0           # transmission au lobby, par sujet
 const SHARE_TEACH_STEP := 0.06      # Empathie de celui qui explique
 const SHARE_LISTEN_STEP := 0.04     # Loyauté de celui qui écoute ; Méfiance (<= -50) : il n'écoute pas
 const SHARE_FEAR_PULL := 0.1        # un récit rapproche un peu l'appréhension de celle du conteur
+## Après un combat de la Tour (P2, GameData.learn_from_battle) : le danger qu'un survivant a vécu, de 0 à 100,
+## comparé à son appréhension de chaque sorte de monstre affrontée : part de la vie perdue x « hp_lost »,
+## + « agony » s'il a été à l'agonie, + « ally_fallen » par allié tombé, + « defeat » en cas de défaite.
+## « Grave » (cicatrice ou haine possibles) : agonie, ou un ami tombé. Chiffres provisoires (projet).
+const ENCOUNTER_DANGER := {"hp_lost": 60.0, "agony": 30.0, "ally_fallen": 15.0, "defeat": 20.0}
 
 
 ## Version du profil de personnalité (hero["persona"]["version"]) : à augmenter si on change ce qui est
