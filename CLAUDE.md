@@ -306,9 +306,11 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Mode dev (fiche du héros, « PERSONNALITÉ (mode dev) ») : métier, couches, talent, effort, tics, les 18 curseurs
   par famille (− / + : palier ; évo− / évo+ : 10 points d'évolution, `dev_set_axis_tier`, `dev_add_evolution`),
   composites, comportements, accès ouverts, tensions, « Nouveau tirage » (`dev_reroll_personality`).
-  Banc de test : `Godot --headless --path . -s res://tools/test_personality.gd` (tableau de la section 1 des
+  Banc de test : `Godot --headless --path <copie> -s res://tools/test_personality.gd`, dans une copie du projet
+  avec un `override.cfg` (voir P1a-bis) : même lancé avec -s, il démarre `GameData`, qui relit et réécrit la
+  sauvegarde (constaté pendant C2 ; la sauvegarde réelle n'avait rien perdu). Il vérifie le tableau de la section 1 des
   Paliers sur 40 000 héros par rareté à ±10 %, aucun héros plat, exemples Varek / Sorn / Ilda, évolution 60 à
-  100 = 225 points, fonctions d'effet, tirage diversifiant). Écarts signalés : 3★ facteur de queue 1,03 au lieu
+  100 = 225 points, fonctions d'effet, tirage diversifiant. Écarts signalés : 3★ facteur de queue 1,03 au lieu
   de 1 (sinon 1 héros sur 9 à ±90, pas 1 sur 8) ; la ligne « Secret (si généré) » ne peut pas être atteinte
   entière (à 90 : 1 sur 2,4 au lieu de 2) ; Rythme : l'onglet Axes met Aube au pôle haut, sa règle dit + = nuit
   (gardé : + Nocturne, exclusive Veilleur). Après l'ajout d'un fichier `class_name`, lancer une fois
@@ -408,6 +410,12 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   de la Tour complet (journal, carnet d'étage, bibliothèque, mémorial), enregistrer puis relire à l'identique (les
   nombres à virgule relus se comparent à 0,0001 près : arrondi connu de la sauvegarde). P1b est terminée : P2
   branchera les effets (sujets et appréhension en combat, besoins, opinions) sur ces structures.
+- Personnalité v2, étape P2 : commencée puis mise en attente (le porteur du projet a fait passer C2 avant), sur la
+  branche `p2-personnalite`, pas encore dans `main` : P2a table MODIFIERS et vrai `modifier()`, P2b stress revu
+  (sensibilité, type, accoutumance), P2c effets des sujets en combat, P2d `can_learn` et affinités (conditions du
+  catalogue réécrites sur les paliers, choix « recréer et adapter »), P2e Berserk et éveils selon le caractère. Reste
+  P2f armes de prédilection et plafonds, P2g exclusives. Coefficients du cahier suivis à la lettre (choix du porteur
+  du projet). À reprendre après le réglage de la difficulté des étages 5 et 10 (fusionner `main` dans la branche).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -447,15 +455,17 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
   de 0,1 s (`start()` puis `step()`) : grille « 3D » avec hauteurs (voir « Combat v2, étape C1 »), recherche de
   chemin, ligne de vue 3D pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
-  du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres.
+  du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres (il rappelle `start()` :
+  ne pas l'appeler sur un combat déjà démarré).
   `scripts/battle_view.gd` : classe `BattleView`, affiche le combat en direct (pions, coups,
   chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause
-  (aucun ordre pendant la pause, choix du porteur du projet).
+  (aucun ordre pendant la pause, choix du porteur du projet). La carte : vue de dessus (`arena`) ou vue
+  isométrique 3D (`arena3d`, voir « Combat v2, étape C2 ») ; le reste de l'écran est commun aux deux.
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
 - Combat v2, étape C1 (cahier, onglet « Combat v2 », sections 0, 2, 3, 8, 8 bis, 9) : la simulation devient
-  « 3D sur grille » ; pas encore de nouvelle vue (la vue isométrique, c'est C2). Chiffres provisoires.
+  « 3D sur grille » ; la vue isométrique, c'est C2 (plus bas). Chiffres provisoires.
   1. `scripts/battle_map.gd` (`BattleMap`) : hauteur de chaque case (0 à 4 niveaux) et type (`Kind` : sol,
   obstacle, toit, échelle, escalier ou pente, muret, rempart, porte, herbes hautes, tour, rocher). `Battle.map`.
   2. Verticalité (`tower.gd`, section « Verticalité ») : passages d'une case à l'autre (`BattleMap.Link` : marche,
@@ -525,6 +535,39 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   lancements en même temps, donc plus lent que seul) : étage 1 80-109 → 288-383 ms, étages 2 à 4 130-170 → 415-510 ms,
   étage 5 557-620 → 1 030-1 146 ms, étage 10 250-269 → 561-612 ms. Unités bloquées sans raison : 0 sur 5 400 combats
   avant comme après (« foule » : 10 à 226 par série de 300, surtout la queue dans les ruelles de l'étage 5).
+- Combat v2, étape C2 (cahier, onglet « Combat v2 », sections 0, 1, 2, 8) : la vue isométrique semi-3D. Aucun
+  changement de la simulation : `scripts/battle_view_3d.gd` (`BattleView3D`) ne fait que montrer `Battle`.
+  1. Carte : une colonne de blocs par case (`LEVEL` 0,8 case par niveau, socle `BASE_DEPTH`), couleur selon le type de
+  case et le gabarit (`PALETTES` : village, prairie, relief, ville, cité, arène), en MultiMesh (4 formes : boîte, sphère,
+  prisme, cylindre ; une opaque et une transparente par forme : `_fill_multimeshes`). Les décors nommés par
+  MapGenerator (`map_data["structures"]`) ont leur forme : arbres, maisons fermées à toit à deux pans, puits, rochers,
+  clocher (cloche et toit pointu), créneaux du rempart (côté ennemis), porte, marches, échelles (contre la case voisine
+  la plus haute), herbes hautes, murets. Caméra orthographique (`PITCH_DEG` 35°, `YAW_DEG` 45°, zoom = largeur vue en
+  cases). Personnages : corps (capsule, couleur de la classe, `CLASS_COLORS`), tête et anneau au sol couleur du camp
+  (vert, rouge, boss violet et plus grand), ombre au sol à la hauteur de la case ; la hauteur affichée glisse
+  (`CLIMB_DISPLAY_SPEED`) : on le voit grimper. Berserk : corps rougi ; agonie : couché, rouge qui bat ; tombé : gris.
+  2. Gestes (comme le hub 3D) : un doigt déplace la caméra, deux doigts (ou la molette) zooment, bouton « Tourner »
+  (90°, glisse en un quart de seconde). Murs et toits devant le héros choisi transparents (`_update_fade`, toutes les
+  0,15 s : colonnes plus hautes que lui, devant lui, dont l'image recouvre la sienne ; leur socle reste opaque).
+  3. Ordres : `tap` → combattant le plus proche à l'écran (`unit_at_screen`), sinon lancer de rayon sur la carte en
+  hauteur (`pick_cell` : la première colonne touchée, son dessus ou son flanc) → signal `tapped` → `BattleView._arena_tap`,
+  commun aux deux vues (mêmes ordres, mêmes boutons, pause sans ordres).
+  4. Par-dessus la 3D (overlay 2D, aux points projetés) : barres de vie, d'endurance, de mana ; étiquettes (PEUR,
+  PANIQUE, BERSERK, REFUS DE MOURIR, REPOS, MIGRAINE, AGONIE et secondes, arme plantée, tombé) ; noms ; traits des
+  coups, tirs, sorts et soins ; chiffres ; bulles « Non ! » (`BattleView.draw_bubble_on`) ; ordres en cours. Le reste de
+  l'écran (chrono et vagues, barre du boss, encart de l'équipe, journal, fenêtres système, boutons) est celui de
+  `BattleView`, inchangé.
+  5. Choix de la vue : `BattleView.use_3d` = `Settings.new_visuals` au début du combat (duels compris) ; mode dev : bouton
+  « Vue de dessus » / « Vue 3D » en haut, en plein combat.
+  6. Performance : rendu Compatibility ; réglages en constantes de `battle_view_3d.gd` (`SHADOWS`, `MSAA`,
+  `RENDER_SHRINK` : écran 3D rendu plus petit) ; mode dev : compteur d'images par seconde en haut à gauche de la vue.
+  Mesuré sur PC (Radeon RX 6700 XT, synchro écran coupée), étage 5 : vue 3D 1 680 images/s, 1,4 ms de calcul par
+  image, 94 appels de dessin ; vue de dessus 340 images/s, 3,8 ms, 247 appels (elle redessine chaque case à chaque
+  image). Pas encore mesuré sur téléphone.
+  7. Vérifications : `tools/capture_c2.tscn` (dans une copie du projet, avec une fenêtre ; voir son en-tête) :
+  « mode=capture » (images, « rot », « choisi », « archer_toit », « cache » : héros posé derrière un bâtiment),
+  « mode=ordres » (héros, toit, rue, montée par l'échelle : étages 1 et 5), « mode=identique » (le même combat sans
+  écran et à travers l'écran 3D : 10 combats des étages 1, 2, 3, 5 et 10, identiques au caractère près).
 - Phase 1.1 de la feuille de route v2 (cahier, « Améliorations combat... », lot A ; chiffres dans `tower.gd`,
   section « Combat ») :
   Endurance : `fighter["stamina"]` (`STAMINA_MAX` 100), héros seulement (l'adversaire d'un duel aussi). Se
@@ -642,7 +685,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
   pendant le combat (ce qui peut changer le résultat) ou les laisse se débrouiller ; plus tard, les
   consignes de la salle d'opération seront apprises peu à peu par les héros qui participent au
-  combat. Vue du dessus pour l'instant, vue isométrique 3D plus tard.
+  combat. Vue isométrique 3D depuis C2 (avec les nouveaux visuels), la vue du dessus reste disponible.
 - `scripts/training_screen.gd` : terrain d'entraînement (ouvert depuis le hub, bouton « Retour à la cité ») ;
   `main.gd` range les écrans du hub sans onglet dans `HUB_SCREENS`. Un héros y travaille une compétence
   (`hero["training"]`) ; une séance toutes les `TRAINING_SESSION_SECONDS` de temps réel, même jeu fermé
