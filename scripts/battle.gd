@@ -278,14 +278,14 @@ func start() -> void:
 	# Défense de la cité : le triple avertissement pèse sur les esprits dès le début.
 	if quest.get("warnings", 0) > 0:
 		for hero in heroes:
-			_stress(hero, GameData.MENTAL_LOSS_WARNINGS)
+			_stress(hero, GameData.MENTAL_LOSS_WARNINGS, "warnings")
 	# Deux hostiles dans la même équipe : l'ambiance est tendue, chacun en perd de la santé mentale.
 	for i in heroes.size():
 		for j in range(i + 1, heroes.size()):
 			if GameData.bond_level(heroes[i]["source"], heroes[j]["source"]) == GameData.BOND_HOSTILE:
 				_log("%s et %s se regardent de travers : l'ambiance est tendue." % [heroes[i]["name"], heroes[j]["name"]], "disobey")
-				_stress(heroes[i], GameData.MENTAL_LOSS_HOSTILE)
-				_stress(heroes[j], GameData.MENTAL_LOSS_HOSTILE)
+				_stress(heroes[i], GameData.MENTAL_LOSS_HOSTILE, "hostile")
+				_stress(heroes[j], GameData.MENTAL_LOSS_HOSTILE, "hostile")
 
 
 ## Fait avancer le combat d'un pas (TICK secondes).
@@ -690,6 +690,7 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 			GameData.STAMINA_NOVICE_FACTOR if is_hero and GameData.is_combat_novice(source) else 1.0),
 		"stamina_regen": PersonalityEngine.modified("stamina_regen", source, GameData.STAMINA_REGEN_PER_SECOND),
 		"stamina_floor": PersonalityEngine.modified("stamina_floor", source, 0.0),
+		"exposed": {},             # sujets de stress vécus (sang, mort, boss...) : accoutumance en fin de combat
 		"exhausted": false,        # endurance tombée à 0, pas encore remontée à STAMINA_RECOVERED
 		# Rotation (voir order_swap) : se repose à l'arrière ; vulnérable pendant l'échange jusqu'à « swap_until ».
 		"resting": false,
@@ -2010,7 +2011,7 @@ func _start_bleed(attacker: Dictionary, target: Dictionary) -> void:
 		"d'une hémorragie" if heavy else "d'un saignement", "e" if heavy else "",
 		attacker["name"], attacker["level"]]
 	if not target["has_bled"]:
-		_stress(target, GameData.MENTAL_LOSS_BLEEDING)  # voir son propre sang couler
+		_stress(target, GameData.MENTAL_LOSS_BLEEDING, "bleeding")  # voir son propre sang couler
 	target["has_bled"] = true
 	var who := _name_with_stars(target)
 	if heavy:
@@ -2303,7 +2304,7 @@ func _announce_fusion(fighter: Dictionary, text: String) -> void:
 ## Surpassement), jusqu'à la mort s'il ne s'arrête pas, et de la santé mentale (deux fois plus en Surpassement).
 func _berserk_tick(unit: Dictionary) -> void:
 	var surpass: bool = unit.get("surpass", false)
-	_stress(unit, GameData.MENTAL_BERSERK_PER_SECOND * TICK * (GameData.SURPASS_MENTAL_FACTOR if surpass else 1.0))
+	_stress(unit, GameData.MENTAL_BERSERK_PER_SECOND * TICK * (GameData.SURPASS_MENTAL_FACTOR if surpass else 1.0), "berserk")
 	if unit["hp"] <= 0:
 		return
 	var drain := GameData.SURPASS_DRAIN_PER_SECOND if surpass else GameData.BERSERK_DRAIN_PER_SECOND
@@ -2557,19 +2558,18 @@ func _die(fighter: Dictionary, cause: String) -> void:
 		fighter["panic"] = ""
 		_journal(fighter, "death", {"cause": cause})
 		_log("%s tombe au combat !" % fighter["name"])
-		# Voir un allié tomber ébranle les autres (Protecteur : deux fois plus ; un ami ou un frère d'armes :
-		# bien plus encore, voir BOND_DEATH_FACTOR).
+		# Voir un allié tomber ébranle les autres (selon leur Sensibilité et leur Empathie, et l'habitude de
+		# la mort ; un ami ou un frère d'armes : bien plus encore, voir BOND_DEATH_FACTOR, et on ne s'habitue
+		# pas à perdre un ami).
 		for ally in _alive(heroes):
-			var loss := GameData.MENTAL_LOSS_ALLY_DEATH
 			if GameData.has_trait(ally["source"], "Protecteur"):
-				loss *= GameData.PROTECTOR_DEATH_FACTOR
 				_reveal(ally, "Protecteur")
 			var bond: int = ally["bonds"].get(fighter["id"], 0)
-			loss *= GameData.BOND_DEATH_FACTOR[bond]
+			var loss: float = GameData.MENTAL_LOSS_ALLY_DEATH * GameData.BOND_DEATH_FACTOR[bond]
 			if bond >= GameData.BOND_FRIEND:
 				_log("%s voit tomber son %s %s..." % [ally["name"],
 					"frère d'armes" if bond == GameData.BOND_BROTHERS else "ami", fighter["name"]], "bleed")
-			_stress(ally, loss)
+			_stress(ally, loss, "ally_death", {"friend": bond >= GameData.BOND_FRIEND})
 			# Voir mourir quelqu'un tout près peut faire peur (voir _scare).
 			if ally["pos"].distance_to(fighter["pos"]) <= GameData.FEAR_SIGHT:
 				_scare(ally, GameData.FEAR_ALLY_DEATH_CHANCE, "la mort de %s" % fighter["name"])
@@ -2598,36 +2598,42 @@ func _mind(unit: Dictionary) -> float:
 	return GameData.mental_factor(unit["mental"]) * _fear(unit) * _tired(unit)
 
 
-## Un héros perd de la santé mentale (moins avec Calme). À 0, c'est la rupture (une fois par combat).
-func _stress(fighter: Dictionary, amount: float) -> void:
+## Un héros perd de la santé mentale : stress revu (P2, PersonalityEngine.stress : Stabilité, sensibilité au
+## type d'événement « type », accoutumance ; « context » : sujet du boss, deuil d'un ami), puis moins avec
+## Calme. Le sujet est noté (fighter["exposed"]) : s'il finit le combat sans s'effondrer, il s'y habitue un peu
+## (GameData.finish_tower_battle). À 0, c'est la rupture (une fois par combat).
+func _stress(fighter: Dictionary, amount: float, type := "", context := {}) -> void:
 	if not fighter["is_hero"] or fighter["hp"] <= 0 or amount <= 0.0 or quest.get("duel", false):
 		return  # (un duel compte à part, voir GameData.finish_duel)
+	var loss := PersonalityEngine.stress(fighter["source"], type, amount, context)
 	# Plancher : certains héros ne tombent jamais à 0 (Stabilité 90, Maîtrise 90 : pas de rupture).
 	var floor_value := PersonalityEngine.modified("mental_floor", fighter["source"], 0.0)
-	fighter["mental"] = maxf(minf(floor_value, fighter["mental"]), fighter["mental"] - amount * (1.0 - GameData.mental_guard(fighter["skills"])))
+	fighter["mental"] = maxf(minf(floor_value, fighter["mental"]), fighter["mental"] - loss * (1.0 - GameData.mental_guard(fighter["skills"])))
+	var subject := PersonalityEngine.stress_subject(type, context)
+	if subject != "" and not context.get("friend", false):
+		fighter["exposed"][subject] = true
 	if fighter["mental"] <= 0.0 and not fighter["ruptured"]:
 		_rupture(fighter)
 
 
 ## Blessure : perte proportionnelle à la vie perdue (MENTAL_LOSS_WOUNDS pour une vie entière).
 func _stress_wound(fighter: Dictionary, amount: int) -> void:
-	_stress(fighter, GameData.MENTAL_LOSS_WOUNDS * float(amount) / fighter["max_hp"])
+	_stress(fighter, GameData.MENTAL_LOSS_WOUNDS * float(amount) / fighter["max_hp"], "wounds")
 
 
-## Un boss arrive sur le terrain : chaque héros debout encaisse le choc (Courageux moitié, Lâche double).
+## Un boss arrive sur le terrain : chaque héros debout encaisse le choc, selon son Courage et ce qu'il sait
+## déjà de ce boss (accoutumance). Courageux et Lâche s'y montrent.
 func _check_boss_arrival() -> void:
 	if _boss_seen or not enemies.any(func(e): return e["boss"] and e["present"] and e["hp"] > 0):
 		return
 	_boss_seen = true
+	var boss: Dictionary = enemies.filter(func(e): return e["boss"] and e["present"] and e["hp"] > 0)[0]
+	var context := {"subject": PersonalityEngine.subject_for_enemy(boss["base_name"])}
 	for hero in _alive(heroes):
-		var loss := GameData.MENTAL_LOSS_BOSS
-		if GameData.has_trait(hero["source"], "Courageux"):
-			loss *= GameData.BRAVE_BOSS_FACTOR
-			_reveal(hero, "Courageux")
-		if GameData.has_trait(hero["source"], "Lâche"):
-			loss *= GameData.COWARD_BOSS_FACTOR
-			_reveal(hero, "Lâche")
-		_stress(hero, loss)
+		for trait_name in ["Courageux", "Lâche"]:
+			if GameData.has_trait(hero["source"], trait_name):
+				_reveal(hero, trait_name)
+		_stress(hero, GameData.MENTAL_LOSS_BOSS, "boss", context)
 		_scare(hero, GameData.FEAR_BOSS_CHANCE, "le boss")
 
 
@@ -2682,7 +2688,7 @@ func _rupture(fighter: Dictionary) -> void:
 	fighter["mind_news"].append("%s : rupture en combat, il s'est effondré." % fighter["name"])
 	for ally in _alive(heroes):
 		if ally["id"] != fighter["id"] and ally["pos"].distance_to(fighter["pos"]) <= GameData.PANIC_RADIUS:
-			_stress(ally, GameData.PANIC_SPREAD_LOSS)
+			_stress(ally, GameData.PANIC_SPREAD_LOSS, "panic_spread")
 
 
 ## En pleine panique (effondrement) ?
@@ -2739,7 +2745,7 @@ func _frighten(fighter: Dictionary, what: String) -> void:
 	fighter["fear_comfort"] = 0.0
 	_log("%s a peur." % _name_with_stars(fighter), "disobey")
 	fighter["mind_news"].append("%s a eu peur au combat (%s)." % [fighter["name"], what])
-	_stress(fighter, GameData.FEAR_MENTAL_LOSS)
+	_stress(fighter, GameData.FEAR_MENTAL_LOSS, "fear")
 	if fighter["hp"] <= 0 or panicking(fighter):
 		return  # (le stress a pu provoquer une rupture)
 	fighter["fear_until"] = time + GameData.FEAR_MAX_SECONDS

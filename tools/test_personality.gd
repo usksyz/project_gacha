@@ -21,12 +21,14 @@ func _initialize() -> void:
 			_check_structures()
 		if only_p2:
 			_check_modifiers()
+			_check_stress()
 		print("")
 		print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 		quit(1 if failures > 0 else 0)
 		return
 	_check_structures()
 	_check_modifiers()
+	_check_stress()
 	_check_distribution()
 	_check_facettes_examples()
 	_check_evolution()
@@ -335,6 +337,51 @@ func _check_modifiers() -> void:
 	_check(all_ok, "2 000 héros tirés au hasard : tous les effets dans leurs bornes")
 	_check(D.MODIFIERS.keys().all(func(effect): return D.MODIFIERS[effect]["op"] == "none" or spread[effect].size() >= 5),
 		"les effets varient d'un héros à l'autre (au moins 5 valeurs chacun)")
+
+
+## P2 : stress revu (Stabilité, sensibilité par type, accoutumance, Roc, Sang-froid).
+func _check_stress() -> void:
+	print("Stress revu (P2)")
+	var neutral := _plain_hero(920)
+	_check(D.STRESS_TYPES.keys().all(func(type): return is_equal_approx(E.stress_factor(neutral, type), 1.0)),
+		"héros neutre : chaque type de stress compte tel quel (x1)")
+	var steady := _plain_hero(921, "scribe", {"STA": 6})
+	var shaky := _plain_hero(922, "scribe", {"STA": -6})
+	_check(is_equal_approx(E.stress(steady, "", 10.0), 10.0 / 1.36) and is_equal_approx(E.stress(shaky, "", 10.0), 13.6),
+		"Stabilité +60 : stress / 1,36 (cahier) ; Vulnérabilité -60 : x1,36")
+	var rock := _plain_hero(923, "scribe", {"STA": 7})
+	_check(E.has_access(rock, "roc") and is_equal_approx(E.stress_factor(rock, ""), 1.0 / 1.42 * 0.5), "Roc (Stabilité 70) : encore divisé par deux")
+	var cold := _plain_hero(924, "scribe", {"SEN": -7})
+	_check(E.stress_factor(cold, "ally_death") == 0.0 and E.stress_factor(cold, "wounds") > 0.0, "Sang-froid (Détachement 70) : aucun stress à la mort d'un allié")
+	var kind := _plain_hero(925, "scribe", {"EMP": 6, "SEN": 4})
+	var selfish := _plain_hero(926, "scribe", {"EMP": -6, "SEN": -4})
+	_check(E.stress_factor(kind, "synthesis") > 1.0 and E.stress_factor(selfish, "synthesis") < 1.0,
+		"synthèse : l'Empathique souffre plus, l'Égocentrique moins")
+	var brave := _plain_hero(927, "scribe", {"AUD": 5, "STA": 0, "DOU": 5, "OPT": 5})
+	var coward := _plain_hero(928, "scribe", {"AUD": -5, "DOU": -5, "OPT": -5})
+	_check(E.stress_factor(brave, "boss") < 1.0 and E.stress_factor(coward, "boss") > 1.0, "boss : le Courage protège")
+	var han := {"id": 929, "name": "Han", "rarity": 3, "persona": E.secret_persona("Han", 1)}
+	_check(E.stress_factor(han, "synthesis") <= 0.15, "Han : presque insensible aux synthèses (accoutumance)")
+	# Accoutumance : chaque exposition surmontée fait baisser la peur, jamais monter.
+	var witness := _plain_hero(930)
+	var before := E.stress_factor(witness, "synthesis")
+	for i in 5:
+		E.habituate(witness, "synthesis")
+	_check(E.stress_factor(witness, "synthesis") < before, "synthèse : on s'y habitue (5 expositions : x%.2f → x%.2f)" % [before, E.stress_factor(witness, "synthesis")])
+	E.habituate(han, "synthesis")
+	_check(E.apprehension(han, "synthesis") == 0.0, "une exposition surmontée ne fait jamais monter la peur")
+	var mourner := _plain_hero(931)
+	for i in 5:
+		E.habituate(mourner, "ally_death")
+	_check(E.stress_factor(mourner, "ally_death", {"friend": true}) > E.stress_factor(mourner, "ally_death"),
+		"on s'habitue à la mort, pas à celle d'un ami")
+	var all_ok := true
+	for i in 1000:
+		var hero := {"id": i, "rarity": 1 + i % 5, "persona": E.generate(1 + i % 5, "", [], 12000 + i)}
+		for type in D.STRESS_TYPES:
+			var factor := E.stress_factor(hero, type, {"subject": "monster:chef_gobelin"})
+			all_ok = all_ok and factor >= 0.0 and factor <= D.STRESS_FACTOR_MAX
+	_check(all_ok, "1 000 héros tirés au hasard : le facteur de stress reste entre 0 et x%.0f" % D.STRESS_FACTOR_MAX)
 
 
 ## Le résultat d'un effet est-il permis : dans ses bornes, ou la valeur imposée par un accès du héros

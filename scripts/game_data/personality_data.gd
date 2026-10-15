@@ -607,6 +607,58 @@ const ACCESS_MODIFIERS := {
 
 
 # ---------------------------------------------------------------------------
+# Stress revu (document de référence, « Sensibilité au stress » ; feuille de route v2, prompt 5.1 point 4) — P2
+# ---------------------------------------------------------------------------
+# Perte de santé mentale = perte de base x Stabilité x sensibilité au type d'événement x accoutumance
+# (PersonalityEngine.stress), puis Calme (compétence, comme avant).
+# Stabilité (cahier, « 1. Paliers », section 5) : stress reçu / (1 + 0,06 x palier) pour une Stabilité
+# positive (au mieux /1,6) ; un Vulnérable (palier négatif) le reçoit x (1 + 0,06 x palier) (ajout du projet :
+# le cahier ne donne que le côté positif). Roc (Stabilité 70, cahier) : encore divisé par deux.
+const STRESS_STABILITY_STEP := 0.06
+const STRESS_ROC_FACTOR := 0.5
+## Le facteur total (Stabilité, type, accoutumance, accès) reste entre ces bornes.
+const STRESS_FACTOR_MIN := 0.05
+const STRESS_FACTOR_MAX := 3.0
+## Sensibilité par type d'événement : {axe ou « courage » (composite) : m}, facteur (1 + m)^palier par
+## entrée, le produit borné à STRESS_TYPE_MIN..MAX. « subject » : le sujet dont l'appréhension règle
+## l'accoutumance (« boss » : le sujet du boss, donné par l'appelant). Coefficients : projet (provisoires) ;
+## les axes viennent du document de référence (Témoins d'une synthèse : Empathie, Sensibilité ; Deuil :
+## Sensibilité ; peur des boss : Courage...).
+const STRESS_TYPE_MIN := 0.5
+const STRESS_TYPE_MAX := 2.0
+const STRESS_TYPES := {
+	"wounds": {"name": "Blessures", "axes": {"DOU": -0.05}},
+	"bleeding": {"name": "Voir son sang couler", "axes": {"DOU": -0.05}, "subject": "sight:blood"},
+	"boss": {"name": "Arrivée d'un boss", "axes": {"courage": -0.07}, "subject": "boss"},
+	"warnings": {"name": "Triple avertissement", "axes": {"OPT": -0.05}, "subject": "mission:defense"},
+	"ally_death": {"name": "Un allié tombe", "axes": {"SEN": 0.06, "EMP": 0.04}, "subject": "sight:death"},
+	"panic_spread": {"name": "Panique d'un allié", "axes": {"SEN": 0.05}},
+	"fear": {"name": "Prendre peur", "axes": {}},
+	"berserk": {"name": "Rage (Berserk)", "axes": {}},
+	"hostile": {"name": "Un hostile dans l'équipe", "axes": {"COL": 0.05}},
+	"defeat": {"name": "Défaite", "axes": {"OPT": -0.05, "AMB": 0.03}},
+	"synthesis": {"name": "Voir une synthèse", "axes": {"EMP": 0.05, "SEN": 0.05}, "subject": "synthesis"},
+	"left_out": {"name": "Laissé à la cité", "axes": {"AMB": 0.05}},
+	"duel_lost": {"name": "Duel perdu", "axes": {"AMB": 0.05}},
+	"challenge_refused": {"name": "Défi refusé", "axes": {"COL": 0.05}},
+}
+## Accoutumance (feuille de route v2 : « baisse à chaque exposition surmontée, sauf deuil d'un ami et peurs
+## personnelles ») : facteur = appréhension du sujet / son danger de départ (SUBJECTS), entre STRESS_HABIT_MIN
+## (Han et la synthèse : il ne réagit presque pas) et STRESS_HABIT_MAX (un berger face aux loups). Le deuil
+## d'un ami (ou frère d'armes) n'y est pas soumis (contexte « friend »).
+const STRESS_HABIT_MIN := 0.1
+const STRESS_HABIT_MAX := 2.0
+## Après une exposition surmontée (le héros ne s'est pas effondré), le danger vécu qu'on compare à son
+## attente (after_encounter, mode « watched ») : plus bas que l'appréhension de départ, donc la peur baisse.
+const HABIT_SURVIVED_DANGER := 30.0
+## Accès qui changent le stress d'un type (ou de tous : « all ») : facteur.
+const STRESS_ACCESS := {
+	"roc": {"all": STRESS_ROC_FACTOR},          # Stabilité 70 (cahier)
+	"sang_froid": {"ally_death": 0.0},          # Détachement 70 : aucun stress dû à la mort d'alliés (cahier)
+}
+
+
+# ---------------------------------------------------------------------------
 # Évolution (« 1. Paliers », section 8)
 # ---------------------------------------------------------------------------
 ## Coût en points d'évolution pour atteindre un palier (en valeur absolue) en s'éloignant de zéro.

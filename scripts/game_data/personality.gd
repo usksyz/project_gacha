@@ -53,24 +53,21 @@ const MENTAL_MALUS_MAX := 0.3
 
 ## Les traits et ce qu'ils font (affiché sur la fiche une fois révélés).
 const TRAITS := {
-	"Courageux": "Stresse moitié moins face aux boss. Prend peur moins souvent, et fuit moins quand il a peur.",
-	"Lâche": "Stresse deux fois plus face aux boss. Prend peur plus souvent, et fuit plus quand il a peur.",
+	"Courageux": "Stresse moins face aux boss. Prend peur moins souvent, et fuit moins quand il a peur.",
+	"Lâche": "Stresse plus face aux boss. Prend peur plus souvent, et fuit plus quand il a peur.",
 	"Loyal": "Obéit mieux aux ordres en combat quand sa santé mentale est basse.",
 	"Paresseux": "Refuse parfois l'entraînement ou une affectation (1 fois sur 5).",
 	"Querelleur": "Se brouille parfois avec un autre héros à la cité : ils deviennent hostiles (à régler par un duel).",
-	"Protecteur": "Couvre ses alliés en danger (sous 30 % de vie) : il va à leur côté et encaisse 30 % des coups qui leur sont destinés. Stresse deux fois plus quand un allié meurt.",
+	"Protecteur": "Couvre ses alliés en danger (sous 30 % de vie) : il va à leur côté et encaisse 30 % des coups qui leur sont destinés. Souffre plus quand un allié meurt.",
 	"Ambitieux": "Veut être dans la meilleure équipe : stresse quand un héros plus faible part dans la Tour à sa place.",
 	"Mauvais": "Baisse l'efficacité du lobby (-5 % par héros mauvais) et use ceux qui travaillent avec lui.",
 	"Meneur": "En combat, fait tourner la première ligne : il envoie lui-même à l'arrière un allié épuisé, et un allié frais prend sa place.",
 }
 ## Un trait encore caché se révèle tous les TRAIT_REVEAL_FIGHTS combats de la Tour finis.
 const TRAIT_REVEAL_FIGHTS := 5
-## Effets sur le stress : face aux boss (Courageux, Lâche), à la mort d'un allié (Protecteur),
-## et perte d'un Ambitieux quand un héros plus faible (niveau × étoiles) part dans la Tour à sa place,
-## jamais en dessous de MENTAL_LEFT_OUT_FLOOR.
-const BRAVE_BOSS_FACTOR := 0.5
-const COWARD_BOSS_FACTOR := 2.0
-const PROTECTOR_DEATH_FACTOR := 2.0
+## Le stress face aux boss et à la mort d'un allié dépend de la personnalité (stress revu, P2 :
+## PersonalityData.STRESS_TYPES ; avant : Courageux /2, Lâche x2, Protecteur x2). Ambitieux : perte quand un
+## héros plus faible (niveau × étoiles) part dans la Tour à sa place, jamais en dessous de MENTAL_LEFT_OUT_FLOOR.
 ## Protecteur en combat (battle.gd) : quand un allié à moins de PROTECT_RANGE cases passe sous
 ## PROTECT_HP de sa vie, le Protecteur va se placer près de lui ; à moins de PROTECT_GUARD_RANGE cases,
 ## il encaisse PROTECT_SHARE des coups destinés à cet allié (quitte à tomber à sa place).
@@ -139,7 +136,7 @@ func mental_left_out(fighters: Array, news: Array) -> void:
 			continue
 		if hero_power(hero) <= weakest or mental(hero) <= MENTAL_LEFT_OUT_FLOOR:
 			continue
-		mental_loss(hero, minf(MENTAL_LOSS_LEFT_OUT, mental(hero) - MENTAL_LEFT_OUT_FLOOR))
+		mental_loss(hero, minf(MENTAL_LOSS_LEFT_OUT, mental(hero) - MENTAL_LEFT_OUT_FLOOR), "left_out")
 		_trait_acts(hero, "Ambitieux", news)
 
 
@@ -158,10 +155,11 @@ func change_mental(hero: Dictionary, amount: float) -> void:
 		hero["broken"] = false
 
 
-## Fait perdre « amount » de santé mentale, moins ce que Calme protège. Renvoie la perte réelle.
-func mental_loss(hero: Dictionary, amount: float) -> float:
+## Fait perdre « amount » de santé mentale : stress revu (P2, PersonalityEngine.stress : Stabilité, sensibilité
+## au type d'événement « type », accoutumance), puis moins ce que Calme protège. Renvoie la perte réelle.
+func mental_loss(hero: Dictionary, amount: float, type := "", context := {}) -> float:
 	var before := mental(hero)
-	change_mental(hero, -amount * (1.0 - mental_guard(hero["skills"])))
+	change_mental(hero, -PersonalityEngine.stress(hero, type, amount, context) * (1.0 - mental_guard(hero["skills"])))
 	return before - mental(hero)
 
 
@@ -463,7 +461,7 @@ func drop_challenge(challenger: Dictionary, rival: Dictionary) -> void:
 func refuse_challenge(challenger: Dictionary, rival: Dictionary) -> String:
 	drop_challenge(challenger, rival)
 	var before := mental(challenger)
-	mental_loss(challenger, CHALLENGE_REFUSED_MENTAL)
+	mental_loss(challenger, CHALLENGE_REFUSED_MENTAL, "challenge_refused")
 	save_game()
 	return "Le Maître refuse le duel. %s est vexé : santé mentale %d → %d. %s et %s restent hostiles." \
 		% [challenger["name"], roundi(before), roundi(mental(challenger)), challenger["name"], rival["name"]]
@@ -581,7 +579,7 @@ func finish_duel(challenger: Dictionary, rival: Dictionary, challenger_won: bool
 	var winner_before := mental(winner)
 	var loser_before := mental(loser)
 	change_mental(winner, DUEL_WIN_MENTAL)
-	mental_loss(loser, DUEL_LOSE_MENTAL)
+	mental_loss(loser, DUEL_LOSE_MENTAL, "duel_lost")
 	set_bond_level(challenger, rival, BOND_ACQUAINTANCE)
 	var lines: Array[String] = [
 		"%s remporte le duel contre %s." % [hero_label(winner), hero_label(loser)],
@@ -767,8 +765,13 @@ func mental_after_battle(hero: Dictionary, fighter: Dictionary, victory: bool, n
 	news.append_array(fighter["mind_news"])
 	var before := mental(hero)
 	hero["mental"] = clampf(fighter["mental"], 0.0, MENTAL_MAX)  # (battle.gd a déjà appliqué le plancher)
+	# Accoutumance (P2) : ce qu'il a vécu sans s'effondrer (le sang, la mort d'un allié, un boss...) lui fait un
+	# peu moins peur la fois suivante.
+	if not fighter.get("ruptured", false):
+		for subject in fighter.get("exposed", {}):
+			PersonalityEngine.habituate_subject(hero, subject)
 	if not victory:
-		mental_loss(hero, MENTAL_LOSS_DEFEAT)
+		mental_loss(hero, MENTAL_LOSS_DEFEAT, "defeat")
 	# Fini à 0 : il reste en rupture (avant le gain de la victoire, qui ne suffit pas à le remettre d'aplomb).
 	if mental(hero) <= 0.0 and not is_broken(hero):
 		news.append(break_hero(hero))
@@ -785,12 +788,15 @@ func mental_after_battle(hero: Dictionary, fighter: Dictionary, victory: bool, n
 	return "%s : santé mentale %d → %d" % [hero["name"], roundi(before), roundi(mental(hero))]
 
 
-## Synthèse : chaque héros vivant qui reste (le renforcé compris) est ébranlé. Renvoie l'annonce.
+## Synthèse : chaque héros vivant qui reste (le renforcé compris) est ébranlé, selon son Empathie, sa Sensibilité
+## et son accoutumance (P2, type « synthesis » : Han ne réagit presque pas) ; ceux qui tiennent le coup (pas à 0)
+## s'y habituent un peu. Renvoie l'annonce (sans chiffres : chacun le vit à sa façon).
 func mental_after_synthesis(sacrifice_count: int) -> String:
 	for hero in alive_heroes():
-		mental_loss(hero, MENTAL_LOSS_SYNTHESIS * sacrifice_count)
-	return "Tes héros ont vu la synthèse : leur santé mentale baisse (-%d, moins avec Calme)." \
-		% roundi(MENTAL_LOSS_SYNTHESIS * sacrifice_count)
+		mental_loss(hero, MENTAL_LOSS_SYNTHESIS * sacrifice_count, "synthesis")
+		if mental(hero) > 0.0:
+			PersonalityEngine.habituate(hero, "synthesis")
+	return "Tes héros ont vu la synthèse : leur santé mentale baisse (chacun le vit à sa façon ; moins avec Calme)."
 
 
 ## Remontée au lobby : depuis la dernière fois, chaque héros à la cité regagne de la santé mentale

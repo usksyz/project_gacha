@@ -1294,6 +1294,70 @@ static func modifier_accesses(effect: String, hero: Dictionary) -> Array:
 	return accesses(hero).filter(func(access_id): return D.ACCESS_MODIFIERS.get(access_id, {}).has(effect))
 
 
+## Stress revu (P2) : la perte de santé mentale réelle d'un événement de type « type »
+## (PersonalityData.STRESS_TYPES ; "" = sans type : seule la Stabilité compte), avant Calme.
+## « context » : {"subject": sujet du boss (type « boss »), "friend": vrai pour le deuil d'un ami (pas
+## d'accoutumance)}.
+static func stress(hero: Dictionary, type: String, amount: float, context := {}) -> float:
+	return amount * stress_factor(hero, type, context)
+
+
+## Le facteur du stress : Stabilité x sensibilité au type x accoutumance (borné), puis les accès (Roc, Sang-froid).
+static func stress_factor(hero: Dictionary, type: String, context := {}) -> float:
+	if not hero.has("persona"):
+		return 1.0
+	var sta := tier(hero, "STA")
+	var factor := effect_div(1.0, D.STRESS_STABILITY_STEP, sta) if sta >= 0 else 1.0 + D.STRESS_STABILITY_STEP * -sta
+	factor *= stress_type_factor(hero, type)
+	var subject := stress_subject(type, context)
+	if subject != "" and not context.get("friend", false):
+		factor *= habit_factor(hero, subject)
+	factor = clampf(factor, D.STRESS_FACTOR_MIN, D.STRESS_FACTOR_MAX)
+	for access_id in accesses(hero):
+		var rules: Dictionary = D.STRESS_ACCESS.get(access_id, {})
+		factor *= float(rules.get(type, 1.0)) * float(rules.get("all", 1.0))
+	return factor
+
+
+## Sensibilité du héros à ce type d'événement (1,0 : comme tout le monde).
+static func stress_type_factor(hero: Dictionary, type: String) -> float:
+	var factor := 1.0
+	for key in D.STRESS_TYPES.get(type, {}).get("axes", {}):
+		var p := roundi(composite(hero, key) / 10.0) if D.COMPOSITES.has(key) else tier(hero, key)
+		factor *= pow(1.0 + float(D.STRESS_TYPES[type]["axes"][key]), p)
+	return clampf(factor, D.STRESS_TYPE_MIN, D.STRESS_TYPE_MAX)
+
+
+## Le sujet dont l'accoutumance compte pour ce type (« » si aucun).
+static func stress_subject(type: String, context := {}) -> String:
+	var subject: String = D.STRESS_TYPES.get(type, {}).get("subject", "")
+	if subject == "boss":
+		return context.get("subject", "")
+	return subject
+
+
+## Accoutumance : appréhension du sujet / son danger de départ, bornée (Han et la synthèse : 0,1).
+static func habit_factor(hero: Dictionary, subject: String) -> float:
+	var danger := maxf(1.0, float(D.SUBJECTS.get(subject, {}).get("danger", 50)))
+	return clampf(apprehension(hero, subject) / danger, D.STRESS_HABIT_MIN, D.STRESS_HABIT_MAX)
+
+
+## Une exposition surmontée (le héros ne s'est pas effondré) : l'appréhension du sujet baisse un peu
+## (after_encounter, comme une rencontre regardée). Ne fait rien pour un héros sans profil.
+## Le danger vécu ne dépasse jamais l'attente : une exposition surmontée ne fait jamais monter la peur.
+static func habituate(hero: Dictionary, type: String, context := {}) -> void:
+	var subject := stress_subject(type, context)
+	if subject != "" and not context.get("friend", false) and hero.has("persona"):
+		habituate_subject(hero, subject)
+
+
+static func habituate_subject(hero: Dictionary, subject: String) -> void:
+	if not hero.has("persona"):
+		return
+	var danger := minf(D.HABIT_SURVIVED_DANGER, apprehension(hero, subject))
+	after_encounter(hero, subject, {"danger": danger, "mode": "watched"})
+
+
 ## Une ligne lisible par effet (mode dev) : « Chance d'avoir peur : -9 points (Courage +3) », ou
 ## « x1,12 (Constitution +4) », plus les accès qui s'en mêlent ; les effets neutres sont omis.
 static func modifier_lines(hero: Dictionary) -> Array[String]:
@@ -1312,6 +1376,14 @@ static func modifier_lines(hero: Dictionary) -> Array[String]:
 			parts.append(access_text(access_id).get_slice(" —", 0))
 		if not parts.is_empty():
 			lines.append("%s : %s" % [data["name"], ", ".join(parts)])
+	# Stress revu : le facteur de chaque type d'événement (Stabilité, sensibilité, accoutumance, accès).
+	var stress_parts: Array[String] = []
+	for type in D.STRESS_TYPES:
+		var factor := stress_factor(hero, type)
+		if not is_equal_approx(factor, 1.0):
+			stress_parts.append("%s x%.2f" % [D.STRESS_TYPES[type]["name"], factor])
+	if not stress_parts.is_empty():
+		lines.append("Stress reçu : " + ", ".join(stress_parts))
 	return lines
 
 
