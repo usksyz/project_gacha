@@ -15,6 +15,13 @@ héros uniques qui peuvent mourir définitivement, Tour à étages, gestion de b
 - Tous les chiffres sont provisoires et rangés dans `scripts/game_data/`.
 - Chaque étape : un commit par point, sauvegarde compatible avec les parties existantes, tests en mode
   normal (pas seulement en mode dev), CLAUDE.md mis à jour, liste de ce qu'il faut tester.
+- Tests et sauvegarde locale (règle du porteur du projet, pour toutes les sessions ; remplace l'ancienne règle
+  « ne jamais modifier la vraie sauvegarde ») : Claude peut modifier ou réinitialiser la sauvegarde locale
+  (`user://sauvegarde.cfg`, sur le PC : `%APPDATA%\Godot\app_userdata\Projet Gacha`) si c'est utile pour tester.
+  Avant la première modification d'une session, une copie datée de l'ancienne (sauvegarde et paramètres) dans un
+  dossier à part (`%APPDATA%\Godot\app_userdata\Projet Gacha - copies\<date>_<étape>`). Les simulations
+  (`sim_tower`, bancs de mesure) restent dans une copie du projet (worktree + `override.cfg`, voir P1a-bis), pour
+  ne pas fausser les mesures.
 
 ## Cahier des charges
 Le cahier des charges est un document Claude Docs que le porteur du projet complète au fil du temps :
@@ -93,12 +100,21 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - Tutoriel obligatoire d'une partie neuve (demande du porteur du projet ; cahier, « Tutoriel et interface » :
   premier combat puis la synthèse, « dont la porte s'ouvre à ce moment ») : `GameData.tutorial_step`
   (`game_state.gd`, sauvegardé « tutoriel » ; absent d'une ancienne sauvegarde = pas de tutoriel), étapes
-  `TUTORIAL_STEPS` : invocation, equipe, etage, synthese, puis "" (fini). On commence avec exactement l'or d'une
-  invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes 3000 comme avant). 1. Seule la normale x10 est
-  permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
-  (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Composer une équipe
-  (« Terminé » avec au moins un héros ; « Entrer dans la Tour » fermé avant). 3. Gagner l'étage 1 (défaite :
-  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 4. Retour à
+  `TUTORIAL_STEPS` : invocation, armes, equipe, etage, synthese, puis "" (fini). On commence avec exactement l'or
+  d'une invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes 3000 comme avant). 1. Seule la normale x10
+  est permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
+  (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Armes (étape T1, demande
+  du porteur du projet) : fenêtre « tuto_armes » (les héros partent avec les armes de l'arsenal, il faut en
+  invoquer) ; en la fermant, le hub, où une flèche « Touche ici » montre l'armurerie (`HubCity3D.TUTORIAL_POINTS`,
+  `HubScreen.TUTORIAL_PLACES` : seul ce lieu s'ouvre) ; à l'armurerie, seul le tirage x10 est permis
+  (`weapon_draw_allowed`), et il est offert (`weapon_draw_cost` = 0 ; choisi plutôt que 50 000 or de plus au
+  départ : rien en trop, et une partie déjà en cours n'a pas besoin d'or). Il donne au moins une épée, un bouclier
+  et un arc (`TUTORIAL_WEAPON_TYPES`, `items.gd`), compte pour le terrain d'entraînement (10 armes : fenêtre
+  « Construction terminée », pas d'étape en plus ; son animation dans la cité passe avant celle de la chambre de
+  synthèse, à l'étape 5). Puis fenêtre « tuto_arsenal » (les héros prennent eux-mêmes une arme en partant,
+  bouton « Auto ») et celle de l'étape suivante. Forge fermée pendant le tutoriel. 3. Composer une équipe
+  (« Terminé » avec au moins un héros ; « Entrer dans la Tour » fermé avant). 4. Gagner l'étage 1 (défaite :
+  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 5. Retour à
   la cité (« Continuer » : `DungeonsScreen.navigate`) : la chambre se construit sous les yeux du Maître
   (demande du porteur du projet : `HubCity3D` la laisse hors de la cité tant que « tuto_synthese » n'est pas vu,
   puis joue l'animation ; signal `construction_finished` → fenêtre de l'étape, `hub_screen.gd`), une flèche
@@ -106,9 +122,15 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   hub et les héros ne répondent pas). Ancien plan 2D : la fenêtre tout de suite. Puis une synthèse ; moins de
   2 héros vivants : le tutoriel s'arrête (`end_tutorial`).
   Passage d'étape : `advance_tutorial(étape)` (signal `tutorial_changed`). `main.gd` : bandeau en haut
-  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS` ; synthèse : le hub),
-  reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), hub en fermant
-  « tuto_fin ». Mode dev : « Passer le tutoriel » (`dev_skip_tutorial`).
+  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS` ; armes et synthèse : le
+  hub), reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), hub en fermant
+  « tuto_armes » et « tuto_fin ». Mode dev : « Passer le tutoriel » (`dev_skip_tutorial` : rien n'est donné, ni
+  le tirage offert). Sauvegarde version 7 : une partie arrêtée à l'étape « equipe » sans équipe composée revient
+  à l'étape « armes » ; une équipe composée, ou une étape plus loin : l'étape est sautée (`load_game`).
+  Vérification : `tools/test_tutoriel.tscn` (avec une fenêtre ; voir son en-tête) joue une partie neuve en mode
+  normal à travers les écrans (invocation, flèche et armurerie touchées dans la cité 3D, tirage, équipe, étage 1
+  jusqu'à la victoire avec les héros armés, synthèse), la reprise au lancement et les anciennes sauvegardes, avec
+  des captures ; il recommence la partie (voir « Tests et sauvegarde locale »).
 - Police : la police de Godot n'a pas ★ ← → ♥ ♡ ◆ ▶ ∞ ✓, et sur le web aucune police de l'appareil ne prend
   le relais (carrés vides sur le téléphone). `main.gd` (`_add_symbol_font`) ajoute DejaVu Sans
   (`assets/fonts`, licence libre) en secours de la police par défaut. Un nouveau symbole : vérifier qu'il
@@ -704,7 +726,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   après chaque changement de l'arsenal ou des héros) ; si le Maître choisit (`hero["manual_gear"]`),
   le héros garde ses armes en permanence jusqu'au bouton « Auto ».
   Choix du porteur du projet : quand un héros meurt, ses armes sont perdues avec lui.
-  Le terrain d'entraînement ne s'ouvre qu'après 10 armes tirées (`TRAINING_UNLOCK_DRAWS`, `weapon_draws`).
+  Le terrain d'entraînement ne s'ouvre qu'après 10 armes tirées (`TRAINING_UNLOCK_DRAWS`, `weapon_draws`) :
+  dans une partie neuve, c'est le tirage x10 offert du tutoriel (étape « armes »).
   En combat, l'arme d'un héros décide de sa portée (un héros avec un arc tire), le grade ajoute de
   l'attaque, le bouclier de la défense ; les maîtrises d'arme ne comptent qu'avec l'arme qui va avec.
 - Progrès des compétences : `hero["skill_progress"]` (points par compétence) et `GameData.add_skill_progress()`
