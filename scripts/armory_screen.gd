@@ -27,6 +27,9 @@ var filter: HeroFilter
 const MAX_ROWS := 30
 ## Type d'arme montré dans la fenêtre de choix ("" = tous).
 var picker_type := ""
+## Boutons de tirage, par nombre d'armes (1, 10), et bouton de la forge : fermés pendant le tutoriel.
+var draw_buttons := {}
+var forge_button: Button
 
 
 func _ready() -> void:
@@ -44,22 +47,22 @@ func _ready() -> void:
 	top.add_theme_constant_override("separation", 12)
 	layout.add_child(top)
 	var back := UI.make_button("← Retour à la cité", func(): navigate.emit("hub"), 22)
-	var forge := UI.make_button("Forge (annexe) →", func(): navigate.emit("forge"), 22)
-	for button in [back, forge]:
+	forge_button = UI.make_button("Forge (annexe) →", func(): navigate.emit("forge"), 22)
+	for button in [back, forge_button]:
 		button.custom_minimum_size.y = 64
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		top.add_child(button)
 
-	# Tirage x1 et x10.
+	# Tirage x1 et x10 (textes et accès selon le tutoriel : _refresh_draw_buttons).
 	var draw_row := HBoxContainer.new()
 	draw_row.add_theme_constant_override("separation", 12)
 	layout.add_child(draw_row)
 	for count in [1, 10]:
-		var button := UI.make_button("Tirage x%d\n%d or" % [count, GameData.WEAPON_DRAW_COST * count],
-			func(): _draw_weapons(count), 24)
+		var button := UI.make_button("", func(): _draw_weapons(count), 24)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.custom_minimum_size.y = 100
 		draw_row.add_child(button)
+		draw_buttons[count] = button
 	info_label = UI.make_label("", 20)
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_label.modulate = Color(1, 1, 1, 0.75)
@@ -99,15 +102,29 @@ func on_shown() -> void:
 	for child in result_box.get_children():
 		child.queue_free()
 	info_label.text = "Les héros prennent les meilleures armes de l'arsenal en partant en mission, et les reposent au retour."
+	if GameData.tutorial_step == "armes":
+		info_label.text = "Tutoriel : touche « Tirage x%d », offert par le Système." % GameData.TUTORIAL_WEAPON_COUNT
+	_refresh_draw_buttons()
 	_refresh()
 
 
+## Tutoriel (étape « armes ») : seul le tirage x10 est permis, et il est offert ; la forge reste fermée.
+func _refresh_draw_buttons() -> void:
+	for count in draw_buttons:
+		var button: Button = draw_buttons[count]
+		var cost := GameData.weapon_draw_cost(count)
+		button.text = "Tirage x%d\n%s" % [count, "Offert" if cost == 0 else "%d or" % cost]
+		button.disabled = not GameData.weapon_draw_allowed(count)
+	forge_button.disabled = GameData.tutorial_step != ""
+
+
 func _draw_weapons(count: int) -> void:
+	var tutorial := GameData.tutorial_step == "armes"
 	var weapons := GameData.draw_weapons(count)
 	for child in result_box.get_children():
 		child.queue_free()
 	if weapons.is_empty():
-		info_label.text = "Pas assez d'or : il faut %d or." % (GameData.WEAPON_DRAW_COST * count)
+		info_label.text = "Pas assez d'or : il faut %d or." % GameData.weapon_draw_cost(count)
 		return
 	var lines := []
 	for weapon in weapons:
@@ -115,6 +132,11 @@ func _draw_weapons(count: int) -> void:
 	result_box.add_child(UI.make_system_window("Tirage d'armes", lines))
 	# (L'ouverture du terrain d'entraînement est annoncée par main.gd : GameData.facility_completed.)
 	info_label.text = "Les nouvelles armes sont dans l'arsenal : les héros les prendront en partant en mission."
+	# Tutoriel : la fenêtre de fin de l'étape (les héros se servent eux-mêmes), puis celle de l'étape suivante.
+	if tutorial:
+		GameData.show_tip("tuto_arsenal")
+		GameData.show_tutorial_tip()
+	_refresh_draw_buttons()
 	_refresh()
 
 

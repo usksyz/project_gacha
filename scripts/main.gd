@@ -36,8 +36,10 @@ var tip_queue: Array[String] = []
 ## Noms des fenêtres de main.gd : un conseil attend qu'elles soient fermées.
 const WINDOW_NAMES := ["Tip", "RelationNews", "Challenge", "Facility", "Absence"]
 ## Tutoriel (voir GameData, game_state.gd) : l'écran de chaque étape. Son onglet est le seul permis.
-## Synthèse : le hub, où la chambre se construit sous les yeux du Maître, qui la touche pour y entrer.
-const TUTORIAL_SCREENS := {"invocation": "summon", "equipe": "dungeons", "etage": "dungeons", "synthese": "hub"}
+## Armes : le hub, où une flèche montre l'armurerie. Synthèse : le hub, où la chambre se construit sous les
+## yeux du Maître, qui la touche pour y entrer.
+const TUTORIAL_SCREENS := {"invocation": "summon", "armes": "hub", "equipe": "dungeons", "etage": "dungeons",
+	"synthese": "hub"}
 var tutorial_banner: PanelContainer
 var tutorial_label: Label
 
@@ -199,8 +201,8 @@ func _show_next_tip() -> void:
 		_close_window(overlay)
 		HubCity3D.paused = has_node("Facility")
 		GameData.mark_tip_seen(tip_id)
-		# Tutoriel fini : on découvre la cité.
-		if tip_id == "tuto_fin":
+		# Tutoriel fini : on découvre la cité. Étape « armes » : la cité, où la flèche montre l'armurerie.
+		if tip_id == "tuto_fin" or (tip_id == "tuto_armes" and GameData.tutorial_step == "armes"):
 			show_screen("hub")
 		_show_next_tip(), 24)
 	ok.custom_minimum_size.y = 80

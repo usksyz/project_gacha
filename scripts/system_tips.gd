@@ -11,7 +11,8 @@ static func title(tip_id: String) -> String:
 	if tip_id == "tuto_fin":
 		return "Tutoriel terminé"
 	if tip_id.begins_with("tuto_"):
-		var step := GameData.TUTORIAL_STEPS.find(tip_id.trim_prefix("tuto_")) + 1
+		var step_id := "armes" if tip_id == "tuto_arsenal" else tip_id.trim_prefix("tuto_")  # (fin de l'étape « armes »)
+		var step := GameData.TUTORIAL_STEPS.find(step_id) + 1
 		return "Tutoriel — étape %d / %d" % [step, GameData.TUTORIAL_STEPS.size()]
 	return "Conseil"
 
@@ -22,6 +23,8 @@ static func tutorial_goal(step: String) -> String:
 	match step:
 		"invocation":
 			return number + "invoque %d héros (invocation normale x%d)." % [GameData.TUTORIAL_SUMMON_COUNT, GameData.TUTORIAL_SUMMON_COUNT]
+		"armes":
+			return number + "touche l'Armurerie dans la cité, puis « Tirage x%d » (offert)." % GameData.TUTORIAL_WEAPON_COUNT
 		"equipe":
 			return number + "Donjons > « Composer les équipes », place des héros, puis « Terminé »."
 		"etage":
@@ -47,6 +50,18 @@ static func lines(tip_id: String) -> Array:
 					UI.format_number(GameData.SUMMON_TYPES["normal"]["cost"] * GameData.TUTORIAL_SUMMON_COUNT), GameData.TUTORIAL_SUMMON_COUNT],
 				"Touchez l'invocation normale x%d." % GameData.TUTORIAL_SUMMON_COUNT,
 				"Pour cette première fois, un héros 3 étoiles vous est garanti.",
+			]
+		"tuto_armes":
+			return [
+				"Vos héros n'ont que de vieilles armes de départ. Ils partent au combat avec les armes de l'arsenal : il faut en invoquer.",
+				"Touchez l'Armurerie dans la cité (« Touche ici »), puis le tirage x%d." % GameData.TUTORIAL_WEAPON_COUNT,
+				"Le Système vous offre ce premier tirage. Une épée, un bouclier et un arc vous sont garantis.",
+			]
+		"tuto_arsenal":
+			return [
+				"Les nouvelles armes sont rangées dans l'arsenal.",
+				"Vos héros les prennent eux-mêmes en partant en mission : chacun choisit la meilleure qui convient à sa classe, et la repose au retour.",
+				"Vous pouvez aussi choisir l'arme d'un héros (boutons « Arme » et « Bouclier ») : il la garde alors en permanence, jusqu'au bouton « Auto ».",
 			]
 		"tuto_equipe":
 			return [
@@ -78,8 +93,7 @@ static func lines(tip_id: String) -> Array:
 				"Les étoiles (1 à 5) disent sa rareté et son niveau maximum. Un héros d'une étoile peut cacher un talent : ne le jugez pas trop vite.",
 				"Son caractère (« ? ») se révèle avec le temps. Touchez sa carte dans « Collection » pour voir sa fiche.",
 				"Vous pouvez avoir %d héros vivants au plus." % GameData.HERO_LIMIT,
-				"Ensuite : « Donjons », puis « Composer les équipes ».",
-			]
+			] + ([] if GameData.tutorial_step != "" else ["Ensuite : « Donjons », puis « Composer les équipes »."])
 		"equipe":
 			return [
 				"Une équipe compte de 1 à %d héros. Vous pouvez en préparer %d à l'avance." % [GameData.TEAM_SIZE, GameData.TEAM_COUNT],
