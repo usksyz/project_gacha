@@ -26,7 +26,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     des derniers combats (hero["recent_battles"]), bibliothèque et mémorial du Maître (absents = vides).
 ## 6 : Combat v2, C1 : étages de la Tour figés (« etages » : carte et ennemis, voir floor_layout ; absents =
 ##     générés au prochain passage), carte du combat en cours (pending_battle["map"]).
-const SAVE_VERSION := 6
+## 7 : tutoriel, étape « armes » (tirage d'armes offert) entre l'invocation et l'équipe : une partie arrêtée à
+##     l'étape « equipe » sans équipe composée y revient ; plus loin, elle la saute.
+const SAVE_VERSION := 7
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -116,6 +118,10 @@ func load_game() -> bool:
 	# Sauvegarde d'avant la version 2 : les héros secrets y étaient immortels, ils deviennent mortels
 	# (la case « Immortel » du mode dev part décochée).
 	var version: int = file.get_value("partie", "version", 1)
+	# Tutoriel d'avant l'étape « armes » (version 7) : arrêté à l'équipe, pas encore composée, il passe d'abord
+	# par l'armurerie ; une équipe déjà composée (ou une étape plus loin) saute l'étape.
+	if version < 7 and tutorial_step == "equipe" and teams.all(func(team): return team.is_empty()):
+		tutorial_step = "armes"
 	for hero in roster:
 		if version < 2 and hero.get("secret", false):
 			hero["immortal"] = false

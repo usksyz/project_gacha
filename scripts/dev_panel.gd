@@ -72,7 +72,7 @@ func _ready() -> void:
 		if GameData.tutorial_step == "":
 			return "Pas de tutoriel en cours."
 		GameData.dev_skip_tutorial()
-		return "Tutoriel passé : tous les onglets sont ouverts."]])
+		return "Tutoriel passé : tous les onglets sont ouverts (rien n'est donné : ni héros, ni le tirage d'armes offert)."]])
 
 	_add_section(content, "Tour")
 	floor_label = UI.make_label("", 22)
