@@ -438,6 +438,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   catalogue réécrites sur les paliers, choix « recréer et adapter »), P2e Berserk et éveils selon le caractère. Reste
   P2f armes de prédilection et plafonds, P2g exclusives. Coefficients du cahier suivis à la lettre (choix du porteur
   du projet). À reprendre après le réglage de la difficulté des étages 5 et 10 (fusionner `main` dans la branche).
+  À la fusion : rapprocher `TacticsData.PERSONALITY` (IA tactique, C3 : poids et seuils lus par `axis` et
+  `composite`, hors de `modifier()`) de la table MODIFIERS. La branche est sur GitHub (`origin/p2-personnalite`).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -590,6 +592,86 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   « mode=capture » (images, « rot », « choisi », « archer_toit », « cache » : héros posé derrière un bâtiment),
   « mode=ordres » (héros, toit, rue, montée par l'échelle : étages 1 et 5), « mode=identique » (le même combat sans
   écran et à travers l'écran 3D : 10 combats des étages 1, 2, 3, 5 et 10, identiques au caractère près).
+  Depuis C3 : « vue=dessus » (la capture dans la vue de dessus).
+- Combat v2, étape C3 (cahier, onglet « Combat v2 », section 4 « La perception en bâtonnets », section « L'IA
+  tactique des héros » ; chiffres provisoires) : perception et IA tactique des héros. Aucun rééquilibrage.
+  Partie A, perception (`scripts/battle_perception.gd`, `BattlePerception`, `Battle.perception` ; chiffres dans
+  `tower.gd`, section « Perception en bâtonnets ») :
+  1. Bâtonnets : chaque combattant lance `SIGHT_RAYS` (9) rayons sur `SIGHT_ANGLE` (120°) vers là où il regarde
+  (`fighter["facing"]` : la menace connue la plus proche à moins de 3 cases, sinon sa cible, sinon le sens de sa
+  marche), `SIGHT_LENGTH` (6) cases au centre, x`SIGHT_SIDE_FACTOR` (0,6) sur les côtés. Chaque rayon parcourt les
+  cases qu'il traverse et s'arrête sur un relief plus haut que ses yeux ou un obstacle ; un ennemi à moins d'une
+  demi-case d'un rayon, et que la ligne de vue 3D de C1 laisse voir, est vu (`fighter["sees"]`). Ouïe tout autour :
+  `HEARING_RADIUS` (2), `HEARING_BEAST_RADIUS` (3,5) pour les bêtes (`EMBED_BEASTS`) (`fighter["hears"]`). Mémoire :
+  dernière position connue de chaque ennemi (`fighter["knows"]`) pendant `SIGHT_MEMORY` (5 s, + Maîtrise de soi et
+  Intelligence, 3 à 8 s). Mise à jour toutes les `PERCEPTION_INTERVAL` (0,2 s). Hauteur +1 case par niveau ; herbes
+  hautes vues du sol : chaque case coûte `SIGHT_GRASS_COST` (2) ; nuit (quête « night », aucune pour l'instant) :
+  x0,5 sauf Nocturne (Rythme >= 50) ; peur, panique, Berserk : cône x0,5 (tunnel) ; Acuité (lue par
+  `PersonalityEngine.axis`) : +1 rayon tous les 2 paliers, longueur et ouïe +3 % par palier ; Prudence ou Méfiance
+  (Audace ou Loyauté <= -30) : un regard en arrière toutes les 3 s ; monstres : longueur x0,8. Aucun tirage au hasard.
+  2. Effets : on ne cible que ce que l'on connaît (`Battle._think` : liste `known` ; les ordres du Maître visent
+  n'importe qui). Sans ennemi connu, un héros garde son poste et un monstre avance vers les héros sans frapper
+  (`_unaware`). Une cible connue de mémoire seulement : il va voir à sa dernière place, puis l'oublie. Attaque
+  surprise (`_surprise`) : l'attaquant n'est pas dans les rayons de la cible (l'entendre ne suffit pas) : ni esquive
+  ni parade (Mouvement souple, bouclier), +`SURPRISE_CRIT_BONUS` (15 %) de critique (Guerrier et Assassin, qui n'en
+  ont pas d'ordinaire, aussi), « surprise ! » sur le chiffre ; pas en duel ; compté dans `Battle.surprises` et
+  `journal_counts["surprised"]`. Partage : ce que voient les alliés à moins de `VOICE_RANGE` (4) cases ; un Meneur
+  debout (ni peur ni panique) partage avec toute l'équipe. Les monstres ont la même perception (plus courte) et
+  partagent à portée de voix. La « vue de l'ennemi » qui peut faire peur : le voir ou l'entendre soi-même.
+  3. Œil de faucon devient aussi actif : rayons x2, cône x0,8 pendant `HAWK_EYE_SECONDS` (15 s), puis
+  `HAWK_EYE_COOLDOWN` (30 s) ; un tireur l'active de lui-même quand il ne voit aucun ennemi de ses propres yeux
+  (`hawk_eye_think`), ou sur ordre (bouton « Œil de faucon » de `BattleView`, `order_hawk_eye`, peut être refusé).
+  Ses effets passifs restent. « Sixième sens » (`GameData.SKILLS`) : 3 rayons de 2,5 cases vers l'arrière ; pas
+  encore de moyen de l'apprendre (mode dev > fiche > donner une compétence).
+  4. Affichage (`BattleView._draw_rays`, `BattleView3D._draw_rays`) : en touchant un héros, ses rayons en traits fins
+  avec un point lumineux au bout (à hauteur des yeux en 3D) ; les ennemis qu'aucun héros ne voit ni n'entend sont
+  grisés (`BattleView.unseen`), pas de brouillard total.
+  Partie B, IA tactique (`scripts/battle_tactics.gd`, `BattleTactics`, `Battle.tactics` ; données à part dans
+  `scripts/game_data/tactics_data.gd`, `TacticsData`) :
+  5. Toutes les `PLAN_SECONDS` (0,5 s), chaque héros libre (sans ordre, ni secours, ni repos, ni panique, pas en
+  duel) fait un plan (`fighter["tactic"]` : attitude, case, cible, 3 raisons) contre les seuls ennemis qu'il
+  connaît. Il étudie les cases à pied autour de lui (`SEARCH_RADIUS` 5, les plus proches d'abord) et les note
+  (`CRITERIA`, poids `BASE_WEIGHTS`) : hauteur (x2 pour un tireur), bonne distance de tir, alliés proches, à
+  découvert sous les tirs (-), à couvert, trop d'ennemis au contact (-), isolé (-), bord d'une chute (-), passage
+  étroit devant, dos au mur ; moins le trajet ; bonus pour garder sa case.
+  6. Attitudes (`_plan`) : décrocher (blessé sous `retreat_hp` et au moins 2 ennemis au contact : vers les alliés,
+  loin des ennemis) ; garder ses distances (tireur, un ennemi au corps à corps à moins de 2,5 cases) ; colère (un
+  Colérique, Colère >= 50, charge l'ennemi qui vient de blesser un allié) ; se couvrir (sous le feu d'un tireur
+  connu : une case abritée qui le rapproche du tireur, `cover_max` 3 s au plus ; sans abri, ou ensuite, il va
+  chercher le tireur) ; protéger (bouclier ou Empathie >= 30 : entre un allié sous 35 % de vie et l'ennemi) ;
+  engager (cible à portée, affaiblie, tout près, allié au contact à aider, cible qui ne vient pas, rien fait depuis
+  `wait_max`) ; attendre (sinon, à la meilleure case proche, seulement si elle vaut au moins `WAIT_ADVANTAGE` points
+  de plus que rester là ; sinon il engage). Un héros qui pense à l'encerclement ne va pas seul vers une cible
+  entourée de `engage_crowd` ennemis : il les attend. Concentrer (`_pick_target`) : la cible que frappent les
+  alliés, la plus blessée, le tireur qui fait mal ; l'Assassin vise toujours le plus faible. Un ennemi à sa portée :
+  il se bat là. Peur : il se bat (ou fuit, règles d'avant), mais choisit la case la plus sûre (`FEAR_WEIGHTS`).
+  7. Intelligence (stat) : nombre de critères vus (dans l'ordre de `CRITERIA` : peu intelligent, hauteur et distance
+  seulement, et la cible la plus proche) et de cases étudiées (`criteria_count`, `cells_count` : Intelligence 10 :
+  3 critères, 14 cases ; 15 : 6, 29 ; 21 : 10, 47) ; Lucidité (Foi négative) et Acuité : un cran de plus tous les
+  4 paliers. Personnalité (`TacticsData.PERSONALITY`, lue par `PersonalityEngine.axis` ou `composite`, sans passer
+  par `modifier()` : petite table à part, à rapprocher des MODIFIERS de P2 à la fusion) : Audace / Prudence,
+  Impulsivité / Maîtrise de soi (portée d'engagement, attente, ennemis acceptés autour d'une cible), Courage,
+  Empathie ; Colère, peur (plus haut). Poids et seuils rangés PAR HÉROS et PAR CONTEXTE (« type de quête | famille
+  d'ennemis | gabarit », `BattleTactics.context_of`, `Battle.tactics_context`) dans `hero["tactics"]` (sauvegardé :
+  {"version", "contexts": {contexte: {"weights", "thresholds", "start_weights", "start_thresholds", "fights"}}}),
+  créés au premier combat dans ce contexte (`BattleTactics.profile`) ; ils ne changent pas encore (C3b : bornés
+  entre `LEARN_MIN` et `LEARN_MAX` fois la valeur de départ). Sauvegarde version 8 (rien à adapter).
+  8. Ordres du Maître : arrivé là où le Maître l'a envoyé (`order["by"] == "maitre"`), le héros tient sa position
+  (`fighter["held"]`, `BattleTactics.hold` : il frappe ce qui entre à sa portée, revient à son poste s'il en est
+  poussé) jusqu'à un nouvel ordre ou un danger grave (sous `danger_hp` 30 % de vie avec 2 ennemis au contact). Le
+  Meneur garde son placement de départ (P5 + toits) : un tireur posté sur un toit le tient ; les autres gardent leur
+  place (`leader_post`) jusqu'à ce qu'un ennemi connu soit à moins de 7 cases, puis l'IA.
+  9. Mode dev : en touchant un héros, le bandeau dit son attitude, sa cible et ses 3 raisons (`BattleView.tactic_text`,
+  aussi en pause), et sa case choisie est encadrée en rose (carré dans la vue de dessus, losange en 3D).
+  `Battle.tactical_ai` faux : l'ancien comportement (tous foncent) ; `Battle.perception_on` faux : tout le monde sait
+  tout (avant C3). Simulateur `sim_tower` : options `ia=fonce|tactique`, `perception=non`, `diag=oui` (part du temps
+  de chaque attitude), `cobaye=malin|fonceur` (le 1 étoile de la place 2 : Intelligence 22, Audace -60, Maîtrise +60,
+  ou 8, +60, -60 ; sa mort, sa mise à terre, sa vie à la fin), `suivre=N:*` (tous les héros, chaque seconde) ;
+  surprises par combat.
+  Mesures : voir « Mesures C3 » plus bas (complétées en fin d'étape).
+  Copies du projet pour les simulations : `override.cfg` en UTF-8 SANS BOM (PowerShell `Set-Content -Encoding utf8`
+  en ajoute un : Godot ignore alors le fichier et les simulations écrivent dans la vraie sauvegarde, constaté en C3 ;
+  écrire avec `[IO.File]::WriteAllText(..., (New-Object Text.UTF8Encoding $false))`).
 - Phase 1.1 de la feuille de route v2 (cahier, « Améliorations combat... », lot A ; chiffres dans `tower.gd`,
   section « Combat ») :
   Endurance : `fighter["stamina"]` (`STAMINA_MAX` 100), héros seulement (l'adversaire d'un duel aussi). Se

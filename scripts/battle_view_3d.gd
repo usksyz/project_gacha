@@ -83,6 +83,8 @@ const CLASS_COLORS := {
 }
 const STAMINA_COLOR := Color("e8c547")
 const STAMINA_TIRED_COLOR := Color("7a7466")
+## Perception (C3) : un ennemi que personne ne voit (corps et anneau gris).
+const UNSEEN_COLOR := Color("5c5c66")
 const STRIKE_TIME := 0.25
 const FLOAT_TIME := 0.9
 const BUBBLE_TIME := 1.5
@@ -567,9 +569,12 @@ func _update_units(delta: float) -> void:
 			glow = Color(1, 0.1, 0.1) * 0.6
 		else:
 			body_mat.albedo_color = base_color
+		var hidden := view.unseen(unit)  # (C3) aucun héros ne le voit : grisé
+		if hidden:
+			body_mat.albedo_color = UNSEEN_COLOR
 		body_mat.emission = glow
 		var ring_mat: StandardMaterial3D = nodes["ring_mat"]
-		ring_mat.albedo_color = ORDER_COLOR if unit["id"] == view.selected_id else _camp_color(unit)
+		ring_mat.albedo_color = ORDER_COLOR if unit["id"] == view.selected_id else (UNSEEN_COLOR if hidden else _camp_color(unit))
 		nodes["ring"].visible = not down
 
 
@@ -798,10 +803,37 @@ func _draw_overlay() -> void:
 		heads[unit["id"]] = project(feet + Vector3(0, (BODY_HEIGHT + HEAD_RADIUS * 2.2) * big, 0))
 		bodies[unit["id"]] = project(feet + Vector3(0, BODY_HEIGHT * 0.5 * big, 0))
 	_draw_orders(bodies, k)
+	_draw_rays()
 	for unit in battle.units:
 		if heads.has(unit["id"]):
 			_draw_unit_info(unit, heads[unit["id"]], bodies[unit["id"]], k)
 	_draw_effects(heads, bodies, k)
+
+
+## Perception (C3, effet « lidar ») : les bâtonnets du héros choisi, à hauteur de ses yeux, en traits fins avec un
+## point brillant là où chacun s'arrête.
+func _draw_rays() -> void:
+	if view.selected_id < 0:
+		return
+	var hero: Dictionary = battle.units[view.selected_id]
+	if not hero["present"] or hero["hp"] <= 0:
+		return
+	var eye: float = display_y.get(hero["id"], 0.0) + BODY_HEIGHT * 0.9
+	var from := project(unit_feet(hero) + Vector3(0, BODY_HEIGHT * 0.9, 0))
+	for end in hero.get("rays", PackedVector2Array()):
+		var to := project(Vector3(end.x, eye, end.y))
+		overlay.draw_line(from, to, BattleView.RAY_COLOR, 1.0, true)
+		overlay.draw_circle(to, 2.5, BattleView.RAY_DOT_COLOR)
+	# Mode dev (IA tactique) : la case qu'il a choisie, un losange sur son dessus.
+	var cell = hero.get("tactic", {}).get("cell")
+	if Settings.dev_mode and cell != null:
+		var top := _surface_at(cell) + 0.03
+		var corners := PackedVector2Array()
+		for offset in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5), Vector2(-0.5, -0.5)]:
+			var p: Vector2 = cell + offset
+			corners.append(project(Vector3(p.x, top, p.y)))
+		overlay.draw_polyline(corners, BattleView.TACTIC_COLOR, 2.0, true)
+		overlay.draw_dashed_line(from, project(Vector3(cell.x, top, cell.y)), BattleView.TACTIC_COLOR, 1.5, 6.0)
 
 
 ## Les ordres en cours : un trait jaune vers l'endroit (à sa hauteur) ou l'ennemi visé.
@@ -838,7 +870,7 @@ func _draw_unit_info(unit: Dictionary, head: Vector2, body: Vector2, k: float) -
 		elif unit["is_hero"]:
 			_draw_tag(font, head, "à terre" if unit["immortal"] else "tombé", Color(1, 0.5, 0.5, 0.8), k)
 		return
-	var camp := HERO_COLOR if unit["is_hero"] else ENEMY_COLOR
+	var camp := HERO_COLOR if unit["is_hero"] else (UNSEEN_COLOR if view.unseen(unit) else ENEMY_COLOR)
 	var width := 30.0 * k * (1.4 if unit["boss"] else 1.0)
 	var bar := Rect2(head - Vector2(width / 2.0, 0), Vector2(width, 4.0 * k))
 	overlay.draw_rect(bar, Color("12131c"))
@@ -938,5 +970,5 @@ func _draw_effects(heads: Dictionary, bodies: Dictionary, k: float) -> void:
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
 		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
-		overlay.draw_string(font, head + Vector2(-40, -18 * k - age * 30.0), effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 80,
+		overlay.draw_string(font, head + Vector2(-80, -18 * k - age * 30.0), effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160,
 			font_size, color)

@@ -100,7 +100,9 @@ const SKILLS := {
 	"Tueur de gobelins": "Contre les gobelins : +10 % de dégâts par niveau. Exploit : coup fatal au boss de l'étage 5, ou 50 gobelins tués.",
 	"Esprit combatif": "Évolution de Résistance à la douleur (au niveau 10) : garde ses effets, et +5 % de dégâts par niveau sous la moitié de sa vie.",
 	"Analyse froide": "Observation logique : +10 % de précision (la cible esquive moins) et +10 % de coups critiques par niveau. Rare : 1 % de chances après une synthèse.",
-	"Œil de faucon": "Vision et précision à distance : pour les tirs (flèches et sorts), +0,3 case de portée et +5 % de précision par niveau. S'obtient en synthèse, pour ceux qui se battent de loin.",
+	"Œil de faucon": "Vision et précision à distance : pour les tirs (flèches et sorts), +0,3 case de portée et +5 % de précision par niveau. Active : en combat, il l'active de lui-même quand il ne voit plus l'ennemi (ou sur ton ordre) : sa vue porte deux fois plus loin pendant 15 s (30 s avant de pouvoir recommencer). S'obtient en synthèse, pour ceux qui se battent de loin.",
+	# Ajout du cahier (« Combat v2 », section 4), étape C3 : pas encore de moyen de l'apprendre.
+	"Sixième sens": "Passive : il sent ce qui se passe dans son dos (3 bâtonnets courts vers l'arrière). Plus jamais surpris de dos à courte portée.",
 	"Volonté de fer": "Compétence de promotion : +10 % de vie maximum par niveau.",
 	"Second souffle": "Compétence de promotion : une fois par combat, sous 25 % de sa vie, reprend 15 % de sa vie (+5 % par niveau au-delà du premier).",
 	"Coup précis": "Compétence de promotion : +5 % de coups critiques par niveau.",

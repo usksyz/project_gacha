@@ -28,7 +28,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     générés au prochain passage), carte du combat en cours (pending_battle["map"]).
 ## 7 : tutoriel, étape « armes » (tirage d'armes offert) entre l'invocation et l'équipe : une partie arrêtée à
 ##     l'étape « equipe » sans équipe composée y revient ; plus loin, elle la saute.
-const SAVE_VERSION := 7
+## 8 : Combat v2, C3 : habitudes tactiques de chaque héros (hero["tactics"], par contexte, voir BattleTactics.profile) ;
+##     absentes d'une ancienne sauvegarde : créées au premier combat dans chaque contexte (rien à adapter).
+const SAVE_VERSION := 8
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.

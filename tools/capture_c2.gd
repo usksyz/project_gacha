@@ -118,6 +118,10 @@ func _capture() -> void:
 	if _args["zoom"] != "":
 		view3d.zoom = float(_args["zoom"])
 	view3d._update_camera()
+	# « vue=dessus » (C3) : la capture dans la vue de dessus.
+	if _args.get("vue", "") == "dessus":
+		view.use_3d = false
+		view._apply_view()
 	var chosen := int(_args["choisi"])
 	if chosen >= 0 and chosen < battle.heroes.size():
 		view.selected_id = battle.heroes[chosen]["id"]

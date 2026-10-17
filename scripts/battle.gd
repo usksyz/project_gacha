@@ -239,6 +239,19 @@ var _taken := {}
 var _slots := {}
 var _flows := {}
 var _costs_due := 0.0
+## Perception en bâtonnets (Combat v2, C3 ; voir BattlePerception) : ce que chacun voit, entend et sait. On ne
+## cible que ce que l'on connaît ; un coup d'un ennemi qu'on ne voit pas est une attaque surprise (_surprise).
+## « perception_on » faux : tout le monde sait tout, comme avant C3 (interrupteur pour comparer, sim_tower).
+var perception: BattlePerception
+var perception_on := true
+## Attaques surprises subies par chaque camp pendant ce combat (mesures).
+var surprises := {"heroes": 0, "enemies": 0}
+## IA tactique des héros (C3 ; voir BattleTactics) : un héros libre choisit son attitude et sa case selon ce qu'il
+## sait. « tactical_ai » faux : l'ancien comportement (tous foncent ; interrupteur pour comparer, sim_tower).
+## « tactics_context » : le contexte de ses habitudes (type de quête | famille d'ennemis | gabarit de terrain).
+var tactics: BattleTactics
+var tactical_ai := true
+var tactics_context := ""
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
@@ -275,6 +288,21 @@ func start() -> void:
 	_build_map()
 	map.build_graph()
 	_place_units()
+	perception = BattlePerception.new(self)
+	tactics = BattleTactics.new(self)
+	# Les habitudes tactiques de chaque héros pour ce contexte (créées au premier combat, gardées sur le héros).
+	tactics_context = BattleTactics.context_of(quest, enemies.map(func(e): return e["source"]), map_data)
+	if not quest.get("duel", false):
+		for hero in heroes:
+			var habits := BattleTactics.profile(hero["source"], tactics_context)
+			hero["tw"] = habits["weights"].duplicate()
+			hero["tt"] = habits["thresholds"].duplicate()
+			hero["t_criteria"] = BattleTactics.criteria_count(hero["source"])
+			hero["t_cells"] = BattleTactics.cells_count(hero["source"])
+	if quest.get("duel", false) and heroes.size() > 0 and enemies.size() > 0:
+		# Duel : les deux duellistes se font face.
+		heroes[0]["facing"] = (enemies[0]["pos"] - heroes[0]["pos"]).normalized()
+		enemies[0]["facing"] = -heroes[0]["facing"]
 	# Défense de la cité : le triple avertissement pèse sur les esprits dès le début.
 	if quest.get("warnings", 0) > 0:
 		for hero in heroes:
@@ -351,7 +379,9 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 	if _is_blocked(pos):
 		pos = _free_cell_near(_cell_of(pos))
 	hero["resting"] = false  # (un ordre du Maître met fin au repos de la rotation)
-	hero["order"] = {"kind": "move", "pos": pos}
+	# (« by » : un ordre du Maître ; arrivé, le héros tient ce poste, voir _follow_order et BattleTactics.hold)
+	hero["order"] = {"kind": "move", "pos": pos, "by": "maitre"}
+	hero["held"] = false
 	hero["path"] = PackedVector2Array()
 
 
@@ -360,6 +390,7 @@ func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
 	hero["resting"] = false
+	hero["held"] = false
 	hero["order"] = {"kind": "attack", "target": enemy["id"]}
 	hero["path"] = PackedVector2Array()
 
@@ -503,9 +534,11 @@ func _organize_defense() -> void:
 	_journal_formation("défense du Meneur (%s)" % leader["name"])
 
 
-## Le Meneur place un héros : il y va, et ce sera son poste (voir _follow_order).
+## Le Meneur place un héros : il y va, et ce sera son poste (voir _follow_order). Avec l'IA tactique (C3), il garde
+## ce placement de départ jusqu'à l'arrivée de l'ennemi, puis chacun applique l'IA ; un tireur posté sur un toit
+## y reste (il tient le poste en hauteur, comme avant).
 func _send_to_post(hero: Dictionary, spot: Vector2) -> void:
-	hero["order"] = {"kind": "move", "pos": spot}
+	hero["order"] = {"kind": "move", "pos": spot, "by": "meneur"}
 	hero["path"] = PackedVector2Array()
 
 
@@ -521,6 +554,18 @@ func order_berserk(hero: Dictionary, on: bool) -> void:
 	else:
 		_exit_berserk(hero)
 		hero["berserk_hold_until"] = time + GameData.BERSERK_ORDER_HOLD
+
+
+## Œil de faucon (C3, compétence active) : ordre du Maître ; le héros voit deux fois plus loin pendant
+## HAWK_EYE_SECONDS (voir BattlePerception). Il l'active aussi de lui-même quand il ne voit plus l'ennemi.
+func order_hawk_eye(hero: Dictionary) -> void:
+	if quest.get("duel", false) or not can_hawk_eye(hero) or not _obeys(hero):
+		return
+	perception.activate_hawk_eye(hero)
+
+
+func can_hawk_eye(hero: Dictionary) -> bool:
+	return perception_on and perception != null and hero["is_hero"] and perception.can_hawk_eye(hero)
 
 
 ## Vrai si ce combattant possède Berserk (ou Surpassement) et peut s'en servir.
@@ -573,6 +618,12 @@ func _follow_order(unit: Dictionary, foes: Array) -> bool:
 			return true
 		unit["post"] = order["pos"]  # arrivé : c'est son nouveau poste
 		unit["order"] = {}
+		# IA tactique (C3) : posté par le Maître, il tient sa position jusqu'à un nouvel ordre ou un danger grave ;
+		# posté en hauteur par le Meneur (tireur sur un toit), aussi.
+		if tactical_ai and (order.get("by", "") == "maitre" or (order.get("by", "") == "meneur" and is_high(unit))):
+			unit["held"] = true
+		elif tactical_ai and order.get("by", "") == "meneur":
+			unit["leader_post"] = true  # il garde le placement du Meneur jusqu'à l'arrivée de l'ennemi
 		return false
 	var target: Dictionary = units[order["target"]]
 	if target["hp"] <= 0:
@@ -743,6 +794,33 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"was_hit": false,          # a déjà été blessé dans ce combat (la première blessure fait peur)
 		"mind_news": [],           # traits révélés, ruptures : pour la fenêtre « Personnalité » de fin
 		"bonds": {},               # liens avec les autres héros de l'équipe : {numéro du pion: palier}
+		# Perception (C3, voir BattlePerception) : où il regarde (les héros partent du bas et regardent vers le
+		# haut), le bout de ses bâtonnets, qui il voit et entend, ce qu'il sait de chaque ennemi.
+		"facing": Vector2(0, -1) if is_hero else Vector2(0, 1),
+		"rays": PackedVector2Array(),
+		"sees": {},
+		"hears": {},
+		"knows": {},
+		"glance_at": 0.0,          # prochain regard en arrière (Prudence, Méfiance)
+		"hawk_until": 0.0,         # Œil de faucon actif jusqu'à ce moment
+		"hawk_ready": 0.0,         # Œil de faucon de nouveau possible à ce moment
+		# IA tactique (C3, voir BattleTactics) : son plan (attitude, case, cible, raisons), le prochain plan, posté
+		# par le Maître (il tient sa place), ses poids et seuils pour ce combat (copiés de ses habitudes), combien
+		# de critères il voit et de cases il étudie, depuis quand il attend.
+		"tactic": {},
+		"tactic_due": 0.0,
+		"held": false,
+		"tw": TacticsData.BASE_WEIGHTS.duplicate(),
+		"tt": TacticsData.BASE_THRESHOLDS.duplicate(),
+		"t_criteria": TacticsData.CRITERIA.size(),
+		"t_cells": TacticsData.CELLS_MAX,
+		"cover_since": -1.0,       # sous le feu depuis ce moment (se couvrir, puis aller chercher le tireur)
+		"cover_from": -1,          # le tireur qui le prend pour cible (numéro ; -1 : aucun)
+		"t_last_dist": -1.0,       # distance de sa cible au dernier plan (vient-elle vers lui ?)
+		"engaged_t": -1.0,         # moment où il a connu son premier ennemi
+		"last_attack_t": -100.0,   # moment de son dernier coup (ou tir, sort, soin)
+		"hurt_hero_at": -100.0,    # dernier moment où il a blessé un héros (colère, cible « qui fait mal »)
+		"hurt_hero_id": -1,        # le héros blessé
 	}
 
 
@@ -901,6 +979,8 @@ func _covered(target: Dictionary, shooter: Dictionary) -> bool:
 
 func _step() -> void:
 	_update_crowd()
+	if perception_on:
+		perception.tick()
 	_refresh_costs()
 	_update_formations()
 	if not _defense_organized and not alley_exits.is_empty():
@@ -933,6 +1013,8 @@ func _step() -> void:
 			_lead(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_berserk_think(unit)
+			if perception_on:
+				perception.hawk_eye_think(unit)
 		if unit["hp"] > 0:
 			unit["cooldown"] -= TICK
 			_think(unit)
@@ -1014,6 +1096,9 @@ func _check_end() -> bool:
 func _think(unit: Dictionary) -> void:
 	var foes := _alive(enemies if unit["is_hero"] else heroes)
 	var allies := _alive(heroes if unit["is_hero"] else enemies)
+	# Perception (C3) : on ne vise que les ennemis que l'on connaît (vus, entendus, appris d'un allié, ou encore
+	# en mémoire). Les ordres du Maître, eux, peuvent viser n'importe quel ennemi (le Maître voit tout l'écran).
+	var known := foes if not perception_on else foes.filter(func(foe): return perception.knows(unit, foe))
 
 	# Un héros en pleine panique (rupture) n'écoute plus rien.
 	if unit["is_hero"] and unit["panic"] != "":
@@ -1050,7 +1135,7 @@ func _think(unit: Dictionary) -> void:
 	# Défense : un ennemi va au pied du rempart et le frappe, sauf si un héros lui barre la route (un héros
 	# qu'il peut atteindre : pas un tireur sur le chemin de ronde, deux niveaux plus haut).
 	if not unit["is_hero"] and quest["walls"] > 0:
-		var reachable := foes.filter(func(foe): return absi(height_of(foe) - height_of(unit)) <= GameData.MELEE_MAX_LEVELS)
+		var reachable := known.filter(func(foe): return absi(height_of(foe) - height_of(unit)) <= GameData.MELEE_MAX_LEVELS)
 		var nearest := _nearest(unit, reachable)
 		if nearest.is_empty() or unit["pos"].distance_to(nearest["pos"]) > 2.5:
 			var wall_row: int = map_data.get("wall_row", -1)
@@ -1082,14 +1167,24 @@ func _think(unit: Dictionary) -> void:
 
 	if foes.is_empty():
 		return
-	var target := _choose_target(unit, foes, allies)
+	# IA tactique (C3) : posté par le Maître, il tient sa place ; libre, il choisit son attitude et sa case selon ce
+	# qu'il sait (voir BattleTactics). Sans elle (tactical_ai faux) : l'ancien comportement, plus bas.
+	if unit["is_hero"] and tactical_ai and not quest.get("duel", false):
+		if unit["held"] and tactics.hold(unit, known, foes):
+			return
+		if tactics.think(unit, known, foes, allies):
+			return
+	if known.is_empty():
+		_unaware(unit, foes)
+		return
+	var target := _choose_target(unit, known, allies)
 	unit["target_id"] = target["id"]
 
 	# Posté sur une hauteur (le Maître l'y a envoyé) : il tient la position, sans courir après les ennemis ;
 	# il frappe ou tire sur ceux qui sont à sa portée (la cible choisie d'abord).
 	if unit["is_hero"] and is_high(unit) and map.walkable(_cell_of(unit["post"])) and map.height_at(_cell_of(unit["post"])) > 0:
 		if not _in_reach(unit, target, unit["reach"]):
-			var near := foes.filter(func(foe): return _in_reach(unit, foe, unit["reach"]))
+			var near := known.filter(func(foe): return _in_reach(unit, foe, unit["reach"]))
 			target = _nearest(unit, near) if not near.is_empty() else {}
 		if not target.is_empty():
 			unit["target_id"] = target["id"]
@@ -1097,14 +1192,24 @@ func _think(unit: Dictionary) -> void:
 		return
 
 	# Un héros tient son poste tant que les ennemis sont loin.
-	if unit["is_hero"] and unit["pos"].distance_to(target["pos"]) > ENGAGE_DISTANCE:
+	var target_pos: Vector2 = target["pos"] if not perception_on else perception.known_pos(unit, target)
+	if unit["is_hero"] and unit["pos"].distance_to(target_pos) > ENGAGE_DISTANCE:
 		if unit["pos"].distance_to(unit["post"]) > 0.3:
 			_move_towards(unit, unit["post"])
 		return
 
+	# Une cible qu'il ne connaît plus que de mémoire : il va voir à sa dernière place connue ; elle n'y est plus ?
+	# Il l'oublie.
+	if perception_on and not perception.knows_now(unit, target):
+		if unit["pos"].distance_to(target_pos) <= 1.0:
+			unit["knows"].erase(target["id"])
+		else:
+			_move_towards(unit, target_pos)
+		return
+
 	if unit["ranged"]:
 		# Un tireur recule quand un ennemi arrive au contact.
-		var closest := _nearest(unit, foes)
+		var closest := _nearest(unit, known)
 		if unit["pos"].distance_to(closest["pos"]) < 1.6:
 			_step_away(unit, closest["pos"])
 		if _in_reach(unit, target, unit["reach"]):
@@ -1142,6 +1247,25 @@ func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
 			best = score
 			result = foe
 	return result
+
+
+## Perception (C3) : il ne connaît aucun ennemi. Un héros tient son poste (il attend de voir venir) ; un
+## monstre avance vers le camp des héros (la horde sait où ils sont, pas qui viser : il ne frappe pas avant de voir).
+func _unaware(unit: Dictionary, foes: Array) -> void:
+	unit["target_id"] = -1
+	if unit["is_hero"]:
+		if unit["pos"].distance_to(unit["post"]) > 0.3:
+			_move_towards(unit, unit["post"])
+		return
+	var nearest := _nearest(unit, foes)
+	if not nearest.is_empty():
+		_approach(unit, nearest)
+
+
+## Attaque surprise (C3) : la cible ne voit pas l'attaquant de ses propres yeux (il n'est dans aucun de ses
+## bâtonnets ; l'entendre ne suffit pas). Pas en duel (les deux se font face et se surveillent).
+func _surprise(attacker: Dictionary, target: Dictionary) -> bool:
+	return perception_on and not quest.get("duel", false) and target["present"] and not perception.sees(target, attacker)
 
 
 ## Portée d'un combattant, pour les formations (voir GameData, tower.gd, RANGE_COVER_BONUS) :
@@ -1734,6 +1858,7 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 	if attacker["cooldown"] > 0 or time < attacker["swap_until"]:
 		return  # (pendant un échange de place, il ne frappe pas)
 	attacker["cooldown"] = _attack_time(attacker)
+	attacker["last_attack_t"] = time
 	_spend_stamina(attacker, GameData.STAMINA_ATTACK_COST)
 	match attacker["class"]:
 		"Mage":
@@ -1749,10 +1874,12 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 		"Soigneur":
 			_hit(attacker, target, 1.0, false, "spell")
 		_:
+			# Attaque surprise (C3) : plus de chances de critique (voir aussi _damage : ni esquive ni parade).
+			var surprise_crit := GameData.SURPRISE_CRIT_BONUS if _surprise(attacker, target) else 0.0
 			if attacker["ranged"]:
 				# Un tir (arc). Les archers visent mieux : +25 % de critiques, et leurs critiques font x2.
 				var archer: bool = attacker["class"] == "Archer"
-				var critical: bool = randf() < attacker["crit"] * _fear(attacker) + (0.25 if archer else 0.0)
+				var critical: bool = randf() < attacker["crit"] * _fear(attacker) + (0.25 if archer else 0.0) + surprise_crit
 				var power := (2.0 if archer else 1.5) if critical else 1.0
 				_hit(attacker, target, power * attacker["weapon_power"], critical, "arrow")
 				if attacker["is_hero"]:
@@ -1768,8 +1895,12 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 					"Assassin":
 						pass
 					_:
-						critical = randf() < attacker["crit"] * _fear(attacker)
+						critical = randf() < attacker["crit"] * _fear(attacker) + surprise_crit
 						power = 1.5 if critical else 1.0
+				# (Guerrier, Assassin : pas de critique d'ordinaire ; par surprise, oui.)
+				if surprise_crit > 0.0 and attacker["class"] in ["Guerrier", "Assassin"] and randf() < surprise_crit:
+					critical = true
+					power *= 1.5
 				_hit(attacker, target, power * attacker["weapon_power"] * _wear(attacker), critical, "hit")
 
 
@@ -1862,7 +1993,8 @@ func order_barrage(hero: Dictionary) -> void:
 
 ## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.
 func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool, kind: String) -> void:
-	var amount := _damage(attacker, target, power, critical, kind)
+	var surprise := _surprise(attacker, target)
+	var amount := _damage(attacker, target, power, critical, kind, surprise)
 	attacker["engaged"] = true  # il a pris part au combat (expérience méritée)
 	target["engaged"] = true
 	# Activité (croissance) : l'esquive exerce la Dextérité ; le coup porté, la stat de l'attaque ;
@@ -1873,10 +2005,18 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 		attacker["acts"][ACT_STAT.get(kind, "str")] += 1
 		target["acts"]["vit"] += 1
 	var text := "esquive !" if amount == -1 else ("couvert !" if amount < 0 else "-%d" % amount)
+	if surprise and amount >= 0:
+		text = "surprise ! " + text
+		surprises["heroes" if target["is_hero"] else "enemies"] += 1
+		if target["is_hero"]:
+			target["journal_counts"]["surprised"] = target["journal_counts"].get("surprised", 0) + 1
 	_effect(kind, attacker, target, text, critical and amount >= 0)
 	_journal_hit(attacker, target, maxi(amount, -1), critical)
 	if kind == "hit" and amount > 0:
 		_push(attacker, target, amount, critical)
+	if amount > 0 and target["is_hero"] and not attacker["is_hero"]:
+		attacker["hurt_hero_at"] = time  # (IA tactique : la colère, le tireur qui fait mal)
+		attacker["hurt_hero_id"] = target["id"]
 	if target["hp"] <= 0 and target["killer"] == "":
 		_announce_fall(target, "tué par %s (niv. %d)" % [attacker["name"], attacker["level"]], false, {"attacker": attacker, "kind": kind})
 		if attacker["is_hero"]:
@@ -1887,15 +2027,15 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
 ## « kind » : "hit" (corps à corps), "arrow" (flèche) ou "spell" (sort).
-func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false, kind := "hit") -> int:
+func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false, kind := "hit", surprise := false) -> int:
 	_start_clock()  # premier coup échangé : c'est le contact (rien ne change si le décompte tourne déjà)
 	# Mouvement souple : une chance d'éviter complètement le coup (moins face à la précision
-	# d'Analyse froide, et à celle d'Œil de faucon pour les flèches et les sorts).
+	# d'Analyse froide, et à celle d'Œil de faucon pour les flèches et les sorts). Pas face à une attaque surprise.
 	var dodge: float = GameData.skill_level(target["skills"], "Mouvement souple") * DODGE_PER_LEVEL \
 		- GameData.skill_level(attacker["skills"], "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL
 	if kind != "hit":
 		dodge -= GameData.skill_level(attacker["skills"], "Œil de faucon") * GameData.HAWK_EYE_PRECISION_PER_LEVEL
-	if randf() < dodge:
+	if not surprise and randf() < dodge:
 		return -1
 	# Couvert : derrière un muret ou un rocher, un tir peut s'y arrêter (voir _covered).
 	if kind != "hit" and _covered(target, attacker) and randf() < GameData.COVER_CHANCE:
@@ -1933,8 +2073,9 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 		raw *= 1.0 + above * GameData.HEIGHT_DEFENSE_PER_LEVEL
 	# Peau de pierre (compétence de promotion) : la cible encaisse mieux.
 	raw *= 1.0 - GameData.skill_level(target["skills"], "Peau de pierre") * GameData.STONE_SKIN_PER_LEVEL
-	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup.
-	if target["shield"]:
+	# Utilisation du bouclier : avec un bouclier en main, la cible pare une partie du coup (pas un coup qu'elle
+	# n'a pas vu venir).
+	if target["shield"] and not surprise:
 		raw *= 1.0 - GameData.skill_level(target["skills"], "Utilisation du bouclier") * GameData.SHIELD_GUARD_PER_LEVEL
 	# Calme : sous la moitié de sa vie, la cible garde son sang-froid et encaisse mieux.
 	if target["hp"] * 2 < target["max_hp"]:
@@ -1975,6 +2116,7 @@ func _try_heal(healer: Dictionary, target: Dictionary) -> void:
 	if healer["cooldown"] > 0 or time < healer["swap_until"]:
 		return
 	healer["cooldown"] = _attack_time(healer)
+	healer["last_attack_t"] = time
 	healer["mana"] -= HEAL_MANA_COST
 	_spend_stamina(healer, GameData.STAMINA_ATTACK_COST)
 	var amount := roundi(healer["atk"] * _mind(healer) * _bond(healer) * 2.0 * randf_range(0.9, 1.1))
@@ -2752,7 +2894,9 @@ func _frighten(fighter: Dictionary, what: String) -> void:
 ## s'il a peur, un allié tout près (FEAR_LIFT_RANGE) qui est son ami, son frère d'armes, ou Courageux,
 ## le rassure : au bout de FEAR_LIFT_SECONDS, la peur se lève (fuite comprise).
 func _fear_tick(unit: Dictionary) -> void:
-	if not unit["saw_enemy"] and _alive(enemies).any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= ENGAGE_DISTANCE):
+	# (Perception, C3 : la « vue » de l'ennemi, c'est le voir ou l'entendre soi-même.)
+	if not unit["saw_enemy"] and _alive(enemies).any(func(foe): return unit["pos"].distance_to(foe["pos"]) <= ENGAGE_DISTANCE \
+			and (not perception_on or unit["sees"].has(foe["id"]) or unit["hears"].has(foe["id"]))):
 		unit["saw_enemy"] = true
 		_scare(unit, GameData.FEAR_SIGHT_ENEMY_CHANCE, "la vue de l'ennemi", false)
 	if not afraid(unit):

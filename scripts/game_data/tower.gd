@@ -252,6 +252,61 @@ const POTIONS_PER_MISSION := 3
 const CARE_SECONDS := 3.0
 const CARE_HELP_RANGE := 6.0
 
+# --- Perception en bâtonnets (cahier, « Combat v2 », section 4 ; étape C3) ---
+# Chaque combattant voit par un éventail de SIGHT_RAYS bâtonnets (rayons) sur SIGHT_ANGLE degrés vers l'avant,
+# longs de SIGHT_LENGTH cases au centre et de SIGHT_LENGTH x SIGHT_SIDE_FACTOR sur les côtés (vision
+# périphérique). Un bâtonnet s'arrête sur un obstacle ou un relief plus haut que ses yeux (ligne de vue 3D de C1) ;
+# un combattant touché par un bâtonnet est vu. Autour de lui, il entend dans un cercle de HEARING_RADIUS cases
+# (HEARING_BEAST_RADIUS pour les bêtes, EMBED_BEASTS : l'odorat). Il se souvient de la dernière position vue
+# d'un ennemi pendant SIGHT_MEMORY secondes. Mise à jour toutes les PERCEPTION_INTERVAL secondes (5 par seconde).
+# Ce qui change les bâtonnets : la hauteur (+SIGHT_HEIGHT_BONUS case par niveau), les herbes hautes (chaque case
+# d'herbes traversée depuis le sol coûte SIGHT_GRASS_COST cases), la nuit (quête « night » : x SIGHT_NIGHT_FACTOR,
+# sauf un Nocturne, axe Rythme >= NOCTURNE_MIN), la peur, la panique et la rage (cône x SIGHT_TUNNEL_FACTOR :
+# vision en tunnel), l'Acuité des sens (lue par PersonalityEngine : un bâtonnet de plus ou de moins tous les
+# SIGHT_ACUITY_TIERS_PER_RAY paliers, longueur et ouïe +SIGHT_ACUITY_LENGTH par palier), les monstres (longueur x
+# SIGHT_MONSTER_FACTOR : « en plus court »). Mémoire : + SIGHT_MEMORY_PER_MAI s par palier de Maîtrise de soi,
+# + SIGHT_MEMORY_PER_INT s par point d'Intelligence au-dessus de 10, entre SIGHT_MEMORY_MIN et SIGHT_MEMORY_MAX.
+# Prudence (Audace <= -GLANCE_AXIS) ou Méfiance (Loyauté <= -GLANCE_AXIS) : un regard en arrière toutes les
+# GLANCE_SECONDS secondes. Partage : un allié à moins de VOICE_RANGE cases sait ce que voit l'autre ; un Meneur
+# debout le partage avec toute l'équipe. Attaque surprise : un coup d'un ennemi qui n'est pas dans ses bâtonnets
+# (l'ouïe ne suffit pas : on l'entend, on ne voit pas le coup venir) : ni esquive ni parade (Mouvement souple,
+# bouclier), et SURPRISE_CRIT_BONUS de chances de critique en plus. Œil de faucon, actif : bâtonnets
+# x HAWK_EYE_LENGTH_FACTOR, cône x HAWK_EYE_ANGLE_FACTOR, pendant HAWK_EYE_SECONDS, puis HAWK_EYE_COOLDOWN avant
+# de pouvoir le relancer. Sixième sens : SIXTH_SENSE_RAYS bâtonnets de SIXTH_SENSE_LENGTH cases vers l'arrière
+# (sur SIXTH_SENSE_ANGLE degrés). Chiffres provisoires.
+const PERCEPTION_INTERVAL := 0.2
+const SIGHT_RAYS := 9
+const SIGHT_ANGLE := 120.0
+const SIGHT_LENGTH := 6.0
+const SIGHT_SIDE_FACTOR := 0.6
+const SIGHT_MONSTER_FACTOR := 0.8
+const SIGHT_HEIGHT_BONUS := 1.0
+const SIGHT_GRASS_COST := 2.0
+const SIGHT_NIGHT_FACTOR := 0.5
+const NOCTURNE_MIN := 50
+const SIGHT_TUNNEL_FACTOR := 0.5
+const SIGHT_ACUITY_TIERS_PER_RAY := 2
+const SIGHT_ACUITY_LENGTH := 0.03
+const SIGHT_MIN_RAYS := 3
+const HEARING_RADIUS := 2.0
+const HEARING_BEAST_RADIUS := 3.5
+const SIGHT_MEMORY := 5.0
+const SIGHT_MEMORY_PER_MAI := 0.15
+const SIGHT_MEMORY_PER_INT := 0.1
+const SIGHT_MEMORY_MIN := 3.0
+const SIGHT_MEMORY_MAX := 8.0
+const GLANCE_AXIS := 30
+const GLANCE_SECONDS := 3.0
+const VOICE_RANGE := 4.0
+const SURPRISE_CRIT_BONUS := 0.15
+const HAWK_EYE_SECONDS := 15.0
+const HAWK_EYE_LENGTH_FACTOR := 2.0
+const HAWK_EYE_ANGLE_FACTOR := 0.8
+const HAWK_EYE_COOLDOWN := 30.0
+const SIXTH_SENSE_RAYS := 3
+const SIXTH_SENSE_LENGTH := 2.5
+const SIXTH_SENSE_ANGLE := 60.0
+
 
 ## Chance que l'arme reste plantée dans un héros mis à l'agonie par ce coup (« kind » : "hit" ou "arrow" ;
 ## « weapon » : le type d'arme de l'attaquant, "" pour un monstre ; voir EMBED_HEAVY_CHANCE).

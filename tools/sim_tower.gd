@@ -28,17 +28,21 @@ const MASTER_SWAP_COOLDOWN := 4.0
 ## Une unité « bloquée » : elle veut avancer (elle cherche son chemin à chaque pas) pendant BLOCK_SECONDS
 ## sans s'éloigner de plus de BLOCK_DISTANCE cases de là où elle était.
 const BLOCK_SECONDS := 2.0
+## « cobaye » : la place du héros testé dans l'équipe (0 : 3 étoiles, 1 : 2 étoiles, 2 à 4 : 1 étoile).
+const COBAYE_SLOT := 2
 const BLOCK_DISTANCE := 0.3
 
 var _args := {}
 var _generator = null  # MapGenerator (code C1 et après), sinon null
 ## Numéro → dernier moment où il attendait derrière quelqu'un d'immobile (code C1 et après).
 var _waited := {}
+## « diag=oui » : pas passés dans chaque attitude de l'IA tactique (héros debout), tous combats d'un étage.
+var _diag := {}
 
 
 func _ready() -> void:
 	var args := {"etages": "1,2,3,4,5", "combats": "200", "equipe": "brute", "graine": "1", "meneur": "libre", "meneur_toit": "",
-		"maitre": "non", "potions": "0", "carte": ""}
+		"maitre": "non", "potions": "0", "carte": "", "perception": "", "ia": ""}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
 		if parts.size() == 2:
@@ -61,6 +65,8 @@ func _ready() -> void:
 		var blocked_examples := []
 		var trait_counts := {}
 		var with_trait := {}  # {trait: [combats où l'équipe l'a, victoires]}
+		var surprised := [0, 0]  # attaques surprises subies par les héros, par les ennemis (C3)
+		var cobaye := [0, 0, 0.0]  # le héros testé : morts, mis à terre (agonie, mort), part de vie à la fin (total)
 		for i in count:
 			GameData.arsenal = []
 			GameData.warehouse = {}
@@ -89,6 +95,12 @@ func _ready() -> void:
 				battle = Battle.new(team, GameData.tower_enemies(floor_number), quest)
 			if args["meneur_toit"] != "":
 				battle.set("leader_roof_shooters", args["meneur_toit"] == "oui")  # (essai du point 6 de C1)
+			# C3 : « perception=non » (tout le monde sait tout, comme avant C3), « ia=fonce » (ancien comportement des
+			# héros : tous foncent) ou « ia=tactique » (IA tactique, par défaut quand elle existe).
+			if args["perception"] != "":
+				battle.set("perception_on", args["perception"] != "non")
+			if args["ia"] != "":
+				battle.set("tactical_ai", args["ia"] != "fonce")
 			var result := _play(battle, master, i)
 			usec += Time.get_ticks_usec() - started
 			for kind in blocked:
@@ -103,12 +115,34 @@ func _ready() -> void:
 				entry[1] += 1 if battle.victory else 0
 				with_trait[trait_name] = entry
 			deaths += battle.heroes.filter(func(f): return _is_dead(f)).size()
+			for fighter in battle.heroes:
+				if fighter["source"].get("cobaye", false):
+					cobaye[0] += 1 if _is_dead(fighter) else 0
+					cobaye[1] += 1 if fighter.get("agony", false) or fighter.get("stabilized", false) or _is_dead(fighter) else 0
+					cobaye[2] += maxf(0.0, float(fighter["hp"]) / fighter["max_hp"])
+			var counts = battle.get("surprises")
+			if counts != null:
+				surprised[0] += counts["heroes"]
+				surprised[1] += counts["enemies"]
 		var trait_parts := []
 		for trait_name in TRAIT_NAMES:
 			trait_parts.append("%s %.2f" % [trait_name, trait_counts.get(trait_name, 0) / float(count)])
 		print("RESULTAT equipe=%s maitre=%s etage=%d combats=%d victoires=%.1f%% morts=%.2f temps_ms=%.0f bloques_sans_raison=%d bloques_foule=%d bloques_escalade=%d traits_par_equipe: %s" \
 			% [args["equipe"], args["maitre"], floor_number, count, 100.0 * wins / count, float(deaths) / count,
 			usec / 1000.0 / count, blocked["sans raison"], blocked["foule"], blocked["escalade"], ", ".join(trait_parts)])
+		print("  surprises par combat : subies par les héros %.1f, par les ennemis %.1f" % [surprised[0] / float(count), surprised[1] / float(count)])
+		if _args.get("cobaye", "") != "":
+			print("  cobaye %s : mort %.1f %%, à terre %.1f %%, vie restante moyenne %.0f %%" % [_args["cobaye"],
+				100.0 * cobaye[0] / count, 100.0 * cobaye[1] / count, 100.0 * cobaye[2] / count])
+		if not _diag.is_empty():
+			var total := 0
+			for key in _diag:
+				total += _diag[key]
+			var parts := []
+			for key in _diag:
+				parts.append("%s %.0f%%" % [key, 100.0 * _diag[key] / total])
+			print("  attitudes : ", ", ".join(parts))
+			_diag.clear()
 		for example in blocked_examples:
 			print("  bloqué : ", example)
 		# Victoires selon que l'équipe a le trait ou non (pour trouver ce qui pèse sur l'équilibre).
@@ -142,6 +176,15 @@ func _play(battle: Battle, master: bool, number := 0) -> Dictionary:
 			timers[unit["id"]] = unit["path_timer"]
 		battle.step()
 		_trace(battle, number)
+		# « diag=oui » (C3) : part du temps de chaque attitude de l'IA tactique, pour les héros debout.
+		if _args.get("diag", "") == "oui":
+			for hero in battle.heroes:
+				if hero["present"] and hero["hp"] > 0:
+					var plan: Dictionary = hero.get("tactic", {})
+					var attitude: String = plan.get("attitude", "aucune") if not plan.is_empty() else "aucune"
+					if not hero["order"].is_empty():
+						attitude = "ordre"
+					_diag[attitude] = _diag.get(attitude, 0) + 1
 		for unit in battle.units:
 			var id: int = unit["id"]
 			var wants: bool = unit["present"] and unit["hp"] > 0 and unit["path_timer"] != timers[id]
@@ -226,6 +269,15 @@ func _make_team(floor_number: int, prepared: bool, leader := "libre") -> Array:
 				hero["persona"]["legacy_traits"].append("Meneur")
 		while hero["level"] < level and not GameData.is_max_level(hero):
 			GameData.gain_xp(hero, GameData.xp_to_next(hero["level"]) - hero["xp"])
+		# « cobaye=malin|fonceur » (C3) : le héros de la place COBAYE_SLOT (un 1 étoile) devient intelligent et prudent
+		# (Intelligence 22, Audace -60, Maîtrise de soi +60) ou peu intelligent et impulsif (8, +60, -60) ; le reste de
+		# sa personnalité et de l'équipe ne change pas (mêmes tirages à graine égale).
+		if slot == COBAYE_SLOT and _args.get("cobaye", "") in ["malin", "fonceur"]:
+			var smart: bool = _args["cobaye"] == "malin"
+			hero["stats"]["int"] = 22 if smart else 8
+			PersonalityEngine.set_tier(hero, "AUD", -6 if smart else 6)
+			PersonalityEngine.set_tier(hero, "MAI", 6 if smart else -6)
+			hero["cobaye"] = true
 		if prepared and not GameData.uses_magic(hero):
 			if hero["class"] == "Archer":
 				_give(hero, "Arc")
@@ -284,6 +336,18 @@ func _trace(battle: Battle, number: int) -> void:
 	if wanted == "" or not wanted.begins_with("%d:" % number):
 		return
 	if battle.time < float(_args.get("de", "0")) or battle.time > float(_args.get("a", "9999")):
+		return
+	# « suivre=12:* » : tous les héros, une fois par seconde (attitude de l'IA tactique, case visée, raisons).
+	if wanted.split(":")[1] == "*":
+		if absf(battle.time - roundf(battle.time)) > 0.05:
+			return
+		var foes := battle.enemies.filter(func(e): return e["present"] and e["hp"] > 0)
+		print("t=%.0f ennemis %s" % [battle.time, foes.map(func(e): return "%s%s pv%d" % [e["name"], e["pos"].snapped(Vector2(0.1, 0.1)), e["hp"]])])
+		for unit in battle.heroes:
+			var plan: Dictionary = unit.get("tactic", {})
+			print("   %s pv%d pos%s %s case%s cible%d sait%d voit%d %s" % [unit["name"], unit["hp"], unit["pos"].snapped(Vector2(0.1, 0.1)),
+				plan.get("attitude", "-"), plan.get("cell", null), plan.get("target", -1), unit.get("knows", {}).size(), unit.get("sees", {}).size(),
+				plan.get("reasons", []).map(func(r): return r["why"])])
 		return
 	for unit in battle.units:
 		if unit["name"] == wanted.split(":")[1].replace("_", " "):
