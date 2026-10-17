@@ -125,6 +125,12 @@ func _ready() -> void:
 	# (prompt 4) le rapport du jour de la fée, puis les demandes des héros, quand aucune autre fenêtre n'est ouverte
 	GameData.requests_changed.connect(func(): _show_city_life.call_deferred())
 	_show_city_life.call_deferred()
+	# (étape C) les fenêtres retenues pendant un combat, et le nouveau jour si le jeu reste ouvert
+	var life_timer := Timer.new()
+	life_timer.wait_time = 3.0
+	life_timer.timeout.connect(_check_held_windows)
+	add_child(life_timer)
+	life_timer.start()
 
 
 ## Tutoriel : le bandeau dit quoi faire, et seul l'onglet de l'étape est permis (aucun pendant la
@@ -216,10 +222,35 @@ func _show_next_tip() -> void:
 	box.add_child(ok)
 
 
+## Étape C : un combat de la Tour est en cours (placement compris). Les fenêtres de la cité (demandes, rapport du jour,
+## hostilités, défis, construction terminée) attendent sa fin : elles ne s'ouvrent plus par-dessus le combat.
+func _in_battle() -> bool:
+	return not GameData.pending_battle.is_empty()
+
+
+## Fenêtres « Construction terminée » arrivées pendant un combat : montrées après (voir _check_held_windows).
+var held_facilities: Array = []
+
+
+## Toutes les 3 secondes (étape C) : ce qui a attendu la fin d'un combat, et ce qui arrive avec le temps (nouveau
+## jour : rapport de la fée ; nouvelle heure : demandes), quand aucune fenêtre n'est ouverte.
+func _check_held_windows() -> void:
+	if _in_battle() or _window_open() or not tip_queue.is_empty():
+		return
+	if not held_facilities.is_empty():
+		var held: Array = held_facilities.pop_front()
+		_show_facility_completed(held[0], held[1])
+		return
+	if not GameData.relation_news.is_empty():
+		_show_relation_news()
+		return
+	_show_city_life()
+
+
 ## Vie de la cité (prompt 4) : quand aucune fenêtre n'est ouverte, d'abord le rapport du jour de la fée (une fois
 ## par jour), puis la prochaine demande d'un héros (carte Oui / Non). Une fenêtre à la fois.
 func _show_city_life() -> void:
-	if _window_open() or not tip_queue.is_empty() or GameData.tutorial_step != "":
+	if _window_open() or not tip_queue.is_empty() or GameData.tutorial_step != "" or _in_battle():
 		return
 	if GameData.daily_report_due():
 		_show_daily_report()
@@ -296,6 +327,8 @@ func _city_life_window(window_name: String) -> VBoxContainer:
 func _show_relation_news() -> void:
 	if has_node("RelationNews") or has_node("Challenge"):
 		return  # une fenêtre est déjà ouverte : elle montrera la suite à sa fermeture
+	if _in_battle():
+		return  # (étape C) après le combat : voir _check_held_windows
 	if GameData.relation_news.is_empty():
 		_show_next_challenge()
 		return
@@ -344,6 +377,9 @@ func _show_next_challenge() -> void:
 ## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle
 ## est ouverte, le hub 3D garde son animation de construction pour après.
 func _show_facility_completed(title: String, lines: Array) -> void:
+	if _in_battle():
+		held_facilities.append([title, lines])  # (étape C) montrée après le combat
+		return
 	Settings.vibrate(150)
 	HubCity3D.paused = true
 	var overlay := ColorRect.new()

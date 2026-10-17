@@ -141,3 +141,13 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   4. Banc `tools/test_summon.gd` (dans une copie, `-s`) : 1 000 000 de tirages par sorte. Résultat : normale 0,699 /
   2,277 / 97,02 % ; spéciale 5★ 1,60 %, 4★ 11,8 % (13,4 % « 4★ ou mieux »), 3★ 86,6 %, 62,5 tirages par 5★, mages
   0,49 %, séries au plus 86 sans 5★ et 10 sans 4★.
+
+## Étape A (notes du porteur du projet : stabilisé qui reprend le combat, agonie soignée en fin d'étage)
+- `sim_tower ... combats=300 graine=7` avant (5c623c0) → après (2f53f35), victoires % (morts par combat) :
+  brute étages 1 / 2 / 3 / 4 / 5 / 10 : 99,7 (0,18) / 48,7 (2,79) / 38 (3,29) / 41,3 (3,19) / 30,7 (2,66) / 18 (3,76) →
+  100 (0,09) / 54,3 (2,60) / 42,7 (3,23) / 35,3 (3,49) / 34,7 (3,54) / 20,7 (3,77) ;
+  préparée : 100 (0) / 90,7 (0,76) / 81,3 (1,13) / 85,3 (0,98) / 63 (1,68) / 40 (2,87) →
+  100 (0) / 90 (0,75) / 86 (1,02) / 84,7 (1,07) / 64 (2,20) / 40,7 (2,97).
+  Victoires : dans le bruit (±4 points sur 300 combats). Morts à l'étage 5 en hausse (brute +0,9, préparée +0,5) :
+  un héros stabilisé reprend le combat avec 10 % de sa vie et peut retomber (avant, il était à l'abri).
+- Tutoriel, étage 1 (`tools/sim_tutoriel.gd`, vrai déroulé, 150 parties) : 100 % de victoires avant comme après.
