@@ -32,7 +32,8 @@ func _move_speed(unit: Dictionary) -> float:
 	var speed: float = BASE_SPEED + unit["spd"] * _fear(unit) * SPEED_PER_DEX
 	if unit["exhausted"]:
 		speed *= GameData.STAMINA_EXHAUSTED_SPEED
-	return speed * (0.8 if unit["boss"] else 1.0)
+	# (étape E) « pace » : au pas (ronde, exploration prudente), remis à 1 à chaque décision (voir Battle._think)
+	return speed * (0.8 if unit["boss"] else 1.0) * unit["pace"]
 
 
 ## Endurance : se déplacer et frapper la vident (deux fois plus vite pour un novice). À 0 : épuisé.

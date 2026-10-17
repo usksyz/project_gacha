@@ -71,7 +71,8 @@ const REINFORCE_DELAY := 2.0
 ## Quête utilisée quand on n'en donne pas : tuer tous les ennemis en 90 secondes au plus.
 const DEFAULT_QUEST := {"type": "extermination", "lasting": false, "seconds": 90, "hidden_level": false, "walls": 0}
 ## Quête de survie : si aucun coup n'est échangé au bout de ce temps (secondes),
-## le compte à rebours démarre quand même (pour qu'un combat ne dure jamais sans fin).
+## le compte à rebours démarre quand même (pour qu'un combat ne dure jamais sans fin). (Étape E : hors horde, c'est
+## GameData.ALARM_SECONDS, le temps laissé à l'exploration.)
 const CONTACT_WAIT_MAX := 60.0
 
 # --- Déplacements et attaques ---
@@ -255,6 +256,12 @@ var surprises := {"heroes": 0, "enemies": 0}
 var tactics: BattleTactics
 var tactical_ai := true
 var tactics_context := ""
+## Étape E : la vigilance des monstres (BattleAlert : disposition selon la mission, états, cris, alarme) et
+## l'exploration des héros (BattleExplore). « forced_disposition » : imposer une disposition (sim_tower, tests ;
+## "" : celle de l'étage, "horde" : comme avant l'étape E).
+var alert: BattleAlert
+var explore: BattleExplore
+var forced_disposition := ""
 
 
 ## Survie (terrain à ruelles), au début du combat : un héros Meneur (ni effrayé ni en panique) forme
@@ -329,60 +336,6 @@ func _place_heroes() -> void:
 	_place_row(back, rows[1])
 	for hero in heroes:
 		hero["post"] = hero["pos"]
-
-
-# --- Placement par le Maître (prompt 3, point 2) ---
-# Avant de commencer (le combat est démarré par start() mais aucun pas n'a été joué), le Maître peut déplacer ses
-# héros dans la zone de départ. Un héros placé par le Maître tient ce poste (comme arrivé là sur son ordre, voir
-# _follow_order) et le Meneur ne le déplace pas (_organize_defense). Rien n'est tiré au hasard : sans placement,
-# le combat reste identique.
-
-## Les cases de la zone de départ des héros : les lignes « hero_rows » et celles entre elles.
-func start_zone() -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	var rows: Array = map_data.get("hero_rows", [MapGenerator.HERO_FRONT_ROW, MapGenerator.HERO_BACK_ROW])
-	for row in range(mini(rows[0], rows[1]), maxi(rows[0], rows[1]) + 1):
-		for x in GRID_W:
-			if map.walkable(Vector2i(x, row)):
-				cells.append(Vector2i(x, row))
-	return cells
-
-
-## Le Maître pose un héros sur une case de la zone de départ (avant le premier pas). S'il y a déjà un héros, ils
-## échangent leur place. Renvoie faux si c'est impossible (hors de la zone, combat commencé).
-func place_hero(hero: Dictionary, cell: Vector2i) -> bool:
-	if time > 0.0 or not hero["is_hero"] or not cell in start_zone():
-		return false
-	var other: Dictionary = {}
-	for unit in units:
-		if unit["present"] and unit["id"] != hero["id"] and _cell_of(unit["pos"]) == cell:
-			other = unit
-	if not other.is_empty() and not other["is_hero"]:
-		return false
-	if not other.is_empty():
-		_set_start(other, hero["pos"])
-	_set_start(hero, BattleMap.center(cell))
-	return true
-
-
-func _set_start(hero: Dictionary, pos: Vector2) -> void:
-	hero["pos"] = pos
-	hero["prev_pos"] = pos
-	hero["post"] = pos
-	hero["placed"] = true  # placé par le Maître : il tient ce poste, le Meneur ne le déplace pas
-	hero["held"] = tactical_ai
-	_settle(hero)
-
-
-## « Placement automatique » : les héros reprennent leur place de départ habituelle.
-func auto_place() -> void:
-	if time > 0.0:
-		return
-	for hero in heroes:
-		hero["present"] = false
-		hero["placed"] = false
-		hero["held"] = false
-	_place_heroes()
 
 
 ## Aligne des combattants sur une ligne, centrés, sur des cases libres.

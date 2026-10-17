@@ -308,6 +308,71 @@ const SIXTH_SENSE_RAYS := 3
 const SIXTH_SENSE_LENGTH := 2.5
 const SIXTH_SENSE_ANGLE := 60.0
 
+# --- Vigilance des monstres et exploration (étape E, demande du porteur du projet ; ajout du projet) ---
+# Les monstres n'attaquent que s'ils voient ou entendent les héros. Selon la mission, ils sont disposés autrement
+# (ENEMY_DISPOSITIONS, une par étage, tirée de la graine de l'étage : un étage figé garde la sienne) :
+# - "horde" (survie, défense, duel ; avant l'étape E, tous les combats) : ils savent où sont les héros et foncent ;
+# - "pillage" (étage 1, le village envahi) : dispersés entre les maisons, ils rôdent au pas ;
+# - "camp" : autour d'un feu, au repos (vue x STATE_SIGHT["repos"]), deux guetteurs (GUARDS_PER_CAMP) tournés vers
+#   les héros, une patrouille qui fait le tour ; les autres dorment sous les tentes (renforts : ils sortent du camp) ;
+# - "endormis" : le camp dort (aucun bâtonnet, ouïe x SLEEP_HEARING_FACTOR) ;
+# - "poste" : un poste fortifié sur la hauteur la plus proche du camp ennemi (tireurs en haut, les autres au pied) ;
+# - "patrouilles" : des groupes de 2 ou 3 font des rondes au milieu de la carte ;
+# - "embuscade" : cachés dans les herbes hautes ou derrière les rochers ; vus seulement à moins de HIDDEN_SIGHT cases
+#   (+ HIDDEN_ACUITY par palier d'Acuité) ; ils bondissent quand un héros passe à moins de AMBUSH_TRIGGER cases.
+# États d'un monstre (« state ») : sommeil, repos, guet, ronde, poste, embusque, fouille (il va voir un bruit),
+# alerte (il chasse les héros). Un monstre qui repère un héros réagit après REACTION_SECONDS (selon son état : le
+# temps de se lever, de comprendre), puis crie : les monstres à moins de SHOUT_RANGE cases passent en alerte ; un
+# guetteur donne l'alarme générale (tout le camp). Chaque coup s'entend à NOISE_FIGHT cases (un dormeur : moitié) :
+# les monstres qui l'entendent viennent voir (fouille, au pas SEARCH_PACE), regardent SEARCH_SECONDS puis reprennent
+# leur place. Un monstre frappé passe en alerte. Rondes au pas PATROL_PACE. Sans aucun contact au bout de
+# ALARM_SECONDS, les monstres flairent l'équipe : alarme générale, et le compte à rebours démarre (il démarre sinon
+# au premier coup échangé, comme la survie). Chiffres provisoires.
+const ENEMY_DISPOSITIONS := {
+	"extermination": ["pillage"],
+	"subjugation": ["embuscade", "patrouilles"],
+	"annihilation": ["camp", "endormis", "poste", "patrouilles"],
+}
+const DISPOSITION_NAMES := {"horde": "Horde", "pillage": "Pillage", "camp": "Camp gardé", "endormis": "Camp endormi",
+	"poste": "Poste fortifié", "patrouilles": "Patrouilles", "embuscade": "Embuscade"}
+const REACTION_SECONDS := {"sommeil": 2.5, "repos": 1.2, "guet": 0.8, "ronde": 0.6, "poste": 0.6, "fouille": 0.4, "embusque": 0.0}
+const STATE_SIGHT := {"sommeil": 0.0, "repos": 0.6, "guet": 1.35, "fouille": 1.1}
+const SLEEP_HEARING_FACTOR := 0.5
+const SHOUT_RANGE := 7.0
+const NOISE_FIGHT := 5.0
+const SEARCH_SECONDS := 5.0
+const SEARCH_PACE := 0.8
+const PATROL_PACE := 0.55
+const PATROL_RADIUS := 3.0
+const GUARDS_PER_CAMP := 2
+const HIDDEN_SIGHT := 2.5
+const HIDDEN_ACUITY := 0.25
+const AMBUSH_TRIGGER := 2.5
+const ALARM_SECONDS := 80.0
+# Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
+# ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
+# L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant
+# le côté ennemi (EXPLORE_FORWARD par rangée), au pas EXPLORE_PACE (ils avancent prudemment). Un Curieux
+# (Curiosité >= SCOUT_CUR) ou un Assassin part en éclaireur (jamais à plus de SCOUT_AHEAD cases devant le meneur) ;
+# un solitaire (Loyauté <= -LONER_LOY, ou Audace >= LONER_AUD et Empathie <= 0) explore de son côté ; un prudent
+# (Audace <= -PRUDENT_AUD) ferme la marche. Les autres le suivent à quelques pas. Plan refait toutes les
+# EXPLORE_REPLAN secondes. Une case vue n'est explorée que EXPLORE_FORGET secondes (un monstre qui rôde a pu y revenir).
+const EXPLORE_REPLAN := 1.5
+const EXPLORE_FORGET := 25.0  # une case vue n'est « explorée » que ce temps-là : ensuite on y repasse
+const EXPLORE_GOAL_MAX := 10.0  # au plus ce temps sur un même but (un toit qu'on ne voit pas d'en bas...)
+const EXPLORE_PACE := 0.8
+const EXPLORE_FORWARD := 0.4
+const SCOUT_CUR := 40
+const SCOUT_AHEAD := 4.0
+const LONER_LOY := 40
+const LONER_AUD := 60
+const PRUDENT_AUD := 30
+# Ralliement : un héros qui repère des monstres qui ne l'ont pas vu (aucun en alerte) ne charge pas seul : l'équipe se
+# rassemble autour de lui (à moins de GATHER_RADIUS cases), puis attaque ensemble ; au plus GATHER_MAX secondes
+# d'attente. Un solitaire n'attend personne.
+const GATHER_RADIUS := 3.0
+const GATHER_MAX := 10.0
+
 
 ## Chance que l'arme reste plantée dans un héros mis à l'agonie par ce coup (« kind » : "hit" ou "arrow" ;
 ## « weapon » : le type d'arme de l'attaquant, "" pour un monstre ; voir EMBED_HEAVY_CHANCE).
@@ -628,11 +693,8 @@ func _resolve_pending_battle() -> void:
 	var battle := Battle.new(team, pending_battle["enemies"], pending_battle["quest"])
 	battle.map_data = pending_battle.get("map", {})  # (combat d'avant C1 : une carte neuve)
 	battle.start()
-	# Les places choisies par le Maître avant « Commencer » (prompt 3) ; sans elles, le placement automatique.
-	var placement: Dictionary = pending_battle.get("placement", {})
-	for fighter in battle.heroes:
-		if placement.has(fighter["source"]["id"]):
-			battle.place_hero(fighter, placement[fighter["source"]["id"]])
+	# (Les places choisies par le Maître avant l'étape E, « placement » d'une ancienne sauvegarde, ne servent plus :
+	# les héros explorent eux-mêmes.)
 	while not battle.finished:
 		battle.step()
 	absence_report = {"floor": floor_number, "report": finish_tower_battle(battle)}
@@ -705,8 +767,13 @@ func battle_debrief(battle: Battle) -> Dictionary:
 	var lines := []
 	for moment in moments:
 		lines.append(_debrief_line(moment["who"], moment["event"], narrator))
+	# Trop peu de moments : le début (l'exploration, étape E), puis la fin, puis une phrase pour conclure.
+	if lines.size() < DEBRIEF_MIN and battle.alert != null and battle.alert.disposition != "horde":
+		lines.push_front("Nous avancions à tâtons, sans savoir où ils se cachaient.")
 	if lines.size() < DEBRIEF_MIN:
 		lines.append("Nous avons dû battre en retraite." if not battle.victory else "Nous avons tenu, mais à quel prix.")
+	if lines.size() < DEBRIEF_MIN:
+		lines.append("Je n'en dirai pas plus.")
 	return {"narrator": narrator["name"], "lines": lines}
 
 

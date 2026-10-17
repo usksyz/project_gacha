@@ -938,12 +938,11 @@ func _start_fight() -> void:
 	battle.start()
 
 	_show_page(battle_view)
-	# (prompt 3) le Maître place d'abord ses héros, puis « Commencer ». Étape B : pas pendant le tutoriel (le premier
-	# combat reste simple) ; au premier placement, un conseil du Système l'explique.
-	var placement := GameData.tutorial_step == ""
-	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]], Callable(), placement)
-	if placement:
-		GameData.show_tip("placement")
+	# (étape E) Le Maître ne place plus ses héros : ils explorent le terrain d'eux-mêmes (voir BattleExplore). Hors du
+	# tutoriel, la première fois, un conseil du Système l'explique.
+	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]])
+	if GameData.tutorial_step == "" and battle.alert.disposition != "horde":
+		GameData.show_tip("exploration")
 
 
 func _make_margin() -> MarginContainer:

@@ -108,11 +108,17 @@ static func lines(tip_id: String) -> Array:
 				"« Pause » arrête le temps pour regarder, mais aucun ordre n'est possible pendant la pause.",
 				"Lisez bien la quête : l'objectif n'est pas toujours d'éliminer tous les ennemis.",
 			]
-		"placement":
+		"placement":  # (prompt 3 ; plus montré depuis l'étape E, gardé pour les anciennes sauvegardes)
 			return [
-				"Avant le combat, vous pouvez placer vos héros dans la zone verte : glissez un pion, ou touchez un héros puis une case.",
-				"Un héros que vous placez tient ce poste. « Placement automatique » remet tout le monde à sa place habituelle.",
-				"Touchez « Commencer » quand vous êtes prêt : le combat ne démarre pas avant.",
+				"Avant le combat, vous pouviez placer vos héros. Désormais, ils explorent eux-mêmes le terrain.",
+			]
+		"exploration":
+			return [
+				"Vos héros ne savent pas où sont les ennemis : ils explorent le terrain, chacun à sa façon.",
+				"Certains partent en éclaireur, d'autres s'éloignent seuls, les prudents ferment la marche.",
+				"Les monstres non plus ne savent pas tout : endormis, au repos, de garde ou en ronde, ils n'attaquent que s'ils vous voient ou vous entendent.",
+				"Un guetteur qui vous repère donne l'alarme. Un monstre surpris ne se défend pas.",
+				"Le compte à rebours démarre au premier coup échangé.",
 			]
 		"blessure":
 			return [

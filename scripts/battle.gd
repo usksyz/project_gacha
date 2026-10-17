@@ -38,6 +38,14 @@ func start() -> void:
 	_place_units()
 	perception = BattlePerception.new(self)
 	tactics = BattleTactics.new(self)
+	# Étape E : la disposition des ennemis selon la mission, et l'exploration des héros. Hors horde, le compte à
+	# rebours attend le premier contact (ou l'alarme).
+	alert = BattleAlert.new(self)
+	alert.setup()
+	explore = BattleExplore.new(self)
+	explore.setup()
+	if not alert.alarm:
+		clock_start = -1.0
 	# Les habitudes tactiques de chaque héros pour ce contexte (créées au premier combat, gardées sur le héros).
 	tactics_context = BattleTactics.context_of(quest, enemies.map(func(e): return e["source"]), map_data)
 	if not quest.get("duel", false):
@@ -73,7 +81,8 @@ func step() -> void:
 	_step()
 	time += TICK
 	# Sécurité : si personne ne s'est encore touché après CONTACT_WAIT_MAX, le décompte démarre quand même.
-	if clock_start < 0 and time >= CONTACT_WAIT_MAX:
+	# (Hors horde, c'est l'alarme qui s'en charge, voir BattleAlert.tick.)
+	if clock_start < 0 and alert.disposition == "horde" and time >= CONTACT_WAIT_MAX:
 		_start_clock()
 	if not finished and clock_time() >= quest["seconds"]:
 		if quest.get("duel", false):
@@ -107,7 +116,10 @@ func _start_clock() -> void:
 	if clock_start >= 0:
 		return
 	clock_start = time
-	_log("Premier contact avec la horde : le compte à rebours commence !")
+	if alert != null and alert.disposition != "horde":
+		_log("Premier contact avec l'ennemi : le compte à rebours commence !")
+	else:
+		_log("Premier contact avec la horde : le compte à rebours commence !")
 
 
 func _finish() -> void:
@@ -402,6 +414,20 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"last_attack_t": -100.0,   # moment de son dernier coup (ou tir, sort, soin)
 		"hurt_hero_at": -100.0,    # dernier moment où il a blessé un héros (colère, cible « qui fait mal »)
 		"hurt_hero_id": -1,        # le héros blessé
+		# Étape E (voir BattleAlert, BattleExplore) : son pas (1 : normal ; ronde, exploration prudente : moins), son
+		# état de vigilance (monstres : sommeil, repos, guet, ronde, poste, embusque, fouille, alerte), sa place et son
+		# état de départ, sa ronde, le moment où il a repéré quelqu'un, le bruit qu'il va voir, son dernier cri.
+		"pace": 1.0,
+		"state": "alerte",
+		"home_state": "alerte",
+		"home_pos": Vector2.ZERO,
+		"home_facing": Vector2(0, 1),
+		"route": [],
+		"route_i": 0,
+		"spot_t": -1.0,
+		"search": Vector2.ZERO,
+		"search_until": -1.0,
+		"alert_t": -100.0,
 	}
 
 
@@ -413,6 +439,7 @@ func _step() -> void:
 	_update_crowd()
 	if perception_on:
 		perception.tick()
+	alert.tick()
 	_refresh_costs()
 	_update_formations()
 	if not _defense_organized and not alley_exits.is_empty():
@@ -493,6 +520,7 @@ func _call_reinforcements() -> void:
 		if time - _free_since[place] >= REINFORCE_DELAY and not waiting.is_empty():
 			var enemy: Dictionary = waiting.pop_front()
 			_spawn_enemy(enemy, map_data.get("entry_row", MapGenerator.ENTRY_ROW))
+			alert.on_spawn(enemy)  # (étape E : sans alarme, il sort du camp, ou fait sa ronde)
 			arrivals.append(enemy["name"])
 			_free_since.erase(place)
 	if not arrivals.is_empty():
@@ -531,6 +559,12 @@ func _think(unit: Dictionary) -> void:
 	# Perception (C3) : on ne vise que les ennemis que l'on connaît (vus, entendus, appris d'un allié, ou encore
 	# en mémoire). Les ordres du Maître, eux, peuvent viser n'importe quel ennemi (le Maître voit tout l'écran).
 	var known := foes if not perception_on else foes.filter(func(foe): return perception.knows(unit, foe))
+	unit["pace"] = 1.0
+
+	# Étape E : un monstre qui ne chasse pas encore (au repos, endormi, de garde, en ronde, embusqué...) : voir
+	# BattleAlert. Une fois en alerte, il se bat comme avant.
+	if not unit["is_hero"] and alert.think(unit, known):
+		return
 
 	# Un héros en pleine panique (rupture) n'écoute plus rien.
 	if unit["is_hero"] and unit["panic"] != "":
@@ -603,6 +637,9 @@ func _think(unit: Dictionary) -> void:
 	# qu'il sait (voir BattleTactics). Sans elle (tactical_ai faux) : l'ancien comportement, plus bas.
 	if unit["is_hero"] and tactical_ai and not quest.get("duel", false):
 		if unit["held"] and tactics.hold(unit, known, foes):
+			return
+		# (étape E) des monstres qui ne l'ont pas vu : l'équipe se rassemble avant d'attaquer (BattleExplore.stalk)
+		if explore.stalk(unit, known):
 			return
 		if tactics.think(unit, known, foes, allies):
 			return
@@ -681,11 +718,14 @@ func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
 	return result
 
 
-## Perception (C3) : il ne connaît aucun ennemi. Un héros tient son poste (il attend de voir venir) ; un
-## monstre avance vers le camp des héros (la horde sait où ils sont, pas qui viser : il ne frappe pas avant de voir).
+## Perception (C3) : il ne connaît aucun ennemi. Un héros explore le terrain (étape E, voir BattleExplore ; en horde,
+## ou posté par le Maître : il tient son poste, il attend de voir venir) ; un monstre en alerte avance vers le camp
+## des héros (la horde sait où ils sont, pas qui viser : il ne frappe pas avant de voir).
 func _unaware(unit: Dictionary, foes: Array) -> void:
 	unit["target_id"] = -1
 	if unit["is_hero"]:
+		if explore.think(unit):
+			return
 		if unit["pos"].distance_to(unit["post"]) > 0.3:
 			_move_towards(unit, unit["post"])
 		return
@@ -899,6 +939,7 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 			attacker["kills"].append({"name": target["base_name"], "boss": target["boss"]})
 			attacker["journal_counts"]["kills"] += 1
 			_journal(attacker, "kill", {"with": target["base_name"], "boss": target["boss"]})
+	alert.on_hit(attacker, target)  # (étape E) le coup s'entend ; un monstre frappé passe en alerte
 
 
 ## Étape D : un allié éclaboussé par le sort d'un mage de son équipe : FRIENDLY_SPLASH de l'attaque du mage, moins sa

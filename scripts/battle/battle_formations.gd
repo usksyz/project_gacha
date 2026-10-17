@@ -70,8 +70,8 @@ func _organize_defense() -> void:
 	if leader.is_empty():
 		return
 	_defense_organized = true
-	# (un héros qui a déjà un ordre du Maître le garde ; un héros placé par le Maître avant le combat aussi)
-	var free := _alive(heroes).filter(func(h): return h["order"].is_empty() and h["present"] and not h.get("placed", false))
+	# (un héros qui a déjà un ordre du Maître le garde)
+	var free := _alive(heroes).filter(func(h): return h["order"].is_empty() and h["present"])
 	var shields := free.filter(func(h): return h["shield"] and not h["ranged"])
 	var others := free.filter(func(h): return not h["shield"] and not h["ranged"])
 	var shooters := free.filter(func(h): return h["ranged"])

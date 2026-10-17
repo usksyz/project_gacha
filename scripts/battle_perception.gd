@@ -106,6 +106,13 @@ func _look(unit: Dictionary) -> void:
 		unit["acuity"] = PersonalityEngine.axis(source, "ACU") / 10 if person else 0  # (palier, -10 à +10)
 		unit["glancer"] = person and _glances(unit)
 	var acuity: int = unit["acuity"]
+	# (étape E) Un guetteur balaie du regard ; un dormeur ne voit rien, un monstre au repos moins, un guetteur plus.
+	var sweep: Vector2 = battle.alert.facing_for(unit) if battle.alert != null else Vector2.ZERO
+	if sweep != Vector2.ZERO:
+		unit["facing"] = sweep
+	var sight: float = battle.alert.sight_factor(unit) if battle.alert != null else 1.0
+	# (étape E) Un embusqué ne se voit que de près (plus loin pour qui a l'œil vif).
+	unit["spot_hidden"] = GameData.HIDDEN_SIGHT * (1.0 + maxi(0, acuity) * GameData.HIDDEN_ACUITY)
 	var facing: Vector2 = unit["facing"]
 	# Un regard en arrière (Prudence, Méfiance) : ce tour-ci, il regarde derrière lui.
 	if unit["glancer"] and battle.time >= unit["glance_at"]:
@@ -124,6 +131,9 @@ func _look(unit: Dictionary) -> void:
 	if hawk_eye_active(unit):
 		length *= GameData.HAWK_EYE_LENGTH_FACTOR
 		angle *= GameData.HAWK_EYE_ANGLE_FACTOR
+	length *= sight
+	if sight <= 0.0:
+		count = 0  # (il dort : aucun bâtonnet)
 	var rays := PackedVector2Array()
 	var sees := {}
 	var foes := _foes(unit)
@@ -154,9 +164,13 @@ func _look(unit: Dictionary) -> void:
 	if not person and unit["base_name"] in GameData.EMBED_BEASTS:
 		hearing = GameData.HEARING_BEAST_RADIUS
 	hearing *= 1.0 + acuity * GameData.SIGHT_ACUITY_LENGTH
+	if battle.alert != null:
+		hearing *= battle.alert.hearing_factor(unit)
 	var hears := {}
 	for entry in candidates:
 		var foe: Dictionary = entry[0]
+		if battle.alert != null and battle.alert.hidden(foe) and entry[1].length() > unit["spot_hidden"]:
+			continue  # (un embusqué immobile ne fait pas de bruit)
 		if entry[1].length() <= hearing and absi(battle.height_of(foe) - battle.height_of(unit)) <= 1:
 			hears[foe["id"]] = true
 	unit["hears"] = hears
@@ -194,6 +208,8 @@ func _cast(unit: Dictionary, direction: Vector2, length: float, rays: PackedVect
 		if not map.in_bounds(cell):
 			stop = t
 			break
+		if unit["is_hero"] and battle.explore != null:
+			battle.explore.mark(cell)  # (étape E) une case vue : explorée
 		var top := map.height_at(cell)
 		var kind := map.kind_at(cell)
 		if kind == BattleMap.Kind.BLOCK:
@@ -216,6 +232,8 @@ func _cast(unit: Dictionary, direction: Vector2, length: float, rays: PackedVect
 			continue
 		if absf(rel.cross(direction)) > 0.5:
 			continue
+		if battle.alert != null and battle.alert.hidden(foe) and along > unit["spot_hidden"]:
+			continue  # (étape E) embusqué : trop loin pour le remarquer
 		if map.line_of_sight(origin, z, foe["pos"], battle.height_of(foe)):
 			sees[foe["id"]] = true
 

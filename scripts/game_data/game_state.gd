@@ -172,7 +172,7 @@ func add_gold(amount: int) -> void:
 ## ne les coupe pas.
 ## « tuto_arsenal » : la fenêtre de fin de l'étape « armes » (les héros se servent eux-mêmes dans l'arsenal).
 const TIP_IDS := ["bienvenue", "tuto_invocation", "invocation", "tuto_armes", "tuto_arsenal", "tuto_equipe",
-	"equipe", "tuto_etage", "etage", "blessure", "mort", "tuto_synthese", "tuto_fin", "batiment", "placement"]
+	"equipe", "tuto_etage", "etage", "blessure", "mort", "tuto_synthese", "tuto_fin", "batiment", "placement", "exploration"]
 
 
 ## Demande d'afficher un conseil, s'il n'a pas déjà été vu et si les conseils sont activés.
