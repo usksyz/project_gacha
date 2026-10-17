@@ -151,3 +151,10 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   Victoires : dans le bruit (±4 points sur 300 combats). Morts à l'étage 5 en hausse (brute +0,9, préparée +0,5) :
   un héros stabilisé reprend le combat avec 10 % de sa vie et peut retomber (avant, il était à l'abri).
 - Tutoriel, étage 1 (`tools/sim_tutoriel.gd`, vrai déroulé, 150 parties) : 100 % de victoires avant comme après.
+
+## Étape B : baisse des équipes préparées aux étages 3 et 4 après P2
+- `sim_tower ... etages=3|4 combats=600 equipe=preparee graine=7|8 personnalite=oui|non` (`personnalite=non` : effets de P2 neutres,
+  `PersonalityEngine.effects_on`), 1 200 combats par cas : avec les effets 86,3 / 85,3 % (étage 3) et 85,2 / 85,3 % (étage 4) ;
+  sans 83,7 / 85,5 % et 85,3 / 80,7 %. Les effets de la personnalité ne font pas baisser l'équipe préparée (plutôt +1,5
+  point). Avant P2 (prompt 2, 300 combats) : 89,7 / 87,3 % ; l'écart restant (environ 3 points) est proche du bruit des
+  séries de 300 combats (±3,5) ; les « -7 / -8 points » du prompt 2 en étaient en partie. Pas de rééquilibrage.

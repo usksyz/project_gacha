@@ -42,7 +42,7 @@ var _diag := {}
 
 func _ready() -> void:
 	var args := {"etages": "1,2,3,4,5", "combats": "200", "equipe": "brute", "graine": "1", "meneur": "libre", "meneur_toit": "",
-		"maitre": "non", "potions": "0", "carte": "", "perception": "", "ia": ""}
+		"maitre": "non", "potions": "0", "carte": "", "perception": "", "ia": "", "personnalite": ""}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
 		if parts.size() == 2:
@@ -51,6 +51,9 @@ func _ready() -> void:
 	if ResourceLoader.exists("res://scripts/map_generator.gd"):
 		_generator = load("res://scripts/map_generator.gd")
 	seed(int(args["graine"]))
+	# « personnalite=non » (étape B) : les effets de P2 neutres (PersonalityEngine.effects_on), pour mesurer leur part.
+	if args["personnalite"] == "non":
+		PersonalityEngine.effects_on = false
 	Settings.dev_mode = false  # (pas enregistré)
 	GameData.roster.clear()    # lobby vide : le tirage diversifiant ne compare pas les héros à ceux de la sauvegarde
 	var prepared: bool = args["equipe"] == "preparee"

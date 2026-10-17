@@ -1281,11 +1281,18 @@ static func modifier_tier(effect: String, hero: Dictionary) -> int:
 	return 0
 
 
+## Mesures seulement (sim_tower « personnalite=non », étape B) : faux = les effets de P2 (MODIFIERS, stress revu,
+## accoutumance) sont neutres, pour mesurer leur part. Jamais changé en jeu.
+static var effects_on := true
+
+
 ## Une valeur de jeu (« base ») passée par la personnalité du héros : MODIFIERS (résultat borné par « min » /
 ## « max »), puis les accès de ACCESS_MODIFIERS (« set » l'emporte sur les bornes : « ne fuit jamais » vaut 0
 ## même si la fuite ne descend jamais sous 5 % autrement ; « mul » reste dans les bornes). C'est par ici que
 ## les mécaniques lisent la personnalité (jamais les paliers bruts).
 static func modified(effect: String, hero: Dictionary, base: float, context := {}) -> float:
+	if not effects_on:
+		return base
 	var data: Dictionary = D.MODIFIERS[effect]
 	if data.get("with_base", false) and base == 0.0:
 		return base
@@ -1323,7 +1330,7 @@ static func stress(hero: Dictionary, type: String, amount: float, context := {})
 
 ## Le facteur du stress : Stabilité x sensibilité au type x accoutumance (borné), puis les accès (Roc, Sang-froid).
 static func stress_factor(hero: Dictionary, type: String, context := {}) -> float:
-	if not hero.has("persona"):
+	if not hero.has("persona") or not effects_on:
 		return 1.0
 	var sta := tier(hero, "STA")
 	var factor := effect_div(1.0, D.STRESS_STABILITY_STEP, sta) if sta >= 0 else 1.0 + D.STRESS_STABILITY_STEP * -sta
@@ -1357,6 +1364,8 @@ static func stress_subject(type: String, context := {}) -> String:
 
 ## Accoutumance : appréhension du sujet / son danger de départ, bornée (Han et la synthèse : 0,1).
 static func habit_factor(hero: Dictionary, subject: String) -> float:
+	if not effects_on:
+		return 1.0
 	var danger := maxf(1.0, float(D.SUBJECTS.get(subject, {}).get("danger", 50)))
 	return clampf(apprehension(hero, subject) / danger, D.STRESS_HABIT_MIN, D.STRESS_HABIT_MAX)
 
