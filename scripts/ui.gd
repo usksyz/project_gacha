@@ -84,6 +84,67 @@ static func make_system_window(title: String, lines: Array, danger := false) -> 
 	return panel
 
 
+## Vente à l'entrepôt (GameData.sell_all : déchets et armes F rangées) : une ligne qui dit ce qui se vend et
+## combien, et un bouton « Vendre » qui ouvre une fenêtre de confirmation par-dessus « host » (Oui / Non).
+## « on_done » est appelée après la vente (pour redessiner l'écran).
+static func make_sale_section(host: Control, on_done: Callable) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var value: Dictionary = GameData.sale_value()
+	var text := "Vente : %d poubelle%s (%d or pièce), %d arme%s F rangée%s (%d or pièce)." % [
+		value["junk"], "s" if value["junk"] > 1 else "", GameData.JUNK_SELL_PRICE,
+		value["weapons"], "s" if value["weapons"] > 1 else "", "s" if value["weapons"] > 1 else "",
+		GameData.WEAPON_F_SELL_PRICE]
+	if GameData.tutorial_step != "":
+		text += " Pas pendant le tutoriel."
+	var label := make_label(text, 19)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(label)
+	var button := make_button("Vendre (%d or)" % value["gold"], func(): _confirm_sale(host, on_done), 22)
+	button.custom_minimum_size.y = 64
+	button.disabled = not GameData.can_sell()
+	box.add_child(button)
+	return box
+
+
+static func _confirm_sale(host: Control, on_done: Callable) -> void:
+	var value: Dictionary = GameData.sale_value()
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	host.add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.85)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 32)
+	overlay.add_child(margin)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 16)
+	margin.add_child(box)
+	box.add_child(make_system_window("Vente", [
+		"Vendre %d poubelle%s et %d arme%s de grade F rangée%s dans l'arsenal ?" % [value["junk"],
+			"s" if value["junk"] > 1 else "", value["weapons"], "s" if value["weapons"] > 1 else "",
+			"s" if value["weapons"] > 1 else ""],
+		"Tu recevras %d or. Les armes vendues sont perdues." % value["gold"]]))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	var answers := [["Non", func(): overlay.queue_free()], ["Oui", func():
+		GameData.sell_all()
+		overlay.queue_free()
+		on_done.call()]]
+	for entry in answers:
+		var button := make_button(entry[0], entry[1], 26)
+		button.custom_minimum_size.y = 90
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(button)
+
+
 ## Fenêtre d'un héros tombé (le poids de la mort) : son portrait, son nom, ses étoiles, sa classe et son
 ## niveau, la cause de sa mort, ses traits révélés et ses liens ; puis une ligne par ami ou frère d'armes
 ## encore en vie (« Y a perdu un frère d'armes »). « memorial » : sa fiche figée, ouverte depuis la liste

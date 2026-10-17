@@ -26,7 +26,14 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     des derniers combats (hero["recent_battles"]), bibliothèque et mémorial du Maître (absents = vides).
 ## 6 : Combat v2, C1 : étages de la Tour figés (« etages » : carte et ennemis, voir floor_layout ; absents =
 ##     générés au prochain passage), carte du combat en cours (pending_battle["map"]).
-const SAVE_VERSION := 6
+## 7 : tutoriel, étape « armes » (tirage d'armes offert) entre l'invocation et l'équipe : une partie arrêtée à
+##     l'étape « equipe » sans équipe composée y revient ; plus loin, elle la saute.
+## 8 : Combat v2, C3 : habitudes tactiques de chaque héros (hero["tactics"], par contexte, voir BattleTactics.profile) ;
+##     absentes d'une ancienne sauvegarde : créées au premier combat dans chaque contexte (rien à adapter).
+## 9 : économie (prompt 1) : garantie de l'invocation spéciale à la Genshin (« pity » = tirages sans 5 étoiles,
+##     borné à PITY5_LIMIT - 1 ; « pity4 » = sans 4 étoiles ou mieux, 0 si absent), invocation gratuite du jour
+##     (« invocation_gratuite », absente = pas encore prise).
+const SAVE_VERSION := 9
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -38,6 +45,8 @@ func save_game() -> void:
 	file.set_value("partie", "gemmes", real_gems)
 	file.set_value("partie", "or", real_gold)
 	file.set_value("partie", "pity", pity_counter)
+	file.set_value("partie", "pity4", pity4_counter)
+	file.set_value("partie", "invocation_gratuite", free_summon_day)
 	file.set_value("partie", "etage", tower_floor)
 	file.set_value("partie", "prochain_id", next_hero_id)
 	file.set_value("partie", "codes_utilises", used_codes)
@@ -73,7 +82,11 @@ func load_game() -> bool:
 		return false
 	real_gems = file.get_value("partie", "gemmes", 3000)
 	real_gold = file.get_value("partie", "or", 0)
-	pity_counter = file.get_value("partie", "pity", 0)
+	# Garantie (version 9) : une ancienne partie garde son compteur (l'ancien pity de 50), borné à 89 ; le compteur
+	# des 4 étoiles part de 0.
+	pity_counter = mini(file.get_value("partie", "pity", 0), PITY5_LIMIT - 1)
+	pity4_counter = mini(file.get_value("partie", "pity4", 0), PITY4_LIMIT - 1)
+	free_summon_day = file.get_value("partie", "invocation_gratuite", "")  # absente : celle du jour est à prendre
 	tower_floor = file.get_value("partie", "etage", 1)
 	next_hero_id = file.get_value("partie", "prochain_id", 1)
 	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
@@ -116,6 +129,10 @@ func load_game() -> bool:
 	# Sauvegarde d'avant la version 2 : les héros secrets y étaient immortels, ils deviennent mortels
 	# (la case « Immortel » du mode dev part décochée).
 	var version: int = file.get_value("partie", "version", 1)
+	# Tutoriel d'avant l'étape « armes » (version 7) : arrêté à l'équipe, pas encore composée, il passe d'abord
+	# par l'armurerie ; une équipe déjà composée (ou une étape plus loin) saute l'étape.
+	if version < 7 and tutorial_step == "equipe" and teams.all(func(team): return team.is_empty()):
+		tutorial_step = "armes"
 	for hero in roster:
 		if version < 2 and hero.get("secret", false):
 			hero["immortal"] = false
@@ -149,11 +166,13 @@ func reset_game() -> void:
 
 ## Prépare une partie neuve.
 func _new_game() -> void:
-	real_gems = 3000
+	real_gems = START_GEMS
 	# Tutoriel : de quoi payer exactement l'invocation normale x10 qu'il impose.
 	real_gold = SUMMON_TYPES["normal"]["cost"] * TUTORIAL_SUMMON_COUNT
 	tutorial_step = TUTORIAL_STEPS[0]
 	pity_counter = 0
+	pity4_counter = 0
+	free_summon_day = ""
 	tower_floor = 1
 	roster.clear()
 	next_hero_id = 1

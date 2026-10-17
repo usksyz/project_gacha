@@ -314,7 +314,7 @@ func _roll_pickup(hero: Dictionary, t: float, dungeon_id: String) -> Dictionary:
 			"text": "%s a trouvé une « %s » ! Elle sert à la promotion." % [who, PROMOTION_STONE]}
 	if roll < PLAN_CHANCE + STONE_PICKUP_CHANCE + JUNK_CHANCE:
 		return {"t": t, "kind": "junk", "name": JUNK_NAME, "grade": "F",
-			"text": "%s a collecté « %s (F) ». Astuce : la poubelle est inutile, jetez-la." % [who, JUNK_NAME]}
+			"text": "%s a collecté « %s (F) ». Astuce : la poubelle ne sert à rien, mais elle se vend." % [who, JUNK_NAME]}
 	var material: String = DAILY_DUNGEONS[dungeon_id]["materials"].pick_random()
 	var grade := _roll_from(MATERIAL_GRADE_RATES)
 	return {"t": t, "kind": "material", "name": material, "grade": grade,
@@ -347,8 +347,8 @@ func expedition_log_so_far(expedition: Dictionary) -> Array:
 	return expedition.get("log", []).filter(func(entry): return entry["t"] <= elapsed)
 
 
-## À la fin du temps, chaque groupe est rappelé : les matériaux vont dans l'entrepôt,
-## les plans sont gardés, les déchets jetés. Appelée régulièrement (et au lancement).
+## À la fin du temps, chaque groupe est rappelé : les matériaux et les déchets vont dans l'entrepôt (les déchets
+## se vendent, voir « Vente »), les plans sont gardés. Appelée régulièrement (et au lancement).
 func update_expedition() -> void:
 	var finished := expeditions.filter(func(expedition): return expedition_remaining(expedition) <= 0)
 	if finished.is_empty():
@@ -377,12 +377,17 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 				if not entry["name"] in plans:
 					plans.append(entry["name"])
 				totals["Plan : %s" % entry["name"]] = 1
+			"junk":
+				# (avant le prompt 1, les déchets étaient jetés ; ils se vendent maintenant)
+				add_material(JUNK_NAME, "F", 1)
+				var junk_key := "%s (F)" % JUNK_NAME
+				totals[junk_key] = totals.get(junk_key, 0) + 1
 	var lines := ["L'équipe %d est revenue du donjon journalier (%s)." % [expedition["team_index"] + 1,
 		expedition_dungeon(expedition)["name"]]]
 	for monster in rare_monsters:
 		lines.append("Monstre rare chassé : %s !" % monster)
 	if totals.is_empty():
-		lines.append("Elle n'a rien rapporté d'utile.")
+		lines.append("Elle n'a rien rapporté.")
 	var keys := totals.keys()
 	keys.sort()  # rangé par matériau
 	for key in keys:
@@ -392,6 +397,50 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 		if hero["id"] in expedition["team"]:
 			hero["training_since"] = Time.get_unix_time_from_system()
 	return {"lines": lines}
+
+
+# ---------------------------------------------------------------------------
+# Vente (deuxième source d'or)
+# ---------------------------------------------------------------------------
+# Prompt 1 (économie) : on vend à l'entrepôt les déchets (JUNK_NAME) et les armes de grade F rangées dans
+# l'arsenal (pas celles qu'un héros porte). Pas pendant le tutoriel (ses armes servent à l'étage 1).
+# Prix provisoires.
+const JUNK_SELL_PRICE := 200
+const WEAPON_F_SELL_PRICE := 500
+
+
+## Les armes F rangées (owner 0) qu'on peut vendre.
+func sellable_weapons() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for weapon in free_weapons():
+		if weapon["grade"] == "F":
+			result.append(weapon)
+	return result
+
+
+## Ce que rapporterait la vente : {"junk": nombre de déchets, "weapons": nombre d'armes F, "gold": or}.
+func sale_value() -> Dictionary:
+	var junk := material_count(JUNK_NAME)
+	var weapons := sellable_weapons().size()
+	return {"junk": junk, "weapons": weapons, "gold": junk * JUNK_SELL_PRICE + weapons * WEAPON_F_SELL_PRICE}
+
+
+func can_sell() -> bool:
+	return tutorial_step == "" and sale_value()["gold"] > 0
+
+
+## Vend tous les déchets et toutes les armes F rangées. Renvoie l'or gagné (0 si rien à vendre).
+func sell_all() -> int:
+	if not can_sell():
+		return 0
+	var value := sale_value()
+	_take_material(JUNK_NAME, value["junk"])
+	for weapon in sellable_weapons():
+		arsenal.erase(weapon)
+	gold += value["gold"]
+	gold_changed.emit(gold)
+	save_game()
+	return value["gold"]
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +465,31 @@ const FORGE_RECIPES := {
 	"Arc": {"main": "Minerai de fer", "qty": 3, "extra": {"Charbon": 1}},
 	"Bouclier": {"main": "Minerai de fer", "qty": 6, "extra": {"Charbon": 2}},
 }
+
+## Potion de soin (POTION, items.gd) : préparée à la forge, sans puzzle ni tirage (prompt 1, pour que les potions
+## emportées dans la Tour existent hors du mode dev). L'herbe médicinale vient de la Forêt Kenout (de n'importe
+## quel grade, les plus faibles d'abord). Recette provisoire.
+const POTION_RECIPE := {"Herbe médicinale": 3}
+
+
+## Vrai si l'entrepôt a de quoi préparer une potion de soin.
+func can_brew_potion() -> bool:
+	for material in POTION_RECIPE:
+		if material_count(material) < POTION_RECIPE[material]:
+			return false
+	return true
+
+
+## Prépare une potion de soin (grade F, rangée dans l'entrepôt). Renvoie faux s'il manque des herbes.
+func brew_potion() -> bool:
+	if not forge_built() or not can_brew_potion():
+		return false
+	for material in POTION_RECIPE:
+		_take_material(material, POTION_RECIPE[material])
+	add_material(POTION, "F", 1)
+	save_game()
+	return true
+
 
 ## Difficultés du puzzle (cahier des charges) : taille de la grille, nombre de pièces (et leur taille),
 ## cases d'impureté, pièces révélées une par une, rotation permise, silhouette qui s'efface (secondes),

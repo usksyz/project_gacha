@@ -26,8 +26,11 @@ signal tutorial_changed
 # État de la partie
 # ---------------------------------------------------------------------------
 
+## Gemmes d'une partie neuve (prompt 1, économie : une invocation spéciale ; avant 3 000). Une partie en cours
+## garde les siennes.
+const START_GEMS := 500
 ## Vraies réserves de gemmes et d'or : celles de la sauvegarde.
-var real_gems := 3000
+var real_gems := START_GEMS
 var real_gold := 0
 ## Montant affiché et utilisable en mode dev (Settings.dev_mode) : « infini ».
 const DEV_MONEY := 999999999
@@ -45,7 +48,12 @@ var gold: int:
 	set(value):
 		if not Settings.dev_mode:
 			real_gold = value
+## Garantie de l'invocation spéciale (summon.gd) : tirages faits depuis le dernier 5 étoiles, et depuis le
+## dernier 4 étoiles ou mieux.
 var pity_counter := 0
+var pity4_counter := 0
+## Date (jour de l'appareil, « 2026-10-17 ») de la dernière invocation gratuite quotidienne ("" = jamais prise).
+var free_summon_day := ""
 
 ## Prochain étage de la Tour à conquérir.
 var tower_floor := 1
@@ -155,8 +163,9 @@ func add_gold(amount: int) -> void:
 ## Tous les conseils, dans l'ordre où un joueur les rencontre d'habitude. Ceux qui commencent par « tuto_ »
 ## sont les fenêtres du tutoriel (une par étape, puis la fin) : obligatoires comme la bienvenue, le réglage
 ## ne les coupe pas.
-const TIP_IDS := ["bienvenue", "tuto_invocation", "invocation", "tuto_equipe", "equipe", "tuto_etage", "etage",
-	"blessure", "mort", "tuto_synthese", "tuto_fin", "batiment"]
+## « tuto_arsenal » : la fenêtre de fin de l'étape « armes » (les héros se servent eux-mêmes dans l'arsenal).
+const TIP_IDS := ["bienvenue", "tuto_invocation", "invocation", "tuto_armes", "tuto_arsenal", "tuto_equipe",
+	"equipe", "tuto_etage", "etage", "blessure", "mort", "tuto_synthese", "tuto_fin", "batiment"]
 
 
 ## Demande d'afficher un conseil, s'il n'a pas déjà été vu et si les conseils sont activés.
@@ -190,12 +199,14 @@ func reset_tips() -> void:
 # ---------------------------------------------------------------------------
 # Cahier, « Tutoriel et interface » : premier combat, puis la synthèse, dont la porte s'ouvre à ce moment.
 # Demande du porteur du projet : on commence avec de quoi payer une invocation normale x10, et le tutoriel
-# force, dans l'ordre : l'invocation x10 (un 3 étoiles garanti, voir summon.gd), une équipe à composer,
-# l'étage 1 (à gagner), une synthèse. Pendant ce temps, seul l'onglet de l'étape est permis (main.gd),
-# avec un bandeau qui dit quoi faire. Les fenêtres de chaque étape sont des conseils « tuto_... ».
+# force, dans l'ordre : l'invocation x10 (un 3 étoiles garanti, voir summon.gd), le tirage d'armes x10 à
+# l'armurerie (étape T1, demande du porteur du projet : offert, une épée, un bouclier et un arc garantis, voir
+# items.gd ; il ouvre aussi le terrain d'entraînement), une équipe à composer, l'étage 1 (à gagner), une
+# synthèse. Pendant ce temps, seul l'onglet de l'étape est permis (main.gd), avec un bandeau qui dit quoi
+# faire. Les fenêtres de chaque étape sont des conseils « tuto_... ».
 # Une partie d'avant le tutoriel n'en a pas (tutorial_step vide).
 
-const TUTORIAL_STEPS := ["invocation", "equipe", "etage", "synthese"]
+const TUTORIAL_STEPS := ["invocation", "armes", "equipe", "etage", "synthese"]
 ## Nombre de héros de l'invocation forcée du tutoriel.
 const TUTORIAL_SUMMON_COUNT := 10
 

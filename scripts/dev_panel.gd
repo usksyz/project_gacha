@@ -72,7 +72,14 @@ func _ready() -> void:
 		if GameData.tutorial_step == "":
 			return "Pas de tutoriel en cours."
 		GameData.dev_skip_tutorial()
-		return "Tutoriel passé : tous les onglets sont ouverts."]])
+		return "Tutoriel passé : tous les onglets sont ouverts (rien n'est donné : ni héros, ni le tirage d'armes offert)."]])
+
+	_add_section(content, "Invocation")
+	_add_row(content, [["Rendre l'invocation gratuite", func():
+		GameData.dev_reset_free_summon()
+		if GameData.tutorial_step != "":
+			return "L'invocation gratuite du jour est rendue (elle n'apparaît qu'après le tutoriel)."
+		return "L'invocation gratuite du jour est rendue (écran Invocation)."]])
 
 	_add_section(content, "Tour")
 	floor_label = UI.make_label("", 22)

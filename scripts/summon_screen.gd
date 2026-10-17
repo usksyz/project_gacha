@@ -19,6 +19,9 @@ const VORTEX_COLORS := {
 
 var pity_label: Label
 var roster_label: Label
+## « Invocation gratuite » : une invocation normale x1 offerte par jour (GameData.free_summon), visible tant
+## qu'elle n'est pas prise.
+var free_button: Button
 var results_grid: GridContainer
 var group_box: VBoxContainer
 ## Boutons d'invocation : [sorte, nombre, bouton], pour les griser quand on ne peut pas payer.
@@ -51,7 +54,16 @@ func on_shown() -> void:
 
 
 func _on_summon(summon_type: String, count: int) -> void:
-	var heroes := GameData.summon(summon_type, count)
+	_reveal(GameData.summon(summon_type, count))
+
+
+## L'invocation gratuite du jour.
+func _on_free_summon() -> void:
+	_reveal(GameData.free_summon())
+
+
+## Montre les héros obtenus (rien si la liste est vide : invocation impossible).
+func _reveal(heroes: Array[Dictionary]) -> void:
 	if heroes.is_empty():
 		return
 	_show_results(heroes)
@@ -97,11 +109,14 @@ func _show_results(heroes: Array[Dictionary]) -> void:
 
 
 func _refresh_labels() -> void:
-	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %d invocations" % GameData.summons_before_pity()
+	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %s, 4 étoiles dans %d" % [
+		_pulls(GameData.summons_before_pity()), GameData.summons_before_pity4()]
 	var alive := GameData.alive_heroes().size()
 	roster_label.text = "Héros : %d / %d" % [alive, GameData.HERO_LIMIT]
 	if GameData.free_hero_slots() == 0:
 		roster_label.text += " — résidences pleines"
+	free_button.visible = GameData.free_summon_available()
+	free_button.disabled = GameData.free_hero_slots() < 1
 	for entry in summon_buttons:
 		# On ne peut invoquer que si l'on peut payer ET s'il reste assez de place dans les résidences.
 		# Pendant le tutoriel, seule l'invocation qu'il demande est permise (GameData.summon_allowed).
@@ -164,6 +179,10 @@ func _build_ui() -> void:
 	roster_label = UI.make_label("", 24)
 	roster_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(roster_label)
+
+	free_button = UI.make_button("Invocation gratuite (une par jour)", _on_free_summon, 24)
+	free_button.custom_minimum_size.y = 72
+	layout.add_child(free_button)
 
 	if Settings.new_visuals:
 		_add_illustrated_summons(layout)
@@ -240,7 +259,17 @@ func _show_rates(summon_type: String) -> void:
 	var rarities: Array = info["rates"].keys().filter(func(r): return info["rates"][r] > 0.0)
 	var lines := ["Héros de %d à %d étoiles." % [rarities.min(), rarities.max()]]
 	if summon_type == "special":
-		lines.append("Pity : un 5★ garanti au bout de %d invocations spéciales sans 5★." % GameData.PITY_LIMIT)
+		lines.append("Taux de base : 5★ %s %%, 4★ %s %%, 3★ %s %%." % [_percent(info["rates"][5]),
+			_percent(info["rates"][4]), _percent(info["rates"][3])])
+		lines.append("Garantie : à partir du %de tirage sans 5★, sa chance monte de %d points par tirage ; un 5★ est sûr au %de. Un 4★ ou mieux est sûr tous les %d tirages." % [
+			GameData.PITY5_SOFT_START, roundi(GameData.PITY5_SOFT_STEP * 100), GameData.PITY5_LIMIT, GameData.PITY4_LIMIT])
+		lines.append("Taux réel du 5★, garantie comprise : environ %s %% (un tous les %d tirages en moyenne)." % [
+			String.num(GameData.five_star_real_rate() * 100.0, 1).replace(".", ","), roundi(1.0 / GameData.five_star_real_rate())])
+		lines.append("Tes compteurs : 5★ garanti dans %s, 4★ ou mieux garanti dans %s." % [
+			_pulls(GameData.summons_before_pity()), _pulls(GameData.summons_before_pity4())])
+		lines.append("Mages : %s %% des tirages, quel que soit le rang (la garantie n'en donne jamais)." % _percent(GameData.MAGE_CHANCE))
+	else:
+		lines.append("Aucune garantie.")
 	for rarity in info["rates"]:
 		if info["rates"][rarity] <= 0.0:
 			continue
@@ -272,6 +301,11 @@ func _show_rates(summon_type: String) -> void:
 	box.add_child(close)
 
 
+## « 1 tirage », « 12 tirages ».
+func _pulls(count: int) -> String:
+	return "%d tirage%s" % [count, "s" if count > 1 else ""]
+
+
 ## Un pourcentage lisible : 0.012 -> « 1,2 », 0.3 -> « 30 ».
 func _percent(rate: float) -> String:
 	var value := rate * 100.0
@@ -288,7 +322,7 @@ func _rates_text(info: Dictionary) -> String:
 		parts.append("%d★ %s %%" % [rarity, _percent(info["rates"][rarity])])
 	var text := "  ".join(parts)
 	if info["mages"]:
-		text += "  — mages : très très rares"
+		text += "  — mages %s %%" % _percent(GameData.MAGE_CHANCE)
 	return text
 
 

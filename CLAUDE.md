@@ -15,6 +15,16 @@ héros uniques qui peuvent mourir définitivement, Tour à étages, gestion de b
 - Tous les chiffres sont provisoires et rangés dans `scripts/game_data/`.
 - Chaque étape : un commit par point, sauvegarde compatible avec les parties existantes, tests en mode
   normal (pas seulement en mode dev), CLAUDE.md mis à jour, liste de ce qu'il faut tester.
+- Tests et sauvegarde locale (règle du porteur du projet, pour toutes les sessions ; remplace l'ancienne règle
+  « ne jamais modifier la vraie sauvegarde ») : Claude peut modifier ou réinitialiser la sauvegarde locale
+  (`user://sauvegarde.cfg`, sur le PC : `%APPDATA%\Godot\app_userdata\Projet Gacha`) si c'est utile pour tester.
+  Avant la première modification d'une session, une copie datée de l'ancienne (sauvegarde et paramètres) dans un
+  dossier à part (`%APPDATA%\Godot\app_userdata\Projet Gacha - copies\<date>_<étape>`). Les simulations
+  (`sim_tower`, bancs de mesure) restent dans une copie du projet (worktree + `override.cfg`, voir P1a-bis), pour
+  ne pas fausser les mesures.
+- Copies d'avant chaque prompt (demande du porteur du projet) : avant de modifier, les fichiers concernés sont copiés
+  dans `backups/avant-promptN/` (mêmes chemins), poussés avec le reste ; `backups/.gdignore` empêche Godot de les
+  lire (sinon les `class_name` seraient en double).
 
 ## Cahier des charges
 Le cahier des charges est un document Claude Docs que le porteur du projet complète au fil du temps :
@@ -93,12 +103,21 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - Tutoriel obligatoire d'une partie neuve (demande du porteur du projet ; cahier, « Tutoriel et interface » :
   premier combat puis la synthèse, « dont la porte s'ouvre à ce moment ») : `GameData.tutorial_step`
   (`game_state.gd`, sauvegardé « tutoriel » ; absent d'une ancienne sauvegarde = pas de tutoriel), étapes
-  `TUTORIAL_STEPS` : invocation, equipe, etage, synthese, puis "" (fini). On commence avec exactement l'or d'une
-  invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes 3000 comme avant). 1. Seule la normale x10 est
-  permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
-  (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Composer une équipe
-  (« Terminé » avec au moins un héros ; « Entrer dans la Tour » fermé avant). 3. Gagner l'étage 1 (défaite :
-  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 4. Retour à
+  `TUTORIAL_STEPS` : invocation, armes, equipe, etage, synthese, puis "" (fini). On commence avec exactement l'or
+  d'une invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes : `START_GEMS`, 500 depuis le prompt 1). 1. Seule la normale x10
+  est permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
+  (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Armes (étape T1, demande
+  du porteur du projet) : fenêtre « tuto_armes » (les héros partent avec les armes de l'arsenal, il faut en
+  invoquer) ; en la fermant, le hub, où une flèche « Touche ici » montre l'armurerie (`HubCity3D.TUTORIAL_POINTS`,
+  `HubScreen.TUTORIAL_PLACES` : seul ce lieu s'ouvre) ; à l'armurerie, seul le tirage x10 est permis
+  (`weapon_draw_allowed`), et il est offert (`weapon_draw_cost` = 0 ; choisi plutôt que 50 000 or de plus au
+  départ : rien en trop, et une partie déjà en cours n'a pas besoin d'or). Il donne au moins une épée, un bouclier
+  et un arc (`TUTORIAL_WEAPON_TYPES`, `items.gd`), compte pour le terrain d'entraînement (10 armes : fenêtre
+  « Construction terminée », pas d'étape en plus ; son animation dans la cité passe avant celle de la chambre de
+  synthèse, à l'étape 5). Puis fenêtre « tuto_arsenal » (les héros prennent eux-mêmes une arme en partant,
+  bouton « Auto ») et celle de l'étape suivante. Forge fermée pendant le tutoriel. 3. Composer une équipe
+  (« Terminé » avec au moins un héros ; « Entrer dans la Tour » fermé avant). 4. Gagner l'étage 1 (défaite :
+  on recommence). La chambre de synthèse est alors construite gratuitement (`finish_tower_battle`). 5. Retour à
   la cité (« Continuer » : `DungeonsScreen.navigate`) : la chambre se construit sous les yeux du Maître
   (demande du porteur du projet : `HubCity3D` la laisse hors de la cité tant que « tuto_synthese » n'est pas vu,
   puis joue l'animation ; signal `construction_finished` → fenêtre de l'étape, `hub_screen.gd`), une flèche
@@ -106,9 +125,15 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   hub et les héros ne répondent pas). Ancien plan 2D : la fenêtre tout de suite. Puis une synthèse ; moins de
   2 héros vivants : le tutoriel s'arrête (`end_tutorial`).
   Passage d'étape : `advance_tutorial(étape)` (signal `tutorial_changed`). `main.gd` : bandeau en haut
-  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS` ; synthèse : le hub),
-  reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), hub en fermant
-  « tuto_fin ». Mode dev : « Passer le tutoriel » (`dev_skip_tutorial`).
+  (`SystemTips.tutorial_goal`), seul l'onglet de l'étape est permis (`TUTORIAL_SCREENS` ; armes et synthèse : le
+  hub), reprise à l'écran de l'étape au lancement, fenêtre de chaque étape (`show_tutorial_tip`), hub en fermant
+  « tuto_armes » et « tuto_fin ». Mode dev : « Passer le tutoriel » (`dev_skip_tutorial` : rien n'est donné, ni
+  le tirage offert). Sauvegarde version 7 : une partie arrêtée à l'étape « equipe » sans équipe composée revient
+  à l'étape « armes » ; une équipe composée, ou une étape plus loin : l'étape est sautée (`load_game`).
+  Vérification : `tools/test_tutoriel.tscn` (avec une fenêtre ; voir son en-tête) joue une partie neuve en mode
+  normal à travers les écrans (invocation, flèche et armurerie touchées dans la cité 3D, tirage, équipe, étage 1
+  jusqu'à la victoire avec les héros armés, synthèse), la reprise au lancement et les anciennes sauvegardes, avec
+  des captures ; il recommence la partie (voir « Tests et sauvegarde locale »).
 - Police : la police de Godot n'a pas ★ ← → ♥ ♡ ◆ ▶ ∞ ✓, et sur le web aucune police de l'appareil ne prend
   le relais (carrés vides sur le téléphone). `main.gd` (`_add_symbol_font`) ajoute DejaVu Sans
   (`assets/fonts`, licence libre) en secours de la police par défaut. Un nouveau symbole : vérifier qu'il
@@ -306,9 +331,11 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Mode dev (fiche du héros, « PERSONNALITÉ (mode dev) ») : métier, couches, talent, effort, tics, les 18 curseurs
   par famille (− / + : palier ; évo− / évo+ : 10 points d'évolution, `dev_set_axis_tier`, `dev_add_evolution`),
   composites, comportements, accès ouverts, tensions, « Nouveau tirage » (`dev_reroll_personality`).
-  Banc de test : `Godot --headless --path . -s res://tools/test_personality.gd` (tableau de la section 1 des
+  Banc de test : `Godot --headless --path <copie> -s res://tools/test_personality.gd`, dans une copie du projet
+  avec un `override.cfg` (voir P1a-bis) : même lancé avec -s, il démarre `GameData`, qui relit et réécrit la
+  sauvegarde (constaté pendant C2 ; la sauvegarde réelle n'avait rien perdu). Il vérifie le tableau de la section 1 des
   Paliers sur 40 000 héros par rareté à ±10 %, aucun héros plat, exemples Varek / Sorn / Ilda, évolution 60 à
-  100 = 225 points, fonctions d'effet, tirage diversifiant). Écarts signalés : 3★ facteur de queue 1,03 au lieu
+  100 = 225 points, fonctions d'effet, tirage diversifiant. Écarts signalés : 3★ facteur de queue 1,03 au lieu
   de 1 (sinon 1 héros sur 9 à ±90, pas 1 sur 8) ; la ligne « Secret (si généré) » ne peut pas être atteinte
   entière (à 90 : 1 sur 2,4 au lieu de 2) ; Rythme : l'onglet Axes met Aube au pôle haut, sa règle dit + = nuit
   (gardé : + Nocturne, exclusive Veilleur). Après l'ajout d'un fichier `class_name`, lancer une fois
@@ -408,6 +435,14 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   de la Tour complet (journal, carnet d'étage, bibliothèque, mémorial), enregistrer puis relire à l'identique (les
   nombres à virgule relus se comparent à 0,0001 près : arrondi connu de la sauvegarde). P1b est terminée : P2
   branchera les effets (sujets et appréhension en combat, besoins, opinions) sur ces structures.
+- Personnalité v2, étape P2 : commencée puis mise en attente (le porteur du projet a fait passer C2 avant), sur la
+  branche `p2-personnalite`, pas encore dans `main` : P2a table MODIFIERS et vrai `modifier()`, P2b stress revu
+  (sensibilité, type, accoutumance), P2c effets des sujets en combat, P2d `can_learn` et affinités (conditions du
+  catalogue réécrites sur les paliers, choix « recréer et adapter »), P2e Berserk et éveils selon le caractère. Reste
+  P2f armes de prédilection et plafonds, P2g exclusives. Coefficients du cahier suivis à la lettre (choix du porteur
+  du projet). À reprendre après le réglage de la difficulté des étages 5 et 10 (fusionner `main` dans la branche).
+  À la fusion : rapprocher `TacticsData.PERSONALITY` (IA tactique, C3 : poids et seuils lus par `axis` et
+  `composite`, hors de `modifier()`) de la table MODIFIERS. La branche est sur GitHub (`origin/p2-personnalite`).
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
@@ -447,15 +482,17 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
 - `scripts/battle.gd` : classe `Battle`, combat en temps réel vu du dessus, joué en direct par pas
   de 0,1 s (`start()` puis `step()`) : grille « 3D » avec hauteurs (voir « Combat v2, étape C1 »), recherche de
   chemin, ligne de vue 3D pour les tirs, particularités de chaque classe, saignement, éveil, renforts, remparts, ordres
-  du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres.
+  du joueur (`order_move`, `order_attack`). `run()` joue tout d'un coup sans ordres (il rappelle `start()` :
+  ne pas l'appeler sur un combat déjà démarré).
   `scripts/battle_view.gd` : classe `BattleView`, affiche le combat en direct (pions, coups,
   chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause
-  (aucun ordre pendant la pause, choix du porteur du projet).
+  (aucun ordre pendant la pause, choix du porteur du projet). La carte : vue de dessus (`arena`) ou vue
+  isométrique 3D (`arena3d`, voir « Combat v2, étape C2 ») ; le reste de l'écran est commun aux deux.
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
 - Combat v2, étape C1 (cahier, onglet « Combat v2 », sections 0, 2, 3, 8, 8 bis, 9) : la simulation devient
-  « 3D sur grille » ; pas encore de nouvelle vue (la vue isométrique, c'est C2). Chiffres provisoires.
+  « 3D sur grille » ; la vue isométrique, c'est C2 (plus bas). Chiffres provisoires.
   1. `scripts/battle_map.gd` (`BattleMap`) : hauteur de chaque case (0 à 4 niveaux) et type (`Kind` : sol,
   obstacle, toit, échelle, escalier ou pente, muret, rempart, porte, herbes hautes, tour, rocher). `Battle.map`.
   2. Verticalité (`tower.gd`, section « Verticalité ») : passages d'une case à l'autre (`BattleMap.Link` : marche,
@@ -525,6 +562,119 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   lancements en même temps, donc plus lent que seul) : étage 1 80-109 → 288-383 ms, étages 2 à 4 130-170 → 415-510 ms,
   étage 5 557-620 → 1 030-1 146 ms, étage 10 250-269 → 561-612 ms. Unités bloquées sans raison : 0 sur 5 400 combats
   avant comme après (« foule » : 10 à 226 par série de 300, surtout la queue dans les ruelles de l'étage 5).
+- Combat v2, étape C2 (cahier, onglet « Combat v2 », sections 0, 1, 2, 8) : la vue isométrique semi-3D. Aucun
+  changement de la simulation : `scripts/battle_view_3d.gd` (`BattleView3D`) ne fait que montrer `Battle`.
+  1. Carte : une colonne de blocs par case (`LEVEL` 0,8 case par niveau, socle `BASE_DEPTH`), couleur selon le type de
+  case et le gabarit (`PALETTES` : village, prairie, relief, ville, cité, arène), en MultiMesh (4 formes : boîte, sphère,
+  prisme, cylindre ; une opaque et une transparente par forme : `_fill_multimeshes`). Les décors nommés par
+  MapGenerator (`map_data["structures"]`) ont leur forme : arbres, maisons fermées à toit à deux pans, puits, rochers,
+  clocher (cloche et toit pointu), créneaux du rempart (côté ennemis), porte, marches, échelles (contre la case voisine
+  la plus haute), herbes hautes, murets. Caméra orthographique (`PITCH_DEG` 35°, `YAW_DEG` 45°, zoom = largeur vue en
+  cases). Personnages : corps (capsule, couleur de la classe, `CLASS_COLORS`), tête et anneau au sol couleur du camp
+  (vert, rouge, boss violet et plus grand), ombre au sol à la hauteur de la case ; la hauteur affichée glisse
+  (`CLIMB_DISPLAY_SPEED`) : on le voit grimper. Berserk : corps rougi ; agonie : couché, rouge qui bat ; tombé : gris.
+  2. Gestes (comme le hub 3D) : un doigt déplace la caméra, deux doigts (ou la molette) zooment, bouton « Tourner »
+  (90°, glisse en un quart de seconde). Murs et toits devant le héros choisi transparents (`_update_fade`, toutes les
+  0,15 s : colonnes plus hautes que lui, devant lui, dont l'image recouvre la sienne ; leur socle reste opaque).
+  3. Ordres : `tap` → combattant le plus proche à l'écran (`unit_at_screen`), sinon lancer de rayon sur la carte en
+  hauteur (`pick_cell` : la première colonne touchée, son dessus ou son flanc) → signal `tapped` → `BattleView._arena_tap`,
+  commun aux deux vues (mêmes ordres, mêmes boutons, pause sans ordres).
+  4. Par-dessus la 3D (overlay 2D, aux points projetés) : barres de vie, d'endurance, de mana ; étiquettes (PEUR,
+  PANIQUE, BERSERK, REFUS DE MOURIR, REPOS, MIGRAINE, AGONIE et secondes, arme plantée, tombé) ; noms ; traits des
+  coups, tirs, sorts et soins ; chiffres ; bulles « Non ! » (`BattleView.draw_bubble_on`) ; ordres en cours. Le reste de
+  l'écran (chrono et vagues, barre du boss, encart de l'équipe, journal, fenêtres système, boutons) est celui de
+  `BattleView`, inchangé.
+  5. Choix de la vue : `BattleView.use_3d` = `Settings.new_visuals` au début du combat (duels compris) ; mode dev : bouton
+  « Vue de dessus » / « Vue 3D » en haut, en plein combat.
+  6. Performance : rendu Compatibility ; réglages en constantes de `battle_view_3d.gd` (`SHADOWS`, `MSAA`,
+  `RENDER_SHRINK` : écran 3D rendu plus petit) ; mode dev : compteur d'images par seconde en haut à gauche de la vue.
+  Mesuré sur PC (Radeon RX 6700 XT, synchro écran coupée), étage 5 : vue 3D 1 680 images/s, 1,4 ms de calcul par
+  image, 94 appels de dessin ; vue de dessus 340 images/s, 3,8 ms, 247 appels (elle redessine chaque case à chaque
+  image). Pas encore mesuré sur téléphone.
+  7. Vérifications : `tools/capture_c2.tscn` (dans une copie du projet, avec une fenêtre ; voir son en-tête) :
+  « mode=capture » (images, « rot », « choisi », « archer_toit », « cache » : héros posé derrière un bâtiment),
+  « mode=ordres » (héros, toit, rue, montée par l'échelle : étages 1 et 5), « mode=identique » (le même combat sans
+  écran et à travers l'écran 3D : 10 combats des étages 1, 2, 3, 5 et 10, identiques au caractère près).
+  Depuis C3 : « vue=dessus » (la capture dans la vue de dessus).
+- Combat v2, étape C3 (cahier, onglet « Combat v2 », section 4 « La perception en bâtonnets », section « L'IA
+  tactique des héros » ; chiffres provisoires) : perception et IA tactique des héros. Aucun rééquilibrage.
+  Partie A, perception (`scripts/battle_perception.gd`, `BattlePerception`, `Battle.perception` ; chiffres dans
+  `tower.gd`, section « Perception en bâtonnets ») :
+  1. Bâtonnets : chaque combattant lance `SIGHT_RAYS` (9) rayons sur `SIGHT_ANGLE` (120°) vers là où il regarde
+  (`fighter["facing"]` : la menace connue la plus proche à moins de 3 cases, sinon sa cible, sinon le sens de sa
+  marche), `SIGHT_LENGTH` (6) cases au centre, x`SIGHT_SIDE_FACTOR` (0,6) sur les côtés. Chaque rayon parcourt les
+  cases qu'il traverse et s'arrête sur un relief plus haut que ses yeux ou un obstacle ; un ennemi à moins d'une
+  demi-case d'un rayon, et que la ligne de vue 3D de C1 laisse voir, est vu (`fighter["sees"]`). Ouïe tout autour :
+  `HEARING_RADIUS` (2), `HEARING_BEAST_RADIUS` (3,5) pour les bêtes (`EMBED_BEASTS`) (`fighter["hears"]`). Mémoire :
+  dernière position connue de chaque ennemi (`fighter["knows"]`) pendant `SIGHT_MEMORY` (5 s, + Maîtrise de soi et
+  Intelligence, 3 à 8 s). Mise à jour toutes les `PERCEPTION_INTERVAL` (0,2 s). Hauteur +1 case par niveau ; herbes
+  hautes vues du sol : chaque case coûte `SIGHT_GRASS_COST` (2) ; nuit (quête « night », aucune pour l'instant) :
+  x0,5 sauf Nocturne (Rythme >= 50) ; peur, panique, Berserk : cône x0,5 (tunnel) ; Acuité (lue par
+  `PersonalityEngine.axis`) : +1 rayon tous les 2 paliers, longueur et ouïe +3 % par palier ; Prudence ou Méfiance
+  (Audace ou Loyauté <= -30) : un regard en arrière toutes les 3 s ; monstres : longueur x0,8. Aucun tirage au hasard.
+  2. Effets : on ne cible que ce que l'on connaît (`Battle._think` : liste `known` ; les ordres du Maître visent
+  n'importe qui). Sans ennemi connu, un héros garde son poste et un monstre avance vers les héros sans frapper
+  (`_unaware`). Une cible connue de mémoire seulement : il va voir à sa dernière place, puis l'oublie. Attaque
+  surprise (`_surprise`) : l'attaquant n'est pas dans les rayons de la cible (l'entendre ne suffit pas) : ni esquive
+  ni parade (Mouvement souple, bouclier), +`SURPRISE_CRIT_BONUS` (15 %) de critique (Guerrier et Assassin, qui n'en
+  ont pas d'ordinaire, aussi), « surprise ! » sur le chiffre ; pas en duel ; compté dans `Battle.surprises` et
+  `journal_counts["surprised"]`. Partage : ce que voient les alliés à moins de `VOICE_RANGE` (4) cases ; un Meneur
+  debout (ni peur ni panique) partage avec toute l'équipe. Les monstres ont la même perception (plus courte) et
+  partagent à portée de voix. La « vue de l'ennemi » qui peut faire peur : le voir ou l'entendre soi-même.
+  3. Œil de faucon devient aussi actif : rayons x2, cône x0,8 pendant `HAWK_EYE_SECONDS` (15 s), puis
+  `HAWK_EYE_COOLDOWN` (30 s) ; un tireur l'active de lui-même quand il ne voit aucun ennemi de ses propres yeux
+  (`hawk_eye_think`), ou sur ordre (bouton « Œil de faucon » de `BattleView`, `order_hawk_eye`, peut être refusé).
+  Ses effets passifs restent. « Sixième sens » (`GameData.SKILLS`) : 3 rayons de 2,5 cases vers l'arrière ; pas
+  encore de moyen de l'apprendre (mode dev > fiche > donner une compétence).
+  4. Affichage (`BattleView._draw_rays`, `BattleView3D._draw_rays`) : en touchant un héros, ses rayons en traits fins
+  avec un point lumineux au bout (à hauteur des yeux en 3D) ; les ennemis qu'aucun héros ne voit ni n'entend sont
+  grisés (`BattleView.unseen`), pas de brouillard total.
+  Partie B, IA tactique (`scripts/battle_tactics.gd`, `BattleTactics`, `Battle.tactics` ; données à part dans
+  `scripts/game_data/tactics_data.gd`, `TacticsData`) :
+  5. Toutes les `PLAN_SECONDS` (0,5 s), chaque héros libre (sans ordre, ni secours, ni repos, ni panique, pas en
+  duel) fait un plan (`fighter["tactic"]` : attitude, case, cible, 3 raisons) contre les seuls ennemis qu'il
+  connaît. Il étudie les cases à pied autour de lui (`SEARCH_RADIUS` 5, les plus proches d'abord) et les note
+  (`CRITERIA`, poids `BASE_WEIGHTS`) : hauteur (x2 pour un tireur), bonne distance de tir, alliés proches, à
+  découvert sous les tirs (-), à couvert, trop d'ennemis au contact (-), isolé (-), bord d'une chute (-), passage
+  étroit devant, dos au mur ; moins le trajet ; bonus pour garder sa case.
+  6. Attitudes (`_plan`) : décrocher (blessé sous `retreat_hp` et au moins 2 ennemis au contact : vers les alliés,
+  loin des ennemis) ; garder ses distances (tireur, un ennemi au corps à corps à moins de 2,5 cases) ; colère (un
+  Colérique, Colère >= 50, charge l'ennemi qui vient de blesser un allié) ; se couvrir (sous le feu d'un tireur
+  connu : une case abritée qui le rapproche du tireur, `cover_max` 3 s au plus ; sans abri, ou ensuite, il va
+  chercher le tireur) ; protéger (bouclier ou Empathie >= 30 : entre un allié sous 35 % de vie et l'ennemi) ;
+  engager (cible à portée, affaiblie, tout près, allié au contact à aider, cible qui ne vient pas, rien fait depuis
+  `wait_max`) ; attendre (sinon, à la meilleure case proche, seulement si elle vaut au moins `WAIT_ADVANTAGE` points
+  de plus que rester là ; sinon il engage). Un héros qui pense à l'encerclement ne va pas seul vers une cible
+  entourée de `engage_crowd` ennemis : il les attend. Concentrer (`_pick_target`) : la cible que frappent les
+  alliés, la plus blessée, le tireur qui fait mal ; l'Assassin vise toujours le plus faible. Un ennemi à sa portée :
+  il se bat là. Peur : il se bat (ou fuit, règles d'avant), mais choisit la case la plus sûre (`FEAR_WEIGHTS`).
+  7. Intelligence (stat) : nombre de critères vus (dans l'ordre de `CRITERIA` : peu intelligent, hauteur et distance
+  seulement, et la cible la plus proche) et de cases étudiées (`criteria_count`, `cells_count` : Intelligence 10 :
+  3 critères, 14 cases ; 15 : 6, 29 ; 21 : 10, 47) ; Lucidité (Foi négative) et Acuité : un cran de plus tous les
+  4 paliers. Personnalité (`TacticsData.PERSONALITY`, lue par `PersonalityEngine.axis` ou `composite`, sans passer
+  par `modifier()` : petite table à part, à rapprocher des MODIFIERS de P2 à la fusion) : Audace / Prudence,
+  Impulsivité / Maîtrise de soi (portée d'engagement, attente, ennemis acceptés autour d'une cible), Courage,
+  Empathie ; Colère, peur (plus haut). Poids et seuils rangés PAR HÉROS et PAR CONTEXTE (« type de quête | famille
+  d'ennemis | gabarit », `BattleTactics.context_of`, `Battle.tactics_context`) dans `hero["tactics"]` (sauvegardé :
+  {"version", "contexts": {contexte: {"weights", "thresholds", "start_weights", "start_thresholds", "fights"}}}),
+  créés au premier combat dans ce contexte (`BattleTactics.profile`) ; ils ne changent pas encore (C3b : bornés
+  entre `LEARN_MIN` et `LEARN_MAX` fois la valeur de départ). Sauvegarde version 8 (rien à adapter).
+  8. Ordres du Maître : arrivé là où le Maître l'a envoyé (`order["by"] == "maitre"`), le héros tient sa position
+  (`fighter["held"]`, `BattleTactics.hold` : il frappe ce qui entre à sa portée, revient à son poste s'il en est
+  poussé) jusqu'à un nouvel ordre ou un danger grave (sous `danger_hp` 30 % de vie avec 2 ennemis au contact). Le
+  Meneur garde son placement de départ (P5 + toits) : un tireur posté sur un toit le tient ; les autres gardent leur
+  place (`leader_post`) jusqu'à ce qu'un ennemi connu soit à moins de 7 cases, puis l'IA.
+  9. Mode dev : en touchant un héros, le bandeau dit son attitude, sa cible et ses 3 raisons (`BattleView.tactic_text`,
+  aussi en pause), et sa case choisie est encadrée en rose (carré dans la vue de dessus, losange en 3D).
+  `Battle.tactical_ai` faux : l'ancien comportement (tous foncent) ; `Battle.perception_on` faux : tout le monde sait
+  tout (avant C3). Simulateur `sim_tower` : options `ia=fonce|tactique`, `perception=non`, `diag=oui` (part du temps
+  de chaque attitude), `cobaye=malin|fonceur` (le 1 étoile de la place 2 : Intelligence 22, Audace -60, Maîtrise +60,
+  ou 8, +60, -60 ; sa mort, sa mise à terre, sa vie à la fin), `suivre=N:*` (tous les héros, chaque seconde) ;
+  surprises par combat.
+  Mesures : voir « Mesures C3 » plus bas (complétées en fin d'étape).
+  Copies du projet pour les simulations : `override.cfg` en UTF-8 SANS BOM (PowerShell `Set-Content -Encoding utf8`
+  en ajoute un : Godot ignore alors le fichier et les simulations écrivent dans la vraie sauvegarde, constaté en C3 ;
+  écrire avec `[IO.File]::WriteAllText(..., (New-Object Text.UTF8Encoding $false))`).
 - Phase 1.1 de la feuille de route v2 (cahier, « Améliorations combat... », lot A ; chiffres dans `tower.gd`,
   section « Combat ») :
   Endurance : `fighter["stamina"]` (`STAMINA_MAX` 100), héros seulement (l'adversaire d'un duel aussi). Se
@@ -581,7 +731,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   au contact d'un ennemi, pas effrayé) à moins de `AGONY_ALLY_RANGE` (1,5)
   pendant `AGONY_RESCUE_SECONDS` (3 s ; avant 2) le stabilise (`_agony_tick`, `_stabilize`) : il sort du combat
   (`present` faux, « à l'abri ») avec `AGONY_STABILIZED_HP` (10 %) de vie ; fenêtre « Stabilisé ». Potion de
-  soin (`POTION`, matériau de l'entrepôt, grade F ; pas encore fabriquée, mode dev > Matériaux) : l'équipe en
+  soin (`POTION`, matériau de l'entrepôt, grade F ; préparée à la forge depuis le prompt 1, voir « Économie ») : l'équipe en
   emporte `POTIONS_PER_MISSION` (3) au plus (`mission_potions`), bue tout de suite par un héros qui tombe à
   l'agonie ; les potions bues sont retirées de l'entrepôt (`finish_tower_battle`, ligne dans le résultat).
   Sinon, à la fin des 8 s, mort définitive (`_die` : stress des alliés, peur). Fin du combat (`_after_fight`) :
@@ -642,7 +792,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
   pendant le combat (ce qui peut changer le résultat) ou les laisse se débrouiller ; plus tard, les
   consignes de la salle d'opération seront apprises peu à peu par les héros qui participent au
-  combat. Vue du dessus pour l'instant, vue isométrique 3D plus tard.
+  combat. Vue isométrique 3D depuis C2 (avec les nouveaux visuels), la vue du dessus reste disponible.
 - `scripts/training_screen.gd` : terrain d'entraînement (ouvert depuis le hub, bouton « Retour à la cité ») ;
   `main.gd` range les écrans du hub sans onglet dans `HUB_SCREENS`. Un héros y travaille une compétence
   (`hero["training"]`) ; une séance toutes les `TRAINING_SESSION_SECONDS` de temps réel, même jeu fermé
@@ -661,7 +811,8 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   après chaque changement de l'arsenal ou des héros) ; si le Maître choisit (`hero["manual_gear"]`),
   le héros garde ses armes en permanence jusqu'au bouton « Auto ».
   Choix du porteur du projet : quand un héros meurt, ses armes sont perdues avec lui.
-  Le terrain d'entraînement ne s'ouvre qu'après 10 armes tirées (`TRAINING_UNLOCK_DRAWS`, `weapon_draws`).
+  Le terrain d'entraînement ne s'ouvre qu'après 10 armes tirées (`TRAINING_UNLOCK_DRAWS`, `weapon_draws`) :
+  dans une partie neuve, c'est le tirage x10 offert du tutoriel (étape « armes »).
   En combat, l'arme d'un héros décide de sa portée (un héros avec un arc tire), le grade ajoute de
   l'attaque, le bouclier de la défense ; les maîtrises d'arme ne comptent qu'avec l'arme qui va avec.
 - Progrès des compétences : `hero["skill_progress"]` (points par compétence) et `GameData.add_skill_progress()`
@@ -855,19 +1006,18 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Glisser-déposer des héros dans le groupe : fait. Reste : équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
-  mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
+  mages, garantie) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
   L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
   en jeu, précision du porteur du projet). Raretés (choix du porteur du projet, aligné sur l'œuvre ; onglet
-  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles, les 2 et 3 étoiles très très rares
-  (demande du porteur du projet ; provisoire : 1 étoile 97,5 %, 2 étoiles 2 %, 3 étoiles 0,5 % ; avant : 60 / 30 /
-  10 %), sauf la première x10 du tutoriel (un 3 étoiles garanti), invocation en gemmes de 3 à 5 étoiles (provisoire : 3 étoiles 75 %,
-  4 étoiles 21 %, 5 étoiles 4 %, pity de 50). Ancien réglage : or de 1 à 4 étoiles, gemmes de 1 à 5.
+  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles, les 2 et 3 étoiles très très rares,
+  sauf la première x10 du tutoriel (un 3 étoiles garanti), invocation en gemmes de 3 à 5 étoiles. Ancien réglage :
+  or de 1 à 4 étoiles, gemmes de 1 à 5. Taux et économie : voir « Économie (prompt 1) » plus bas.
   Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
   niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
   Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice (ils
   changent de classe ensuite, voir « Changement de classe ») ;
-  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (donc 1 % des invocations spéciales).
-  Bouton « Détail des taux » sur l'écran d'invocation (étoiles possibles, pity, taux et classes).
+  mages seulement en invocation spéciale, tirés à part du rang (`MAGE_CHANCE`, voir « Économie »).
+  Bouton « Détail des taux » sur l'écran d'invocation (étoiles possibles, garantie, taux et classes).
   Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;
   `_roll_stats`, `MAGE_STAT_MALUS`). Avoir un mage vivant permet de construire les bâtiments de magie
   (`GameData.BUILDINGS` : atelier de magie, laboratoire d'alchimie, bibliothèque ; les trois fusionnent en
@@ -877,6 +1027,40 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   avec la fenêtre « Construction terminée » et l'animation du hub 3D. Les deux autres : en gemmes, après
   l'ouverture du terrain d'entraînement. Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
+- Économie (prompt 1, demande du porteur du projet : sur le modèle des gachas existants, Genshin Impact ; chiffres
+  provisoires dans `summon.gd`, `tower.gd`, `lobby.gd`, `game_state.gd`). Sauvegarde version 9.
+  1. Invocation normale (5 000 or) : 3 étoiles 0,7 %, 2 étoiles 2,3 %, 1 étoile 97 % (avant : 0,5 / 2 / 97,5 %), sans
+  garantie ; la première x10 du tutoriel ne change pas (`_first_summon_rarities`).
+  2. Invocation spéciale : 500 gemmes (cahier ; avant 100). Taux de base 5 étoiles 0,6 %, 4 étoiles 5,1 %, 3 étoiles
+  94,3 % (avant 4 / 21 / 75 %). Garantie (`_roll_special_rarity`, à la place du pity de 50) : `pity_counter` = tirages
+  sans 5 étoiles ; à partir du `PITY5_SOFT_START` (74e), la chance monte de `PITY5_SOFT_STEP` (6 points) par tirage
+  (`five_star_chance`), sûr au `PITY5_LIMIT` (90e) ; `pity4_counter` = sans 4 étoiles ou mieux, sûr au `PITY4_LIMIT`
+  (10e). Les deux sont sauvegardés (« pity », « pity4 ») et continuent d'une x1 à une x10. Mages : `MAGE_CHANCE`
+  (0,5 %) des tirages spéciaux, tirés à part du rang (`_roll_class`), jamais forcés par la garantie ; ils ne sont
+  plus dans `CLASS_RATES` (les lignes sont remises à 100 %, donc l'invocation normale ne change pas). Ancienne
+  sauvegarde : son pity est gardé, borné à 89 ; le compteur des 4 étoiles part de 0.
+  3. « Détail des taux » : taux de base, règle de la garantie, taux réel du 5 étoiles (`five_star_real_rate`, calculé :
+  1,6 %, un tous les 62 tirages), compteurs du joueur ; en haut de l'écran : « 5 étoiles garanti dans N tirages ».
+  4. Banc `tools/test_summon.gd` (dans une copie, `-s`) : 1 000 000 de tirages par sorte. Résultat : normale 0,699 /
+  2,277 / 97,02 % ; spéciale 5★ 1,60 %, 4★ 11,8 % (13,4 % « 4★ ou mieux »), 3★ 86,6 %, 62,5 tirages par 5★, mages
+  0,49 %, séries au plus 86 sans 5★ et 10 sans 4★.
+  5. Gemmes : partie neuve `START_GEMS` (500, une invocation spéciale ; avant 3 000 ; une partie en cours garde les
+  siennes). Étage conquis la première fois : `TOWER_GEMS_BASE` + `TOWER_GEMS_PER_FLOOR` x étage (100 + 20 x étage,
+  étage 1 : 120), x3 sur un étage de boss (étage 5 : 600) ; rien en rejouant (avant : 30 + 5 x étage).
+  Attention : la forge coûte aussi 500 gemmes : avec 500 gemmes au départ, le Maître choisit.
+  6. Invocation gratuite quotidienne : une invocation normale x1 par jour de l'appareil (`free_summon`,
+  `free_summon_available`, `today_date` ; date dans `free_summon_day`, sauvegardée « invocation_gratuite »), bouton
+  « Invocation gratuite (une par jour) » de l'écran d'invocation tant qu'elle n'est pas prise ; pas pendant le
+  tutoriel ; limite de héros respectée. Mode dev : Outils > « Rendre l'invocation gratuite » (`dev_reset_free_summon`).
+  7. Potion de soin : forge, « Préparer une potion de soin » (`POTION_RECIPE` : 3 herbes médicinales de la Forêt
+  Kenout, de n'importe quel grade, les plus faibles d'abord ; `brew_potion`), sans puzzle ni tirage, grade F.
+  8. Vente (`lobby.gd`, section « Vente ») : les poubelles (`JUNK_NAME`) vont maintenant dans l'entrepôt (avant :
+  jetées) ; bouton « Vendre » (`UI.make_sale_section`, fenêtre de confirmation Oui / Non) dans l'armurerie et sous
+  l'entrepôt de la forge : `JUNK_SELL_PRICE` (200 or) par poubelle, `WEAPON_F_SELL_PRICE` (500 or) par arme F rangée
+  (jamais une arme portée) ; pas pendant le tutoriel (`can_sell`).
+  Vérification en mode normal : `tools/test_economie.gd` (copie du projet ; il recommence la partie ; avec une
+  fenêtre, `-- captures=<dossier>` : détail des taux, armurerie, forge). `tools/check_scripts.gd` : compile tous les
+  scripts avec les autoloads (`--check-only` ne les connaît pas).
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : construction, affectations, donjon journalier, entrepôt
   et forge : premières versions faites ; donjon journalier complet (calendrier, trois donjons, monstres rares,
   fenêtre d'entrée). Reste : niveaux de bâtiment, recettes avec les nouveaux matériaux (bois, peau de bête...),

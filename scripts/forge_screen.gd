@@ -63,7 +63,9 @@ func _refresh() -> void:
 		return
 
 	_add_section("Entrepôt", _warehouse_lines())
+	content.add_child(UI.make_sale_section(self, _refresh))  # vendre les déchets et les armes F rangées
 	_add_section("Assistants", _assistant_lines())
+	_add_potion()
 
 	# Choix de l'arme : un bouton par type.
 	content.add_child(UI.make_label("Arme à forger", 24))
@@ -144,6 +146,24 @@ func _warehouse_lines() -> Array:
 	if not GameData.plans.is_empty():
 		lines.append("Plans : %s" % ", ".join(GameData.plans))
 	return lines
+
+
+## Préparation d'une potion de soin (GameData.brew_potion) : sans puzzle, toujours réussie.
+func _add_potion() -> void:
+	var parts := []
+	for material in GameData.POTION_RECIPE:
+		parts.append("%d %s (tu en as %d)" % [GameData.POTION_RECIPE[material], material.to_lower(),
+			GameData.material_count(material)])
+	content.add_child(_small("Potion de soin : %s. Tes héros en emportent %d au plus dans la Tour ; il y en a %d dans l'entrepôt." % [
+		" + ".join(parts), GameData.POTIONS_PER_MISSION, GameData.material_count(GameData.POTION)]))
+	var button := UI.make_button("Préparer une potion de soin", func():
+		if GameData.brew_potion():
+			_refresh.call_deferred(), 22)
+	button.custom_minimum_size.y = 64
+	button.disabled = not GameData.can_brew_potion()
+	content.add_child(button)
+	if not GameData.can_brew_potion():
+		content.add_child(_small("L'herbe médicinale vient de la Forêt Kenout (donjon journalier)."))
 
 
 func _assistant_lines() -> Array:

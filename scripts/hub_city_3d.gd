@@ -365,6 +365,11 @@ func _update_city() -> void:
 		_build_place(key)
 		place_groups[key].visible = false  # caché jusqu'à son animation
 		pending_constructions.append(key)
+	# Tutoriel : la chambre de synthèse se construit en dernier (le terrain d'entraînement, ouvert par le tirage
+	# d'armes de l'étape « armes », avant elle) : la caméra reste sur elle, avec sa fenêtre et la flèche.
+	if GameData.tutorial_step == "synthese" and "synthese" in pending_constructions:
+		pending_constructions.erase("synthese")
+		pending_constructions.append("synthese")
 
 
 func _build_city() -> void:
@@ -1037,11 +1042,15 @@ func _place_labels() -> void:
 			_stick_label(label, walker["node"].position + Vector3(0, 2.2, 0))
 
 
-## Tutoriel (étape synthèse) : une flèche dorée qui sautille au-dessus de la chambre de synthèse, une fois
-## son animation de construction finie, pour montrer où toucher.
+## Tutoriel : le lieu montré à chaque étape passée dans la cité (étape « armes » : l'armurerie, étape T1).
+const TUTORIAL_POINTS := {"armes": "armory", "synthese": "synthese"}
+
+
+## Tutoriel (étapes armes et synthèse) : une flèche dorée qui sautille au-dessus du lieu à toucher (la chambre
+## de synthèse une fois son animation de construction finie).
 func _place_tutorial_pointer() -> void:
-	var show: bool = GameData.tutorial_step == "synthese" and "synthese" in built_places \
-		and not "synthese" in pending_constructions and not animating
+	var key: String = TUTORIAL_POINTS.get(GameData.tutorial_step, "")
+	var show: bool = key != "" and key in built_places and not key in pending_constructions and not animating
 	if not show:
 		if tutorial_pointer:
 			tutorial_pointer.visible = false
@@ -1049,7 +1058,7 @@ func _place_tutorial_pointer() -> void:
 	if tutorial_pointer == null:
 		tutorial_pointer = _make_label("Touche ici\n▼", 30, Color("f5c542"))
 	var bounce := sin(Time.get_ticks_msec() / 180.0) * 0.6
-	_stick_label(tutorial_pointer, _pos3("synthese") + Vector3(0, PLACES["synthese"]["height"] + 2.5 + bounce, 0))
+	_stick_label(tutorial_pointer, _pos3(key) + Vector3(0, PLACES[key]["height"] + 2.5 + bounce, 0))
 
 
 func _stick_label(label: Label, point: Vector3) -> void:

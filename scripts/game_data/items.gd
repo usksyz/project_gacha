@@ -86,26 +86,54 @@ func uses_magic(hero: Dictionary) -> bool:
 	return hero["class"] in ["Mage", "Soigneur"]
 
 
+## Tutoriel, étape « armes » (étape T1, demande du porteur du projet) : le tirage x10 est offert par le Système
+## (plus simple que d'ajouter son prix à l'or de départ : rien ne reste en trop, et une ancienne sauvegarde en
+## plein tutoriel n'a pas besoin d'or en plus) et donne au moins ces types d'armes, pour équiper l'équipe.
+const TUTORIAL_WEAPON_COUNT := 10
+const TUTORIAL_WEAPON_TYPES := ["Épée", "Bouclier", "Arc"]
+
+
+## Vrai si le tutoriel permet ce tirage : pendant son étape « armes », seul le x10 (offert) ; pendant les
+## autres étapes, aucun (l'armurerie n'est pas accessible de toute façon).
+func weapon_draw_allowed(count: int) -> bool:
+	if tutorial_step == "":
+		return true
+	return tutorial_step == "armes" and count == TUTORIAL_WEAPON_COUNT
+
+
+## Prix d'un tirage de « count » armes (0 : le tirage x10 offert du tutoriel).
+func weapon_draw_cost(count: int) -> int:
+	if tutorial_step == "armes" and count == TUTORIAL_WEAPON_COUNT:
+		return 0
+	return WEAPON_DRAW_COST * count
+
+
 ## Tire « count » armes au hasard, les range dans l'arsenal, et renvoie la liste
-## (vide si on n'a pas assez d'or). Les héros les prendront en partant en mission.
-## Chaque arme tirée compte pour l'ouverture du terrain d'entraînement.
+## (vide si on n'a pas assez d'or, ou si le tutoriel ne le permet pas). Les héros les prendront en partant
+## en mission. Chaque arme tirée compte pour l'ouverture du terrain d'entraînement (le tirage du tutoriel aussi).
 func draw_weapons(count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	if gold < WEAPON_DRAW_COST * count:
+	var cost := weapon_draw_cost(count)
+	if gold < cost or not weapon_draw_allowed(count):
 		return results
-	gold -= WEAPON_DRAW_COST * count
+	gold -= cost
+	# (tutoriel) une épée, un bouclier et un arc garantis, mélangés aux autres.
+	var types: Array = TUTORIAL_WEAPON_TYPES.duplicate() if tutorial_step == "armes" else []
+	while types.size() < count:
+		types.append(WEAPON_TYPES.keys().pick_random())
+	types.shuffle()
 	var was_unlocked := training_unlocked()
 	weapon_draws += count
 	if not was_unlocked and training_unlocked():
 		_announce_training_ground()
 	for i in count:
-		var weapon := {"id": next_weapon_id, "type": WEAPON_TYPES.keys().pick_random(),
-			"grade": _roll_grade(), "owner": 0}
+		var weapon := {"id": next_weapon_id, "type": types[i], "grade": _roll_grade(), "owner": 0}
 		next_weapon_id += 1
 		arsenal.append(weapon)
 		results.append(weapon)
 	gold_changed.emit(gold)
 	save_game()
+	advance_tutorial("armes")  # (tutoriel) étape suivante : composer une équipe
 	return results
 
 
@@ -263,7 +291,7 @@ func gear_stats(hero: Dictionary) -> Dictionary:
 
 const PROMOTION_STONE := "Pierre d'attribut"
 ## Potion de soin (rangée dans l'entrepôt, grade F) : stabilise un héros à l'agonie (voir tower.gd, « Agonie »).
-## Pas encore fabriquée : elle viendra de l'alchimie (Plante de vie du plateau) ; mode dev pour l'instant.
+## Préparée à la forge avec de l'herbe médicinale (POTION_RECIPE, lobby.gd ; plus tard peut-être l'alchimie).
 const POTION := "Potion de soin"
 
 

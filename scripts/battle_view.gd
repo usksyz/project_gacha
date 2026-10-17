@@ -62,6 +62,12 @@ const MANA_COLOR := Color("4a8fe8")
 ## Endurance (sous la vie) : jaune, grise quand le héros est épuisé.
 const STAMINA_COLOR := Color("e8c547")
 const STAMINA_TIRED_COLOR := Color("7a7466")
+## Perception (C3) : bâtonnets du héros choisi (traits fins et point lumineux au bout), ennemis que personne ne voit.
+const RAY_COLOR := Color(0.55, 0.95, 1.0, 0.4)
+const RAY_DOT_COLOR := Color(0.75, 1.0, 1.0, 0.95)
+const UNSEEN_COLOR := Color(0.38, 0.38, 0.42, 0.75)
+## Mode dev (IA tactique) : la case choisie par le héros choisi.
+const TACTIC_COLOR := Color("ff7ad9")
 
 var battle: Battle
 var layout: VBoxContainer
@@ -80,6 +86,14 @@ var berserk_button: Button
 var swap_button: Button
 ## Ordre « Tir de barrage » (un archer tire toutes ses flèches d'un coup), visible quand c'est possible.
 var barrage_button: Button
+## « Œil de faucon » (C3) : pour un héros choisi qui l'a, quand il peut l'activer.
+var hawk_button: Button
+
+## La vue isométrique 3D (Combat v2, C2 : BattleView3D), à la place de « arena » quand use_3d est vrai :
+## par défaut avec les nouveaux visuels ; le mode dev a un bouton pour passer de l'une à l'autre en combat.
+var arena3d: BattleView3D
+var use_3d := false
+var view_button: Button
 
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
@@ -138,6 +152,7 @@ func play(new_battle: Battle, title: String, on_finish := Callable()) -> void:
 		old.queue_free()
 	selected_id = -1
 	paused = false
+	use_3d = Settings.new_visuals
 	_build(title)
 	_update_hint()
 
@@ -156,6 +171,11 @@ func _build(title: String) -> void:
 	clock_label = UI.make_label("", 24)
 	clock_label.add_theme_color_override("font_color", Color("f5b82e"))
 	header.add_child(clock_label)
+	# Mode dev : passer de la vue 3D à la vue de dessus (et retour) en plein combat.
+	view_button = UI.make_button("", _toggle_view, 16)
+	view_button.custom_minimum_size = Vector2(96, 40)
+	view_button.visible = Settings.dev_mode
+	header.add_child(view_button)
 
 	hint_label = UI.make_label("", 20)
 	hint_label.add_theme_color_override("font_color", ORDER_COLOR)
@@ -175,6 +195,13 @@ func _build(title: String) -> void:
 	arena.draw.connect(_draw_arena)
 	arena.gui_input.connect(_on_arena_input)
 	layout.add_child(arena)
+	# Le même champ de bataille en vue isométrique 3D (une seule des deux vues est visible).
+	arena3d = BattleView3D.new()
+	arena3d.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	arena3d.tapped.connect(_arena_tap)
+	layout.add_child(arena3d)
+	arena3d.setup(self)
+	_apply_view()
 
 	# Encart de l'équipe, sous le champ de bataille : les héros côte à côte, avec leurs PV
 	# (actuels / max et pourcentage) et leur mana (mages et soigneurs). Toucher un héros le choisit.
@@ -214,13 +241,33 @@ func _build(title: String) -> void:
 	barrage_button.add_theme_color_override("font_color", Color("f5d98a"))
 	barrage_button.visible = false
 	controls.add_child(barrage_button)
-	# Jusqu'à quatre boutons côte à côte : leur texte passe à la ligne plutôt que d'élargir l'écran.
-	for button in [berserk_button, swap_button, barrage_button]:
+	hawk_button = UI.make_button("Œil de faucon", _order_hawk_eye, 22)
+	hawk_button.custom_minimum_size.y = 80
+	hawk_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hawk_button.add_theme_color_override("font_color", Color("9fd3ff"))
+	hawk_button.visible = false
+	controls.add_child(hawk_button)
+	# Jusqu'à cinq boutons côte à côte : leur texte passe à la ligne plutôt que d'élargir l'écran.
+	for button in [berserk_button, swap_button, barrage_button, hawk_button]:
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pause_button = UI.make_button("Pause", _toggle_pause, 26)
 	pause_button.custom_minimum_size.y = 80
 	pause_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls.add_child(pause_button)
+
+
+## Mode dev : vue 3D ↔ vue de dessus (le combat continue, rien ne change dans la simulation).
+func _toggle_view() -> void:
+	use_3d = not use_3d
+	_apply_view()
+
+
+func _apply_view() -> void:
+	arena.visible = not use_3d
+	arena3d.visible = use_3d
+	view_button.text = "Vue de dessus" if use_3d else "Vue 3D"
+	if hint_label != null and battle != null:
+		_update_hint()
 
 
 func _toggle_pause() -> void:
@@ -259,8 +306,14 @@ func _advance() -> void:
 		selected_id = -1  # le héros choisi est tombé
 		_update_hint()
 	_update_berserk_button()  # (le héros peut entrer en rage ou en sortir de lui-même)
+	if Settings.dev_mode and selected_id >= 0 and not paused:
+		hint_label.text = tactic_text(battle.units[selected_id])  # (son plan change en direct)
 	_update_clock()
-	arena.queue_redraw()
+	# Les effets trop vieux pour être montrés (coups, chiffres, bulles) : on ne les parcourt plus.
+	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < battle.time - BUBBLE_TIME:
+		first_effect += 1
+	if arena.visible:
+		arena.queue_redraw()
 	portraits.queue_redraw()
 	boss_bar.queue_redraw()
 
@@ -454,16 +507,41 @@ func _update_hint() -> void:
 	if battle.quest.get("duel", false):
 		hint_label.text = "Duel : les deux héros règlent leur conflit seuls, sans ordres. Il s'arrête à %d %% de vie." \
 			% roundi(GameData.DUEL_STOP_HP * 100)
+	elif paused and Settings.dev_mode and selected_id >= 0:
+		hint_label.text = "Pause. " + tactic_text(battle.units[selected_id])  # (mode dev : on inspecte son plan)
 	elif paused:
 		hint_label.text = "Pause. Les ordres reprendront avec le combat."
 	elif selected_id >= 0:
 		hint_label.text = "%s : touche un endroit pour l'y envoyer, un ennemi à attaquer, ou un bouton en bas." \
 			% battle.units[selected_id]["name"]
-		if not battle.height_cells().is_empty():
-			hint_label.text += " Le chiffre d'une case : sa hauteur. On monte par les échelles et les escaliers ; d'en haut, on frappe plus fort et on tire plus loin."
+		if Settings.dev_mode:
+			hint_label.text = tactic_text(battle.units[selected_id])  # (mode dev : son plan et ses raisons)
+		elif not battle.height_cells().is_empty():
+			hint_label.text += (" Touche un toit pour l'y envoyer." if use_3d else " Le chiffre d'une case : sa hauteur.") \
+				+ " On monte par les échelles et les escaliers ; d'en haut, on frappe plus fort et on tire plus loin."
 	else:
 		hint_label.text = "Touche un héros pour le guider."
 	_update_berserk_button()
+
+
+## Mode dev (IA tactique, C3) : l'attitude du héros, sa case et ses 3 raisons.
+const ATTITUDE_NAMES := {"attendre": "attend", "engager": "engage", "distance": "garde ses distances",
+	"couvrir": "se couvre", "proteger": "protège", "decrocher": "décroche", "poste": "tient son poste"}
+
+
+func tactic_text(hero: Dictionary) -> String:
+	var plan: Dictionary = hero.get("tactic", {})
+	if not battle.tactical_ai:
+		return "%s : IA tactique coupée (tous foncent)." % hero["name"]
+	if plan.is_empty():
+		return "%s : aucun ennemi connu, il attend à son poste." % hero["name"]
+	var text: String = "%s %s" % [hero["name"], ATTITUDE_NAMES.get(plan["attitude"], plan["attitude"])]
+	if plan["target"] >= 0:
+		text += " (cible : %s)" % battle.units[plan["target"]]["name"]
+	var why: Array = plan["reasons"].map(func(r): return r["why"])
+	if not why.is_empty():
+		text += " — " + " ; ".join(why)
+	return text
 
 
 ## Le bouton « Berserk » n'apparaît que pour un héros choisi qui possède Berserk (pas pendant la pause).
@@ -484,6 +562,9 @@ func _update_berserk_button() -> void:
 	var barrage_shown: bool = not paused and not hero.is_empty() and not _is_duel() and battle.can_barrage(hero)
 	if barrage_button.visible != barrage_shown:
 		barrage_button.visible = barrage_shown
+	var hawk_shown: bool = not paused and not hero.is_empty() and not _is_duel() and battle.can_hawk_eye(hero)
+	if hawk_button.visible != hawk_shown:
+		hawk_button.visible = hawk_shown
 
 
 ## Ordre du Maître : le héros choisi part se reposer à l'arrière, un allié frais prend sa place.
@@ -510,6 +591,16 @@ func _order_barrage() -> void:
 	portraits.queue_redraw()
 
 
+## Ordre du Maître : le héros choisi active Œil de faucon (il peut refuser, voir Battle.order_hawk_eye).
+func _order_hawk_eye() -> void:
+	if selected_id < 0 or paused or battle.finished:
+		return
+	battle.order_hawk_eye(battle.units[selected_id])
+	Settings.vibrate(30)
+	_update_hint()
+	arena.queue_redraw()
+
+
 ## Ordre du Maître : le héros choisi entre en rage, ou en sort (il peut refuser, voir Battle.order_berserk).
 func _order_berserk() -> void:
 	if selected_id < 0 or paused or battle.finished:
@@ -529,8 +620,14 @@ func _on_arena_input(event: InputEvent) -> void:
 	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
 		return  # pas d'ordre pendant la pause, ni pendant un duel
 	var map_pos: Vector2 = (event.position - _origin()) / _cell_size()
-	var touched := _unit_at(map_pos)
+	_arena_tap(_unit_at(map_pos), map_pos, Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos))
 
+
+## Un toucher sur le champ de bataille (vue de dessus ou vue 3D) : « touched » le combattant touché ({} sinon),
+## « map_pos » le point de la carte (en cases), « inside » s'il est sur la carte. Mêmes ordres dans les deux vues.
+func _arena_tap(touched: Dictionary, map_pos: Vector2, inside: bool) -> void:
+	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
+		return  # pas d'ordre pendant la pause, ni pendant un duel
 	if not touched.is_empty() and touched["is_hero"]:
 		# Choisir un héros (ou le relâcher en le touchant à nouveau).
 		selected_id = -1 if selected_id == touched["id"] else touched["id"]
@@ -538,7 +635,7 @@ func _on_arena_input(event: InputEvent) -> void:
 		var hero: Dictionary = battle.units[selected_id]
 		if not touched.is_empty():
 			battle.order_attack(hero, touched)
-		elif Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos):
+		elif inside:
 			battle.order_move(hero, map_pos)
 		else:
 			return
@@ -598,6 +695,7 @@ func _draw_arena() -> void:
 			positions[unit["id"]] = unit["prev_pos"].lerp(unit["pos"], weight)
 
 	_draw_orders(positions, cell)
+	_draw_rays(positions)
 	for id in positions:
 		_draw_unit(battle.units[id], _to_screen(positions[id]), cell)
 	_draw_names(positions, cell)
@@ -689,6 +787,32 @@ func _draw_orders(positions: Dictionary, cell: float) -> void:
 			arena.draw_arc(to, cell * 0.55, 0, TAU, 20, ORDER_COLOR, 2.0)
 
 
+## Perception (C3, effet « lidar ») : les bâtonnets du héros choisi, en traits fins, avec un point brillant là
+## où chacun s'arrête.
+func _draw_rays(positions: Dictionary) -> void:
+	if selected_id < 0 or not positions.has(selected_id):
+		return
+	var hero: Dictionary = battle.units[selected_id]
+	var from := _to_screen(positions[selected_id])
+	for end in hero.get("rays", PackedVector2Array()):
+		var to := _to_screen(end)
+		arena.draw_line(from, to, RAY_COLOR, 1.0, true)
+		arena.draw_circle(to, 2.5, RAY_DOT_COLOR)
+	# Mode dev (IA tactique) : la case qu'il a choisie, un carré en tirets.
+	var cell = hero.get("tactic", {}).get("cell")
+	if Settings.dev_mode and cell != null:
+		var size := _cell_size()
+		var corner := _to_screen(Vector2(floorf(cell.x), floorf(cell.y)))
+		arena.draw_rect(Rect2(corner, Vector2.ONE * size), TACTIC_COLOR, false, 2.0)
+		arena.draw_dashed_line(from, corner + Vector2.ONE * size / 2.0, TACTIC_COLOR, 1.5, 6.0)
+
+
+## Vrai si un ennemi n'est vu (ni entendu) par aucun héros : on le grise (pas de brouillard total).
+func unseen(unit: Dictionary) -> bool:
+	return not unit["is_hero"] and battle.perception_on and battle.perception != null \
+		and battle.perception.updated_at >= 0.0 and not battle.perception.seen_by_heroes.has(unit["id"])
+
+
 func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var radius := cell * (0.5 if unit["boss"] else 0.36)
@@ -723,6 +847,9 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 		outline = HERO_COLOR
 	elif unit["boss"]:
 		fill = Color("5a1f6e")
+	if unseen(unit):  # aucun héros ne le voit : grisé
+		fill = UNSEEN_COLOR
+		outline = UNSEEN_COLOR.lightened(0.25)
 	arena.draw_circle(center, radius, fill)
 	arena.draw_arc(center, radius, 0, TAU, 24, outline, 2.0)
 	arena.draw_string(font, center + Vector2(-radius, radius * 0.45), unit["name"].left(1),
@@ -780,8 +907,6 @@ func _draw_names(positions: Dictionary, cell: float) -> void:
 func _draw_effects(positions: Dictionary, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var now := battle.time
-	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < now - BUBBLE_TIME:
-		first_effect += 1
 	for i in range(first_effect, battle.effects.size()):
 		var effect: Dictionary = battle.effects[i]
 		var age: float = now - effect["t"]
@@ -825,19 +950,24 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
 		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
-		var rise := Vector2(-40, -cell * 0.4 - age * cell * 0.8)
-		arena.draw_string(font, to + rise, effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 80, size, color)
+		var rise := Vector2(-80, -cell * 0.4 - age * cell * 0.8)
+		arena.draw_string(font, to + rise, effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160, size, color)
 
 
 ## Bulle de parole (fond blanc, petite pointe vers le bas) centrée au-dessus du point « tip ».
 func _draw_bubble(font: Font, tip: Vector2, text: String, alpha: float) -> void:
-	var size := 18
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 16
+	draw_bubble_on(arena, font, tip, text, alpha)
+
+
+## La même bulle, dessinée sur n'importe quel Control (la vue 3D s'en sert aussi).
+func draw_bubble_on(canvas: Control, font: Font, tip: Vector2, text: String, alpha: float) -> void:
+	var font_size := 18
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 16
 	var box := Rect2(tip + Vector2(-width / 2.0, -34), Vector2(width, 26))
 	var fill := Color(1, 1, 1, 0.92 * alpha)
-	arena.draw_rect(box, fill)
-	arena.draw_colored_polygon(PackedVector2Array([tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), fill)
-	arena.draw_string(font, box.position + Vector2(0, 19), text, HORIZONTAL_ALIGNMENT_CENTER, width, size,
+	canvas.draw_rect(box, fill)
+	canvas.draw_colored_polygon(PackedVector2Array([tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), fill)
+	canvas.draw_string(font, box.position + Vector2(0, 19), text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size,
 		Color(0.75, 0.1, 0.1, alpha))
 
 
@@ -856,6 +986,8 @@ func _show_result(report: Dictionary) -> void:
 func _show_windows(windows: Array) -> void:
 	controls.queue_free()
 	arena.visible = false
+	arena3d.visible = false
+	view_button.visible = false
 	hint_label.visible = false
 	boss_bar.visible = false
 	portraits.visible = false

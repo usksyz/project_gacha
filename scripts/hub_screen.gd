@@ -28,6 +28,8 @@ var construction_panel: ConstructionPanel
 var assignment_panel: AssignmentPanel
 ## Boutons fermés pendant le tutoriel (lieux hors des remparts, Construction, Affectations).
 var locked_buttons: Array[Button] = []
+## Tutoriel : le seul lieu qui s'ouvre à chaque étape passée dans la cité (cible du quartier) et son nom.
+const TUTORIAL_PLACES := {"armes": ["armory", "l'Armurerie"], "synthese": ["synthesis", "la chambre de synthèse"]}
 
 
 func _ready() -> void:
@@ -87,12 +89,14 @@ func _ready() -> void:
 	_refresh_tutorial()
 
 
-## Tutoriel : les boutons du hub sont fermés (seule la chambre de synthèse se touche, voir _on_zone_pressed).
+## Tutoriel : les boutons du hub sont fermés (seul le lieu de l'étape se touche, voir _on_zone_pressed).
 func _refresh_tutorial() -> void:
 	for button in locked_buttons:
 		button.disabled = GameData.tutorial_step != ""
-	if GameData.tutorial_step == "synthese":
-		info_label.text = "Touche la chambre de synthèse."
+	if TUTORIAL_PLACES.has(GameData.tutorial_step):
+		info_label.text = "Touche %s." % TUTORIAL_PLACES[GameData.tutorial_step][1]
+	elif info_label.text.begins_with("Touche l"):
+		info_label.text = _default_info()
 
 
 ## Tutoriel : la chambre de synthèse vient de se construire sous les yeux du Maître : la fenêtre de l'étape.
@@ -169,9 +173,9 @@ func on_shown() -> void:
 
 
 func _on_zone_pressed(zone: Dictionary) -> void:
-	# Tutoriel : seule la chambre de synthèse s'ouvre.
-	if GameData.tutorial_step == "synthese" and zone["target"] != "synthesis":
-		info_label.text = "Tutoriel : touche la chambre de synthèse."
+	# Tutoriel : seul le lieu de l'étape s'ouvre (l'armurerie, puis la chambre de synthèse).
+	if TUTORIAL_PLACES.has(GameData.tutorial_step) and zone["target"] != TUTORIAL_PLACES[GameData.tutorial_step][0]:
+		info_label.text = "Tutoriel : touche %s." % TUTORIAL_PLACES[GameData.tutorial_step][1]
 		return
 	info_label.text = "%s : %s" % [zone["name"], zone["info"]]
 	# Le terrain d'entraînement ne s'ouvre qu'après quelques tirages d'armes.
