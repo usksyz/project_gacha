@@ -601,6 +601,9 @@ const MODIFIERS := {
 	# Planchers (seuls certains accès les relèvent) : santé mentale qui ne tombe jamais à 0 (pas de rupture),
 	# endurance qui ne tombe jamais à 0 (jamais épuisé).
 	"mental_floor": {"name": "Plancher de santé mentale", "op": "none", "source": "cahier"},
+	# Escalade (Combat v2, C1, battle.gd _passage_speed : « l'Audace, neutre pour l'instant ») : neutre, comme sur main
+	# avant la fusion (la vraie table plantait sur cet effet inconnu).
+	"climb": {"name": "Vitesse d'escalade", "op": "none", "source": "projet"},
 	"stamina_floor": {"name": "Plancher d'endurance", "op": "none", "source": "cahier"},
 }
 
