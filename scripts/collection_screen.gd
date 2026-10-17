@@ -329,6 +329,10 @@ func _add_personality_tools(content: VBoxContainer, hero: Dictionary) -> void:
 	for domain in PersonalityData.APTITUDE_DOMAINS:
 		aptitude_parts.append("%s %d" % [PersonalityData.APTITUDE_DOMAINS[domain], persona["aptitudes"].get(domain, 0)])
 	lines.append("Talent : croissance %d ; aptitudes %s" % [hero["growth"], ", ".join(aptitude_parts)])
+	var favorite := PersonalityEngine.favorite_weapon(hero, GameData.CLASS_WEAPONS.get(hero["class"], []))
+	lines.append("Arme de prédilection (P2f) : %s ; missions avec elle %d / %d%s" % [favorite if favorite != "" else "aucune",
+		hero.get("weapon_pref_missions", 0), PersonalityData.PREFERENCE_REVEAL_MISSIONS,
+		" (remarquée)" if hero.get("weapon_pref_revealed", "") != "" else ""])
 	lines.append("Effort : %.0f · acharnement x%.2f" % [persona["effort"], PersonalityEngine.acharnement(hero)])
 	lines.append("Tics : %s" % " ; ".join(persona["tics"].map(func(tic_id): return PersonalityEngine.tic_text(tic_id))))
 	# Anciens traits lus sur les paliers (révélés ou non), et ceux gardés d'une ancienne sauvegarde.
@@ -741,6 +745,13 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 		var shield := GameData.equipped(hero, "shield")
 		if not shield.is_empty():
 			content.add_child(UI.make_label("Bouclier : %s" % GameData.weapon_name(shield), 22))
+	# Arme de prédilection (P2f) : ce que le Maître a remarqué, après quelques missions.
+	var preference := GameData.weapon_preference_text(hero)
+	if preference != "" and not GameData.uses_magic(hero):
+		var preference_label := UI.make_label(preference, 20)
+		preference_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		preference_label.modulate = Color(1, 1, 1, 0.8)
+		content.add_child(preference_label)
 
 	# Compétences : nom, rang et niveau, puis ce qu'elle fait (en plus petit).
 	content.add_child(UI.make_label("Compétences :" if not hero["skills"].is_empty() else "Compétences : aucune", 22))

@@ -236,6 +236,8 @@ func gears_up_on_mission(hero: Dictionary) -> bool:
 
 ## Départ en mission (Tour ou donjon journalier) : chaque héros de l'équipe qui s'équipe tout seul
 ## prend la meilleure arme libre qu'il sait utiliser, puis un bouclier si sa classe en porte.
+## Arme de prédilection (P2f, PersonalityEngine.favorite_weapon) : il prend la sienne, même un peu moins bonne
+## (PREFERENCE_GRADE_TOLERANCE crans de grade), et le Maître finit par le remarquer (note_weapon_preference).
 ## Les héros les plus rares se servent en premier. Ceux équipés par le Maître gardent leurs armes.
 func gear_up(team: Array) -> void:
 	var heroes := team.duplicate()
@@ -245,11 +247,28 @@ func gear_up(team: Array) -> void:
 			continue
 		var current := equipped(hero, "weapon")
 		var current_rank := -1 if current.is_empty() else grade_rank(current["grade"])
+		var usable: Array = CLASS_WEAPONS.get(hero["class"], [])
+		var favorite := PersonalityEngine.favorite_weapon(hero, usable)
+		var best: Dictionary = {}
+		var best_favorite: Dictionary = {}
 		for weapon in free_weapons():  # les meilleures d'abord
-			if weapon["type"] in CLASS_WEAPONS.get(hero["class"], []) and grade_rank(weapon["grade"]) > current_rank:
-				_take_off(hero, "weapon")
-				weapon["owner"] = hero["id"]
-				break
+			if not weapon["type"] in usable:
+				continue
+			if best.is_empty():
+				best = weapon
+			if best_favorite.is_empty() and weapon["type"] == favorite:
+				best_favorite = weapon
+		var chosen := best
+		if not best_favorite.is_empty() and grade_rank(best_favorite["grade"]) \
+				>= grade_rank(best["grade"]) - PersonalityData.PREFERENCE_GRADE_TOLERANCE:
+			chosen = best_favorite
+		# (sa propre arme de prédilection n'est pas échangée contre une autre sorte)
+		var keeps_favorite: bool = not current.is_empty() and current["type"] == favorite \
+			and not chosen.is_empty() and chosen["type"] != favorite
+		if not chosen.is_empty() and grade_rank(chosen["grade"]) > current_rank and not keeps_favorite:
+			_take_off(hero, "weapon")
+			chosen["owner"] = hero["id"]
+		note_weapon_preference(hero, favorite)
 		if hero["class"] in SHIELD_CLASSES and fighting_weapon(hero)["type"] != "Arc":
 			var shield := equipped(hero, "shield")
 			var shield_rank := -1 if shield.is_empty() else grade_rank(shield["grade"])
@@ -259,6 +278,29 @@ func gear_up(team: Array) -> void:
 					weapon["owner"] = hero["id"]
 					break
 	save_game()
+
+
+## « à l'arc », « au fouet »... pour « X revient toujours à l'arc ».
+const PREFERENCE_WORDS := {"Épée": "à l'épée", "Lance": "à la lance", "Dague": "à la dague", "Fouet": "au fouet",
+	"Arc": "à l'arc"}
+
+
+## Arme de prédilection (P2f) : chaque départ en mission avec elle compte (hero["weapon_pref_missions"]) ; au bout
+## de PREFERENCE_REVEAL_MISSIONS, le Maître l'a remarqué (hero["weapon_pref_revealed"] : le type, montré sur la fiche).
+func note_weapon_preference(hero: Dictionary, favorite: String) -> void:
+	if favorite == "" or fighting_weapon(hero).get("type", "") != favorite:
+		return
+	hero["weapon_pref_missions"] = hero.get("weapon_pref_missions", 0) + 1
+	if hero["weapon_pref_missions"] >= PersonalityData.PREFERENCE_REVEAL_MISSIONS:
+		hero["weapon_pref_revealed"] = favorite
+
+
+## Ce que le Maître a remarqué : « Mira revient toujours à l'arc. », ou "" (rien de remarqué).
+func weapon_preference_text(hero: Dictionary) -> String:
+	var type: String = hero.get("weapon_pref_revealed", "")
+	if type == "":
+		return ""
+	return "%s revient toujours %s." % [hero["name"], PREFERENCE_WORDS.get(type, "à la même arme")]
 
 
 func _hero_alive(hero_id: int) -> bool:

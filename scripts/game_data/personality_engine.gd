@@ -1472,6 +1472,28 @@ static func _condition_met(hero: Dictionary, condition: Array) -> bool:
 	return value >= int(condition[2]) if condition[1] == ">=" else value <= int(condition[2])
 
 
+## Arme de prédilection (P2f) parmi « types » (les armes que sa classe prend) : le type dont l'aptitude est
+## au moins PREFERENCE_MIN_APTITUDE et plus haute que celle de tous les autres ; "" s'il n'en a pas (ou sans profil).
+static func favorite_weapon(hero: Dictionary, types: Array) -> String:
+	if not hero.has("persona"):
+		return ""
+	var aptitudes: Dictionary = hero["persona"].get("aptitudes", {})
+	var best := ""
+	var best_value := 0
+	var tied := false
+	for type in types:
+		var value: int = aptitudes.get(D.WEAPON_DOMAINS.get(type, ""), 0)
+		if value > best_value:
+			best = type
+			best_value = value
+			tied = false
+		elif value == best_value:
+			tied = true
+	if best == "" or tied or best_value < D.PREFERENCE_MIN_APTITUDE:
+		return ""
+	return best
+
+
 ## Les compétences à condition et ce que le héros en a (mode dev) : « Calme (Stabilité +50) : oui ».
 static func affinity_lines(hero: Dictionary) -> Array[String]:
 	var lines: Array[String] = []

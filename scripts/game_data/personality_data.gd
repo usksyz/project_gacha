@@ -845,6 +845,18 @@ const APTITUDE_MAX := 5
 ## Aptitude moyenne de départ selon les étoiles (avant le hasard ±1 et le métier).
 const APTITUDE_BASE := {1: 1.5, 2: 2.0, 3: 2.5, 4: 3.0, 5: 3.5}
 
+## Armes de prédilection (P2f ; feuille de route v2 : « X revient toujours à l'arc ») : le domaine d'aptitude de
+## chaque type d'arme. Un héros a une arme de prédilection quand, parmi les armes que sa classe prend, l'une a
+## une aptitude d'au moins PREFERENCE_MIN_APTITUDE et plus haute que toutes les autres. En partant en mission,
+## il la prend même si une autre arme de l'arsenal a jusqu'à PREFERENCE_GRADE_TOLERANCE crans de grade de plus.
+## Après PREFERENCE_REVEAL_MISSIONS missions avec elle, le Maître le remarque (fiche). Chiffres : projet,
+## provisoires (le cahier n'était pas lisible pendant cette étape : à confronter à l'onglet Personnalité).
+const WEAPON_DOMAINS := {"Épée": "epee", "Lance": "lance", "Dague": "dague", "Fouet": "fouet", "Arc": "arc",
+	"Bouclier": "bouclier"}
+const PREFERENCE_MIN_APTITUDE := 4
+const PREFERENCE_GRADE_TOLERANCE := 2
+const PREFERENCE_REVEAL_MISSIONS := 3
+
 
 # ---------------------------------------------------------------------------
 # Effort (acharnement)
