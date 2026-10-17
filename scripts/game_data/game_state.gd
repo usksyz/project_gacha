@@ -26,8 +26,11 @@ signal tutorial_changed
 # État de la partie
 # ---------------------------------------------------------------------------
 
+## Gemmes d'une partie neuve (prompt 1, économie : une invocation spéciale ; avant 3 000). Une partie en cours
+## garde les siennes.
+const START_GEMS := 500
 ## Vraies réserves de gemmes et d'or : celles de la sauvegarde.
-var real_gems := 3000
+var real_gems := START_GEMS
 var real_gold := 0
 ## Montant affiché et utilisable en mode dev (Settings.dev_mode) : « infini ».
 const DEV_MONEY := 999999999

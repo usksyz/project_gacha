@@ -164,7 +164,7 @@ func reset_game() -> void:
 
 ## Prépare une partie neuve.
 func _new_game() -> void:
-	real_gems = 3000
+	real_gems = START_GEMS
 	# Tutoriel : de quoi payer exactement l'invocation normale x10 qu'il impose.
 	real_gold = SUMMON_TYPES["normal"]["cost"] * TUTORIAL_SUMMON_COUNT
 	tutorial_step = TUTORIAL_STEPS[0]

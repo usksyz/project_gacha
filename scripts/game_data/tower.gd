@@ -359,14 +359,21 @@ func floor_tier(floor_number: int) -> int:
 	return floor_number / BOSS_EVERY
 
 
+## Gemmes d'un étage conquis pour la première fois (prompt 1, économie) : TOWER_GEMS_BASE + TOWER_GEMS_PER_FLOOR
+## x étage (étage 1 : 120, soit un quart d'invocation spéciale), x3 sur un étage de boss ; rien en rejouant.
+## Provisoire (avant : 30 + 5 x étage).
+const TOWER_GEMS_BASE := 100
+const TOWER_GEMS_PER_FLOOR := 20
+
+
 ## Récompenses d'un étage : de l'or (5 000 à l'étage 1, 10 000 à l'étage 4...),
-## quelques gemmes, et de l'expérience pour chaque héros survivant.
+## des gemmes, et de l'expérience pour chaque héros survivant.
 ## Un étage de boss rapporte trois fois plus.
 func tower_rewards(floor_number: int) -> Dictionary:
 	var bonus := 3 if is_boss_floor(floor_number) else 1
 	return {
 		"gold": roundi(5000 * (1 + (floor_number - 1) / 3.0)) * bonus,
-		"gems": (30 + 5 * floor_number) * bonus,
+		"gems": (TOWER_GEMS_BASE + TOWER_GEMS_PER_FLOOR * floor_number) * bonus,
 		"xp": (10 + 5 * floor_number) * bonus,
 	}
 
