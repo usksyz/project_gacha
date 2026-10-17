@@ -22,6 +22,9 @@ héros uniques qui peuvent mourir définitivement, Tour à étages, gestion de b
   dossier à part (`%APPDATA%\Godot\app_userdata\Projet Gacha - copies\<date>_<étape>`). Les simulations
   (`sim_tower`, bancs de mesure) restent dans une copie du projet (worktree + `override.cfg`, voir P1a-bis), pour
   ne pas fausser les mesures.
+- Copies d'avant chaque prompt (demande du porteur du projet) : avant de modifier, les fichiers concernés sont copiés
+  dans `backups/avant-promptN/` (mêmes chemins), poussés avec le reste ; `backups/.gdignore` empêche Godot de les
+  lire (sinon les `class_name` seraient en double).
 
 ## Cahier des charges
 Le cahier des charges est un document Claude Docs que le porteur du projet complète au fil du temps :
@@ -101,7 +104,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   premier combat puis la synthèse, « dont la porte s'ouvre à ce moment ») : `GameData.tutorial_step`
   (`game_state.gd`, sauvegardé « tutoriel » ; absent d'une ancienne sauvegarde = pas de tutoriel), étapes
   `TUTORIAL_STEPS` : invocation, armes, equipe, etage, synthese, puis "" (fini). On commence avec exactement l'or
-  d'une invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes 3000 comme avant). 1. Seule la normale x10
+  d'une invocation normale x`TUTORIAL_SUMMON_COUNT` (50 000 or ; gemmes : `START_GEMS`, 500 depuis le prompt 1). 1. Seule la normale x10
   est permise (`summon_allowed`) ; elle donne un 3 étoiles garanti, un 2 étoiles une fois sur deux
   (`FIRST_SUMMON_TWO_STAR_CHANCE`), le reste en 1 étoile (`_first_summon_rarities`). 2. Armes (étape T1, demande
   du porteur du projet) : fenêtre « tuto_armes » (les héros partent avec les armes de l'arsenal, il faut en
@@ -728,7 +731,7 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   au contact d'un ennemi, pas effrayé) à moins de `AGONY_ALLY_RANGE` (1,5)
   pendant `AGONY_RESCUE_SECONDS` (3 s ; avant 2) le stabilise (`_agony_tick`, `_stabilize`) : il sort du combat
   (`present` faux, « à l'abri ») avec `AGONY_STABILIZED_HP` (10 %) de vie ; fenêtre « Stabilisé ». Potion de
-  soin (`POTION`, matériau de l'entrepôt, grade F ; pas encore fabriquée, mode dev > Matériaux) : l'équipe en
+  soin (`POTION`, matériau de l'entrepôt, grade F ; préparée à la forge depuis le prompt 1, voir « Économie ») : l'équipe en
   emporte `POTIONS_PER_MISSION` (3) au plus (`mission_potions`), bue tout de suite par un héros qui tombe à
   l'agonie ; les potions bues sont retirées de l'entrepôt (`finish_tower_battle`, ligne dans le résultat).
   Sinon, à la fin des 8 s, mort définitive (`_die` : stress des alliés, peur). Fin du combat (`_after_fight`) :
@@ -1003,19 +1006,18 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Glisser-déposer des héros dans le groupe : fait. Reste : équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
 - Phase 3 (gacha) : invocation normale (or) et spéciale (gemmes, meilleurs taux, seule à donner des
-  mages, pity de 50) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
+  mages, garantie) dans `GameData.SUMMON_TYPES`, tirage d'armes, arsenal et équipement : fait.
   L'« invocation gratuite » du cahier est l'invocation normale en or (l'or est la monnaie gagnée
   en jeu, précision du porteur du projet). Raretés (choix du porteur du projet, aligné sur l'œuvre ; onglet
-  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles, les 2 et 3 étoiles très très rares
-  (demande du porteur du projet ; provisoire : 1 étoile 97,5 %, 2 étoiles 2 %, 3 étoiles 0,5 % ; avant : 60 / 30 /
-  10 %), sauf la première x10 du tutoriel (un 3 étoiles garanti), invocation en gemmes de 3 à 5 étoiles (provisoire : 3 étoiles 75 %,
-  4 étoiles 21 %, 5 étoiles 4 %, pity de 50). Ancien réglage : or de 1 à 4 étoiles, gemmes de 1 à 5.
+  « Invocations et classes » du cahier) : invocation en or de 1 à 3 étoiles, les 2 et 3 étoiles très très rares,
+  sauf la première x10 du tutoriel (un 3 étoiles garanti), invocation en gemmes de 3 à 5 étoiles. Ancien réglage :
+  or de 1 à 4 étoiles, gemmes de 1 à 5. Taux et économie : voir « Économie (prompt 1) » plus bas.
   Limite de héros (choix du porteur du projet) : `GameData.HERO_LIMIT` (50, provisoire, grandira avec le
   niveau des résidences) héros vivants pour invoquer ; les héros secrets s'obtiennent même plein.
   Dans chaque rareté d'étoiles, une rareté de classe (`CLASS_RATES`) : 1-2 étoiles tous Novice (ils
   changent de classe ensuite, voir « Changement de classe ») ;
-  mages seulement en invocation spéciale, 1 % des 3 étoiles et plus (donc 1 % des invocations spéciales).
-  Bouton « Détail des taux » sur l'écran d'invocation (étoiles possibles, pity, taux et classes).
+  mages seulement en invocation spéciale, tirés à part du rang (`MAGE_CHANCE`, voir « Économie »).
+  Bouton « Détail des taux » sur l'écran d'invocation (étoiles possibles, garantie, taux et classes).
   Les mages sont puissants mais fragiles (comme la magicienne du manhwa : Intelligence ~31, le reste 7-8 ;
   `_roll_stats`, `MAGE_STAT_MALUS`). Avoir un mage vivant permet de construire les bâtiments de magie
   (`GameData.BUILDINGS` : atelier de magie, laboratoire d'alchimie, bibliothèque ; les trois fusionnent en
@@ -1025,6 +1027,40 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   avec la fenêtre « Construction terminée » et l'animation du hub 3D. Les deux autres : en gemmes, après
   l'ouverture du terrain d'entraînement. Leurs fonctions (Recherche, synthèse, savoir des mages) restent à faire.
   Reste : grades au-delà de C+, compétences de lance, dague et fouet.
+- Économie (prompt 1, demande du porteur du projet : sur le modèle des gachas existants, Genshin Impact ; chiffres
+  provisoires dans `summon.gd`, `tower.gd`, `lobby.gd`, `game_state.gd`). Sauvegarde version 9.
+  1. Invocation normale (5 000 or) : 3 étoiles 0,7 %, 2 étoiles 2,3 %, 1 étoile 97 % (avant : 0,5 / 2 / 97,5 %), sans
+  garantie ; la première x10 du tutoriel ne change pas (`_first_summon_rarities`).
+  2. Invocation spéciale : 500 gemmes (cahier ; avant 100). Taux de base 5 étoiles 0,6 %, 4 étoiles 5,1 %, 3 étoiles
+  94,3 % (avant 4 / 21 / 75 %). Garantie (`_roll_special_rarity`, à la place du pity de 50) : `pity_counter` = tirages
+  sans 5 étoiles ; à partir du `PITY5_SOFT_START` (74e), la chance monte de `PITY5_SOFT_STEP` (6 points) par tirage
+  (`five_star_chance`), sûr au `PITY5_LIMIT` (90e) ; `pity4_counter` = sans 4 étoiles ou mieux, sûr au `PITY4_LIMIT`
+  (10e). Les deux sont sauvegardés (« pity », « pity4 ») et continuent d'une x1 à une x10. Mages : `MAGE_CHANCE`
+  (0,5 %) des tirages spéciaux, tirés à part du rang (`_roll_class`), jamais forcés par la garantie ; ils ne sont
+  plus dans `CLASS_RATES` (les lignes sont remises à 100 %, donc l'invocation normale ne change pas). Ancienne
+  sauvegarde : son pity est gardé, borné à 89 ; le compteur des 4 étoiles part de 0.
+  3. « Détail des taux » : taux de base, règle de la garantie, taux réel du 5 étoiles (`five_star_real_rate`, calculé :
+  1,6 %, un tous les 62 tirages), compteurs du joueur ; en haut de l'écran : « 5 étoiles garanti dans N tirages ».
+  4. Banc `tools/test_summon.gd` (dans une copie, `-s`) : 1 000 000 de tirages par sorte. Résultat : normale 0,699 /
+  2,277 / 97,02 % ; spéciale 5★ 1,60 %, 4★ 11,8 % (13,4 % « 4★ ou mieux »), 3★ 86,6 %, 62,5 tirages par 5★, mages
+  0,49 %, séries au plus 86 sans 5★ et 10 sans 4★.
+  5. Gemmes : partie neuve `START_GEMS` (500, une invocation spéciale ; avant 3 000 ; une partie en cours garde les
+  siennes). Étage conquis la première fois : `TOWER_GEMS_BASE` + `TOWER_GEMS_PER_FLOOR` x étage (100 + 20 x étage,
+  étage 1 : 120), x3 sur un étage de boss (étage 5 : 600) ; rien en rejouant (avant : 30 + 5 x étage).
+  Attention : la forge coûte aussi 500 gemmes : avec 500 gemmes au départ, le Maître choisit.
+  6. Invocation gratuite quotidienne : une invocation normale x1 par jour de l'appareil (`free_summon`,
+  `free_summon_available`, `today_date` ; date dans `free_summon_day`, sauvegardée « invocation_gratuite »), bouton
+  « Invocation gratuite (une par jour) » de l'écran d'invocation tant qu'elle n'est pas prise ; pas pendant le
+  tutoriel ; limite de héros respectée. Mode dev : Outils > « Rendre l'invocation gratuite » (`dev_reset_free_summon`).
+  7. Potion de soin : forge, « Préparer une potion de soin » (`POTION_RECIPE` : 3 herbes médicinales de la Forêt
+  Kenout, de n'importe quel grade, les plus faibles d'abord ; `brew_potion`), sans puzzle ni tirage, grade F.
+  8. Vente (`lobby.gd`, section « Vente ») : les poubelles (`JUNK_NAME`) vont maintenant dans l'entrepôt (avant :
+  jetées) ; bouton « Vendre » (`UI.make_sale_section`, fenêtre de confirmation Oui / Non) dans l'armurerie et sous
+  l'entrepôt de la forge : `JUNK_SELL_PRICE` (200 or) par poubelle, `WEAPON_F_SELL_PRICE` (500 or) par arme F rangée
+  (jamais une arme portée) ; pas pendant le tutoriel (`can_sell`).
+  Vérification en mode normal : `tools/test_economie.gd` (copie du projet ; il recommence la partie ; avec une
+  fenêtre, `-- captures=<dossier>` : détail des taux, armurerie, forge). `tools/check_scripts.gd` : compile tous les
+  scripts avec les autoloads (`--check-only` ne les connaît pas).
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : construction, affectations, donjon journalier, entrepôt
   et forge : premières versions faites ; donjon journalier complet (calendrier, trois donjons, monstres rares,
   fenêtre d'entrée). Reste : niveaux de bâtiment, recettes avec les nouveaux matériaux (bois, peau de bête...),
