@@ -492,6 +492,34 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   Plus gros écarts : préparée étages 3 et 4, -6,7 et -8 points (environ 3 écarts-types sur 300 combats : réel) ; brute
   étage 3, +6,3. Pas de rééquilibrage (coefficients du cahier gardés, choix du porteur du projet). Temps de calcul :
   +2 à +5 %.
+- Une personnalité qu'on voit (prompt 4 ; feuille de route v2, phase 5.2 : première tranche de P3, en petit ;
+  `personality.gd`, section « Vie de la cité » ; textes et chiffres : projet, provisoires). Le Maître ne voit jamais de
+  chiffres ; en mode dev, la raison (avec les chiffres) de chaque bulle et de chaque demande. Tout passe par
+  `PersonalityEngine` (`tier`, `tics`, `tic_text`, `aptitude`, `trust`, `add_trust`).
+  1. Bulles (`GameData.chatter(héros, voisins)`, `CHATTER_LINES`) : plainte (Pessimisme, Vulnérabilité, santé mentale
+  sous 50, rupture), bonne humeur, encouragement d'un ami ou d'un membre de son groupe (Empathie, Optimisme),
+  évitement d'un hostile (il s'en va), ou un tic (« (se ronge les ongles) »). `HubCity3D._maybe_chatter` : à chaque
+  pause d'un héros qui flâne, `CHATTER_CHANCE` (30 %), `CHATTER_MAX_SHOWN` (3) à la fois, `CHATTER_SECONDS` (4,5 s),
+  voisins à `CHATTER_RANGE` ; bulle blanche au-dessus de la tête, gardée dans le cadre.
+  2. Demandes (`update_requests`, chaque heure réelle à la cité, `REQUEST_CHANCE_PER_HOUR` 10 %, `REQUESTS_MAX` 3 en
+  attente, pas pendant le tutoriel ; `roll_request`, `next_request`, `answer_request`) : « X souhaite rejoindre
+  l'équipe N » (sans équipe ; Ambition, Loyauté, ou un ami dans l'équipe N qui a de la place) ; « X demande un jour de
+  repos » (au travail : santé mentale sous 60, Abandon, Retenue). Carte « Demande » Oui / Non de `main.gd`
+  (`_show_request`) : la confiance envers le Maître monte ou baisse de `REQUEST_TRUST` (5) ; Oui : il rejoint l'équipe,
+  ou se repose `REST_SECONDS` (6 h réelles, `hero["rest_until"]`, `is_resting` : pas de séance d'entraînement, pas à la
+  forge, il flâne dans la cité) avec +`REST_MENTAL` ; Non au repos : -`REFUSED_REST_MENTAL`. Sauvegardé : « demandes »,
+  « demandes_maj ».
+  3. Rapport de la fée (`daily_report_due`, `take_daily_report`) : une fois par jour de l'appareil, après le tutoriel,
+  `REPORT_LINES_MIN` à `REPORT_LINES_MAX` (3 à 5) effets, jamais de causes (« X s'est entraîné seul toute la nuit »,
+  « X et Y ne se sont pas adressé la parole », un tic...), un héros par ligne si possible, mélangés avec la graine du
+  jour. Sauvegardé : « rapport_du_jour ». `main.gd._show_city_life` : rapport puis demandes, quand aucune autre
+  fenêtre n'est ouverte (appelée au lancement, à la fermeture des autres fenêtres et à chaque nouvelle demande).
+  4. Synthèse : avant la fenêtre rouge, fenêtre « Un détail » (« Revoir mon choix » / « Continuer ») pour chaque
+  sacrifié au talent caché (`synthesis_hints` : croissance au-dessus de sa rareté → « X s'entraîne seul tous les
+  soirs. » ; aptitude 5 → « X manie la lance mieux que personne. »).
+  Sauvegarde version 10. Mode dev : Outils > « Vie de la cité » (« Une demande maintenant », « Rapport du jour à
+  revoir »). Banc : `tools/test_prompt4.gd` (copie du projet, avec une fenêtre, `-- captures=<dossier>`).
+  Reste (P3 complet) : décisions par la personnalité (`decide`), bulles en combat, autres demandes.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
