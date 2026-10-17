@@ -45,7 +45,10 @@ var gold: int:
 	set(value):
 		if not Settings.dev_mode:
 			real_gold = value
+## Garantie de l'invocation spéciale (summon.gd) : tirages faits depuis le dernier 5 étoiles, et depuis le
+## dernier 4 étoiles ou mieux.
 var pity_counter := 0
+var pity4_counter := 0
 
 ## Prochain étage de la Tour à conquérir.
 var tower_floor := 1

@@ -13,7 +13,7 @@ extends GameItems
 ## - « normal » : héros de base, payée en or, la monnaie gagnée en jouant. C'est l'invocation
 ##   « gratuite » du cahier (sans argent réel) : de 1 à 3 étoiles ;
 ## - « special » : héros spéciaux, payée en gemmes : de 3 à 5 étoiles.
-##   C'est la seule qui peut donner un mage, et elle a un pity (5 étoiles garanti).
+##   C'est la seule qui peut donner un mage, et elle a une garantie (4 et 5 étoiles, voir PITY5_LIMIT).
 ## « cost » : prix d'une invocation ; « currency » : "gold" ou "gems" ;
 ## « rates » : probabilité de chaque rareté, de la plus haute à la plus basse (le total fait 1.0,
 ## soit 100 %). Une rareté absente ne peut pas sortir. Taux provisoires.
@@ -24,18 +24,32 @@ extends GameItems
 const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
 		"rates": {3: 0.007, 2: 0.023, 1: 0.97}},
-	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
-		"rates": {5: 0.04, 4: 0.21, 3: 0.75}},
+	# Prompt 1 : prix du cahier (500 gemmes) et taux de base à la Genshin Impact (5★ 0,6 %), avec une garantie
+	# progressive (voir « Garantie de l'invocation spéciale » plus bas). Avant : 100 gemmes, 4 % / 21 % / 75 %.
+	"special": {"name": "Invocation spéciale", "cost": 500, "currency": "gems", "mages": true,
+		"rates": {5: 0.006, 4: 0.051, 3: 0.943}},
 }
+
+## Mages : seulement par invocation spéciale, 0,5 % des tirages, tirés à part du rang (un mage peut être 3, 4 ou
+## 5 étoiles). La garantie ne force jamais un mage. Provisoire. (Avant : 1 % des 3 étoiles et plus.)
+const MAGE_CHANCE := 0.005
 
 ## Nombre maximum de héros vivants pour invoquer, choix du porteur du projet (les morts ne comptent pas ;
 ## les héros secrets comptent, mais s'obtiennent toujours par code, même plein). Chiffre provisoire : plus tard, il grandira
 ## avec le niveau des résidences (cahier : « la résidence a atteint le niv. 2, sa capacité d'accueil a augmenté »).
 const HERO_LIMIT := 50
 
-## Pity de l'invocation spéciale : un héros 5 étoiles est garanti au bout de ce nombre
-## d'invocations spéciales sans 5 étoiles.
-const PITY_LIMIT := 50
+## Garantie de l'invocation spéciale (prompt 1, comme Genshin Impact ; remplace l'ancien pity de 50) :
+## - 5 étoiles : à partir du tirage PITY5_SOFT_START sans 5 étoiles (74e), la chance monte de PITY5_SOFT_STEP
+##   (6 points) par tirage ; au PITY5_LIMIT-ième (90e), il est sûr. Taux réel moyen : environ 1,6 % (un 5 étoiles
+##   tous les 62 tirages environ) ;
+## - 4 étoiles ou mieux : sûr au PITY4_LIMIT-ième tirage (10e) sans 4 ou 5 étoiles.
+## Compteurs : pity_counter (tirages sans 5 étoiles) et pity4_counter (sans 4 étoiles ou mieux), sauvegardés,
+## ils continuent d'une session à l'autre et d'une x1 à une x10. Chiffres provisoires.
+const PITY5_LIMIT := 90
+const PITY5_SOFT_START := 74
+const PITY5_SOFT_STEP := 0.06
+const PITY4_LIMIT := 10
 
 ## Couleur associée à chaque rareté.
 const RARITY_COLORS := {
@@ -49,17 +63,14 @@ const RARITY_COLORS := {
 ## Rareté des classes, à l'intérieur de chaque rareté d'étoiles : une fois les étoiles tirées,
 ## on tire la classe selon ce tableau (le total de chaque ligne fait 1.0, soit 100 %).
 ## Les 1 et 2 étoiles sont des gens ordinaires : tous « Novice ».
-## Les mages ne s'obtiennent que par invocation spéciale, avec une très très faible chance :
-## 1 % des 3 étoiles et plus. Comme toutes les invocations spéciales donnent un 3 étoiles ou plus,
-## 1 % des invocations spéciales donnent un mage (à peu près 1 toutes les 100).
-## Dans l'invocation normale (ses 3 étoiles), la part des mages est simplement retirée du tirage.
-## Chiffres provisoires, à régler.
+## Les mages sont tirés à part (MAGE_CHANCE, invocation spéciale seulement) : ils ne sont plus dans ce tableau,
+## dont les lignes sont remises à 100 % au tirage (class_rates). Chiffres provisoires, à régler.
 const CLASS_RATES := {
 	1: {"Novice": 1.0},
 	2: {"Novice": 1.0},
-	3: {"Guerrier": 0.30, "Chevalier": 0.20, "Archer": 0.20, "Assassin": 0.15, "Soigneur": 0.14, "Mage": 0.01},
-	4: {"Guerrier": 0.27, "Chevalier": 0.22, "Archer": 0.20, "Assassin": 0.15, "Soigneur": 0.15, "Mage": 0.01},
-	5: {"Guerrier": 0.25, "Chevalier": 0.22, "Archer": 0.20, "Assassin": 0.16, "Soigneur": 0.16, "Mage": 0.01},
+	3: {"Guerrier": 0.30, "Chevalier": 0.20, "Archer": 0.20, "Assassin": 0.15, "Soigneur": 0.14},
+	4: {"Guerrier": 0.27, "Chevalier": 0.22, "Archer": 0.20, "Assassin": 0.15, "Soigneur": 0.15},
+	5: {"Guerrier": 0.25, "Chevalier": 0.22, "Archer": 0.20, "Assassin": 0.16, "Soigneur": 0.16},
 }
 
 ## Prénoms des héros ordinaires, tirés au hasard.
@@ -134,49 +145,89 @@ func summon(summon_type: String, count: int) -> Array[Dictionary]:
 	return results
 
 
+## Combien de tirages spéciaux il reste avant le 5 étoiles sûr (1 = le prochain).
 func summons_before_pity() -> int:
-	return PITY_LIMIT - pity_counter
+	return PITY5_LIMIT - pity_counter
+
+
+## Combien de tirages spéciaux il reste avant le 4 étoiles (ou mieux) sûr.
+func summons_before_pity4() -> int:
+	return PITY4_LIMIT - pity4_counter
+
+
+## Chance d'un 5 étoiles au prochain tirage spécial, quand « done » tirages sans 5 étoiles sont déjà faits :
+## le taux de base, puis +6 points par tirage à partir du 74e, et 100 % au 90e.
+func five_star_chance(done: int) -> float:
+	var pull := done + 1  # numéro du prochain tirage dans la série
+	var base: float = SUMMON_TYPES["special"]["rates"][5]
+	if pull >= PITY5_LIMIT:
+		return 1.0
+	if pull >= PITY5_SOFT_START:
+		return minf(1.0, base + PITY5_SOFT_STEP * (pull - PITY5_SOFT_START + 1))
+	return base
+
+
+## Taux réel du 5 étoiles avec la garantie (calculé, environ 1,6 %) : 1 / nombre moyen de tirages par 5 étoiles.
+func five_star_real_rate() -> float:
+	var expected := 0.0     # nombre moyen de tirages pour un 5 étoiles
+	var still_none := 1.0   # chance de ne pas l'avoir encore eu
+	for done in PITY5_LIMIT:
+		var chance := five_star_chance(done)
+		expected += (done + 1) * still_none * chance
+		still_none *= 1.0 - chance
+	return 1.0 / expected
 
 
 ## Tire une rareté au hasard selon les taux de cette sorte d'invocation.
-## Seule l'invocation spéciale compte pour le pity.
+## Seule l'invocation spéciale a une garantie (voir PITY5_LIMIT, PITY4_LIMIT).
 func _roll_rarity(summon_type: String) -> int:
-	var special := summon_type == "special"
-	if special:
-		pity_counter += 1
-		if pity_counter >= PITY_LIMIT:
-			pity_counter = 0
-			return 5
-
+	if summon_type == "special":
+		return _roll_special_rarity()
 	var rates: Dictionary = SUMMON_TYPES[summon_type]["rates"]
 	var roll := randf()
 	var cumulative := 0.0
 	for rarity in rates:
 		cumulative += rates[rarity]
 		if roll < cumulative:
-			if rarity == 5 and special:
-				pity_counter = 0
 			return rarity
 	return rates.keys().back()  # (arrondi des taux) la plus basse rareté de cette invocation
 
 
-## Chances de chaque classe pour une rareté (voir CLASS_RATES). Sans les mages (invocation
-## normale), leur part est retirée et les autres classes se partagent les 100 %.
-func class_rates(rarity: int, allow_mage: bool) -> Dictionary:
+## Invocation spéciale : 5 étoiles (chance qui monte avec pity_counter), sinon 4 étoiles (taux de base, ou sûr
+## au 10e tirage sans 4 étoiles ou mieux), sinon 3 étoiles. Met les deux compteurs à jour.
+func _roll_special_rarity() -> int:
+	var roll := randf()
+	var rarity := 3
+	if roll < five_star_chance(pity_counter):
+		rarity = 5
+	elif pity4_counter + 1 >= PITY4_LIMIT or roll < five_star_chance(pity_counter) + SUMMON_TYPES["special"]["rates"][4]:
+		rarity = 4
+	pity_counter = 0 if rarity == 5 else pity_counter + 1
+	pity4_counter = 0 if rarity >= 4 else pity4_counter + 1  # un 5 étoiles compte comme « 4 étoiles ou mieux »
+	return rarity
+
+
+## Chances de chaque classe pour une rareté (voir CLASS_RATES), remises à 100 %. Les mages sont à part
+## (MAGE_CHANCE) : « allow_mage » ne sert qu'à l'affichage du détail des taux (mages en plus).
+func class_rates(rarity: int, allow_mage := false) -> Dictionary:
 	var rates: Dictionary = CLASS_RATES[rarity].duplicate()
-	if not allow_mage:
-		rates.erase("Mage")
 	var total := 0.0
 	for hero_class in rates:
 		total += rates[hero_class]
+	var share := 1.0 - (MAGE_CHANCE if allow_mage else 0.0)
 	for hero_class in rates:
-		rates[hero_class] /= total
+		rates[hero_class] = rates[hero_class] / total * share
+	if allow_mage:
+		rates["Mage"] = MAGE_CHANCE
 	return rates
 
 
-## Tire la classe d'un héros selon sa rareté.
+## Tire la classe d'un héros selon sa rareté. « allow_mage » (invocation spéciale) : d'abord MAGE_CHANCE d'être
+## un mage, quel que soit le rang ; sinon la classe selon CLASS_RATES.
 func _roll_class(rarity: int, allow_mage: bool) -> String:
-	var rates := class_rates(rarity, allow_mage)
+	if allow_mage and randf() < MAGE_CHANCE:
+		return "Mage"
+	var rates := class_rates(rarity)
 	var roll := randf()
 	var cumulative := 0.0
 	for hero_class in rates:

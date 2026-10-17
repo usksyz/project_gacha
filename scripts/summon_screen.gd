@@ -240,7 +240,7 @@ func _show_rates(summon_type: String) -> void:
 	var rarities: Array = info["rates"].keys().filter(func(r): return info["rates"][r] > 0.0)
 	var lines := ["Héros de %d à %d étoiles." % [rarities.min(), rarities.max()]]
 	if summon_type == "special":
-		lines.append("Pity : un 5★ garanti au bout de %d invocations spéciales sans 5★." % GameData.PITY_LIMIT)
+		lines.append("Garantie : un 5★ sûr au bout de %d invocations spéciales sans 5★." % GameData.PITY5_LIMIT)
 	for rarity in info["rates"]:
 		if info["rates"][rarity] <= 0.0:
 			continue

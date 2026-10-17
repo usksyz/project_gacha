@@ -30,7 +30,10 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     l'étape « equipe » sans équipe composée y revient ; plus loin, elle la saute.
 ## 8 : Combat v2, C3 : habitudes tactiques de chaque héros (hero["tactics"], par contexte, voir BattleTactics.profile) ;
 ##     absentes d'une ancienne sauvegarde : créées au premier combat dans chaque contexte (rien à adapter).
-const SAVE_VERSION := 8
+## 9 : économie (prompt 1) : garantie de l'invocation spéciale à la Genshin (« pity » = tirages sans 5 étoiles,
+##     borné à PITY5_LIMIT - 1 ; « pity4 » = sans 4 étoiles ou mieux, 0 si absent), invocation gratuite du jour
+##     (« invocation_gratuite », absente = pas encore prise).
+const SAVE_VERSION := 9
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -42,6 +45,7 @@ func save_game() -> void:
 	file.set_value("partie", "gemmes", real_gems)
 	file.set_value("partie", "or", real_gold)
 	file.set_value("partie", "pity", pity_counter)
+	file.set_value("partie", "pity4", pity4_counter)
 	file.set_value("partie", "etage", tower_floor)
 	file.set_value("partie", "prochain_id", next_hero_id)
 	file.set_value("partie", "codes_utilises", used_codes)
@@ -77,7 +81,10 @@ func load_game() -> bool:
 		return false
 	real_gems = file.get_value("partie", "gemmes", 3000)
 	real_gold = file.get_value("partie", "or", 0)
-	pity_counter = file.get_value("partie", "pity", 0)
+	# Garantie (version 9) : une ancienne partie garde son compteur (l'ancien pity de 50), borné à 89 ; le compteur
+	# des 4 étoiles part de 0.
+	pity_counter = mini(file.get_value("partie", "pity", 0), PITY5_LIMIT - 1)
+	pity4_counter = mini(file.get_value("partie", "pity4", 0), PITY4_LIMIT - 1)
 	tower_floor = file.get_value("partie", "etage", 1)
 	next_hero_id = file.get_value("partie", "prochain_id", 1)
 	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
@@ -162,6 +169,7 @@ func _new_game() -> void:
 	real_gold = SUMMON_TYPES["normal"]["cost"] * TUTORIAL_SUMMON_COUNT
 	tutorial_step = TUTORIAL_STEPS[0]
 	pity_counter = 0
+	pity4_counter = 0
 	tower_floor = 1
 	roster.clear()
 	next_hero_id = 1
