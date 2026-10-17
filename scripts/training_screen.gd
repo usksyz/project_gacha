@@ -330,10 +330,12 @@ func _make_hero_row(hero: Dictionary) -> Control:
 	buttons.add_theme_constant_override("v_separation", 8)
 	box.add_child(buttons)
 	var auto_on: bool = hero.get("training_auto", false)
-	var auto := UI.make_button("Auto", func(): _choose_auto(hero), 22)
+	var auto := UI.make_button("Auto ✓" if auto_on else "Auto", func(): _choose_auto(hero), 22)
 	auto.custom_minimum_size = Vector2(110, 64)
 	auto.toggle_mode = true
 	auto.button_pressed = auto_on
+	if auto_on:  # (bien visible : en auto, il suit la suggestion du Système)
+		auto.add_theme_stylebox_override("pressed", UI.make_panel_style(Color("5a4310"), Color("f5b82e"), 2))
 	auto.add_theme_color_override("font_color", Color("f5b82e"))
 	buttons.add_child(auto)
 	for skill_name in GameData.TRAINING_SKILLS:
@@ -365,7 +367,7 @@ func _progress_text(hero: Dictionary, skill_name: String) -> String:
 	var level := GameData.skill_level(hero["skills"], skill_name)
 	if level >= GameData.SKILL_MAX_LEVEL:
 		return "%s : niveau maximum" % skill_name
-	var progress := "%d / %d" % [GameData.skill_progress(hero, skill_name), GameData.TRAINING_POINTS_PER_LEVEL]
+	var progress := "%d / %d" % [GameData.skill_progress(hero, skill_name), GameData.skill_progress_needed(skill_name)]
 	if level == 0:
 		return "%s : pas encore apprise — %s" % [skill_name, progress]
 	return "%s : niv. %d — %s" % [skill_name, level, progress]
