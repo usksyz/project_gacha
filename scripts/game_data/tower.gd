@@ -220,10 +220,11 @@ const BARRAGE_STAMINA_COST := 10.0
 # (fenêtre rouge « X est dans un état critique, sa vie est en danger ! »). L'allié libre le plus proche
 # (à moins de AGONY_HELP_RANGE cases, pas au contact d'un ennemi, pas effrayé) court à son côté ; s'il y
 # reste AGONY_RESCUE_SECONDS (à moins de
-# AGONY_ALLY_RANGE cases), ou si l'équipe a une potion de soin, il est stabilisé : il sort du combat avec
-# AGONY_STABILIZED_HP de sa vie. Sinon, il meurt (mort définitive). Quand le combat s'arrête, un héros encore
-# à l'agonie est sauvé si un allié debout peut le rejoindre et rester à son côté avant la fin de ses
-# AGONY_SECONDS ; sinon il meurt. Seul un allié libre (pas au contact d'un ennemi) part le secourir.
+# AGONY_ALLY_RANGE cases), ou si l'équipe a une potion de soin, il est stabilisé : il se relève avec
+# AGONY_STABILIZED_HP de sa vie et reprend le combat (étape A ; avant, il en sortait). Sinon, à la fin de ses
+# AGONY_SECONDS, il meurt (mort définitive). Quand l'étage se termine, un héros encore à l'agonie est soigné, s'il
+# reste un héros debout (étape A ; avant : seulement si un allié pouvait le rejoindre à temps) ; toute l'équipe à
+# terre : il meurt. Seul un allié libre (pas au contact d'un ennemi) part le secourir.
 # Les potions : l'équipe en
 # emporte jusqu'à POTIONS_PER_MISSION de l'entrepôt (POTION, items.gd) et rend celles qu'elle n'a pas bues.
 # Un immortel du mode dev passe aussi par l'agonie, mais reste « à terre » au lieu de mourir.

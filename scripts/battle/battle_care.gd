@@ -153,17 +153,32 @@ func _agony_tick(fighter: Dictionary) -> void:
 		_die(fighter, fighter["agony_cause"])
 
 
-## Sauvé de l'agonie (« by » : l'allié ou la potion) : il sort du combat avec AGONY_STABILIZED_HP de sa vie.
+## Sauvé de l'agonie (« by » : l'allié ou la potion) : il se relève avec AGONY_STABILIZED_HP de sa vie et reprend
+## le combat (demande du porteur du projet, étape A : avant, il sortait du combat ; il ne quitte l'étage qu'à la
+## fin, avec les autres). Il peut retomber à l'agonie.
 func _stabilize(fighter: Dictionary, by: String) -> void:
 	fighter["agony"] = false
 	fighter["stabilized"] = true
-	fighter["present"] = false  # mis à l'abri : il ne combat plus
 	fighter["hp"] = maxi(1, roundi(fighter["max_hp"] * GameData.AGONY_STABILIZED_HP))
+	fighter["order"] = {}
+	fighter["path"] = PackedVector2Array()
 	var text := "%s est stabilisé grâce à %s." % [_name_with_stars(fighter), by]
 	_journal(fighter, "rescued", {"by": by})
-	_log(text + " Il est mis à l'abri.", "awaken")
-	_alert("Stabilisé", [text, "Il sort du combat, sa vie n'est plus en danger."])
+	_log(text + " Il se relève et reprend le combat.", "awaken")
+	_alert("Stabilisé", [text, "Il se relève, affaibli, et reprend le combat."])
 	fighter["mind_news"].append("%s a frôlé la mort : stabilisé grâce à %s." % [fighter["name"], by])
+
+
+## Fin de l'étage (étape A, demande du porteur du projet) : un héros encore à l'agonie quand l'étage se termine est
+## soigné (il ne meurt pas, même sans avoir été stabilisé, arme plantée comprise), s'il reste au moins un héros
+## debout pour le ramener. Toute l'équipe à terre (défaite complète) : personne ne le ramène, il meurt.
+func _heal_at_end(fighter: Dictionary) -> void:
+	fighter["agony"] = false
+	fighter["stabilized"] = true
+	fighter["hp"] = maxi(1, roundi(fighter["max_hp"] * GameData.AGONY_STABILIZED_HP))
+	_journal(fighter, "rescued", {"by": "la fin de l'étage"})
+	_log("%s est soigné à la fin de l'étage : il s'en sortira." % _name_with_stars(fighter), "awaken")
+	fighter["mind_news"].append("%s a frôlé la mort : soigné à la fin de l'étage." % fighter["name"])
 
 
 ## Qui va secourir qui : pour chaque héros à l'agonie, l'allié libre le plus proche (à moins de

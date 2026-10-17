@@ -984,21 +984,17 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 ## (ou améliorer) Résistance à la douleur. Un héros debout, épée et bouclier en main,
 ## dont les deux maîtrises sont au maximum, les fusionne en « Épée et bouclier ».
 func _after_fight() -> void:
-	# Encore à l'agonie quand le combat s'arrête : sauvé si un allié debout peut le rejoindre et rester à son
-	# côté avant la fin de ses AGONY_SECONDS ; sinon il meurt. Une arme plantée : personne ne peut le sauver.
+	# Encore à l'agonie quand l'étage se termine (étape A, demande du porteur du projet ; avant : sauvé seulement si un
+	# allié debout pouvait le rejoindre à temps) : soigné, s'il reste un héros debout ; sinon (toute l'équipe à terre)
+	# il meurt. Un duel ne finit jamais à l'agonie.
+	var someone_standing := not _alive(heroes).is_empty()
 	for hero in heroes:
 		if not hero["agony"]:
 			continue
-		var left: float = hero["agony_until"] - time - (GameData.AGONY_RESCUE_SECONDS - hero["rescue"])
-		var rescuer: Dictionary = {}
-		for ally in _alive(heroes):
-			if not hero["embedded"] and ally["pos"].distance_to(hero["pos"]) / _move_speed(ally) <= left:
-				rescuer = ally
-				break
-		if rescuer.is_empty():
-			_die(hero, hero["agony_cause"])
+		if someone_standing:
+			_heal_at_end(hero)
 		else:
-			_stabilize(hero, rescuer["name"])
+			_die(hero, hero["agony_cause"])
 	# La rage s'arrête avec le combat ; la migraine (en cours ou qui commence) continue après, en temps réel.
 	var now := Time.get_unix_time_from_system()
 	for unit in units:
