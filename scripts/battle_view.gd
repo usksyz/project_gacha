@@ -1025,6 +1025,7 @@ func _draw_names(positions: Dictionary, cell: float) -> void:
 func _draw_effects(positions: Dictionary, cell: float) -> void:
 	var font := ThemeDB.fallback_font
 	var now := battle.time
+	var ranks := float_ranks(battle, first_effect)
 	for i in range(first_effect, battle.effects.size()):
 		var effect: Dictionary = battle.effects[i]
 		var age: float = now - effect["t"]
@@ -1068,8 +1069,25 @@ func _draw_effects(positions: Dictionary, cell: float) -> void:
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
 		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
-		var rise := Vector2(-80, -cell * 0.4 - age * cell * 0.8)
+		var rise := Vector2(-80, -cell * 0.4 - age * cell * 0.8 - ranks.get(i, 0) * FLOAT_LINE)
 		arena.draw_string(font, to + rise, effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160, size, color)
+
+
+## Étape C : chiffres empilés. Pour chaque chiffre encore visible, son rang parmi ceux de la même cible (0 = le plus
+## récent, en bas ; les plus anciens montent d'une ligne par chiffre plus récent) : ils ne se chevauchent plus.
+const FLOAT_LINE := 17.0
+
+
+static func float_ranks(fight: Battle, first: int) -> Dictionary:
+	var ranks := {}
+	var counts := {}
+	for i in range(fight.effects.size() - 1, first - 1, -1):
+		var effect: Dictionary = fight.effects[i]
+		if effect["kind"] == "refuse" or fight.time - effect["t"] > FLOAT_TIME:
+			continue
+		ranks[i] = counts.get(effect["to"], 0)
+		counts[effect["to"]] = ranks[i] + 1
+	return ranks
 
 
 ## Bulle de parole (fond blanc, petite pointe vers le bas) centrée au-dessus du point « tip ».

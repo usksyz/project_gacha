@@ -953,6 +953,7 @@ func _draw_effects(heads: Dictionary, bodies: Dictionary, k: float) -> void:
 	var font := ThemeDB.fallback_font
 	var now := battle.time
 	var first := view.first_effect
+	var ranks := BattleView.float_ranks(battle, first)  # (étape C) chiffres empilés, pas superposés
 	for i in range(first, battle.effects.size()):
 		var effect: Dictionary = battle.effects[i]
 		var age: float = now - effect["t"]
@@ -993,5 +994,6 @@ func _draw_effects(heads: Dictionary, bodies: Dictionary, k: float) -> void:
 		elif effect["text"] == "esquive !":
 			color = Color("9fd3ff")
 		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
-		overlay.draw_string(font, head + Vector2(-80, -18 * k - age * 30.0), effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160,
+		overlay.draw_string(font, head + Vector2(-80, -18 * k - age * 30.0 - ranks.get(i, 0) * BattleView.FLOAT_LINE),
+			effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160,
 			font_size, color)
