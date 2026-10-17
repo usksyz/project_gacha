@@ -291,7 +291,7 @@ func gear_stats(hero: Dictionary) -> Dictionary:
 
 const PROMOTION_STONE := "Pierre d'attribut"
 ## Potion de soin (rangée dans l'entrepôt, grade F) : stabilise un héros à l'agonie (voir tower.gd, « Agonie »).
-## Pas encore fabriquée : elle viendra de l'alchimie (Plante de vie du plateau) ; mode dev pour l'instant.
+## Préparée à la forge avec de l'herbe médicinale (POTION_RECIPE, lobby.gd ; plus tard peut-être l'alchimie).
 const POTION := "Potion de soin"
 
 

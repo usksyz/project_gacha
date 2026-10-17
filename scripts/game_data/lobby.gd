@@ -417,6 +417,31 @@ const FORGE_RECIPES := {
 	"Bouclier": {"main": "Minerai de fer", "qty": 6, "extra": {"Charbon": 2}},
 }
 
+## Potion de soin (POTION, items.gd) : préparée à la forge, sans puzzle ni tirage (prompt 1, pour que les potions
+## emportées dans la Tour existent hors du mode dev). L'herbe médicinale vient de la Forêt Kenout (de n'importe
+## quel grade, les plus faibles d'abord). Recette provisoire.
+const POTION_RECIPE := {"Herbe médicinale": 3}
+
+
+## Vrai si l'entrepôt a de quoi préparer une potion de soin.
+func can_brew_potion() -> bool:
+	for material in POTION_RECIPE:
+		if material_count(material) < POTION_RECIPE[material]:
+			return false
+	return true
+
+
+## Prépare une potion de soin (grade F, rangée dans l'entrepôt). Renvoie faux s'il manque des herbes.
+func brew_potion() -> bool:
+	if not forge_built() or not can_brew_potion():
+		return false
+	for material in POTION_RECIPE:
+		_take_material(material, POTION_RECIPE[material])
+	add_material(POTION, "F", 1)
+	save_game()
+	return true
+
+
 ## Difficultés du puzzle (cahier des charges) : taille de la grille, nombre de pièces (et leur taille),
 ## cases d'impureté, pièces révélées une par une, rotation permise, silhouette qui s'efface (secondes),
 ## crans de bonus au maximum, et chance de succès affichée avant de confirmer.
