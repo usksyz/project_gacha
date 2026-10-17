@@ -207,10 +207,12 @@ func _play() -> void:
 		await _press(dungeons, "Confirmer")
 		var armed := []
 		for hero in GameData.team_members(0):
-			armed.append("%s %s%s" % [hero["name"], GameData.fighting_weapon(hero)["name"],
+			# (un mage ou un soigneur n'a pas d'arme : fighting_weapon renvoie {})
+			armed.append("%s %s%s" % [hero["name"], GameData.fighting_weapon(hero).get("name", "magie"),
 				"" if GameData.equipped(hero, "shield").is_empty() else " + " + GameData.weapon_name(GameData.equipped(hero, "shield"))])
 		var from_arsenal := GameData.team_members(0).filter(func(hero): return not GameData.equipped(hero, "weapon").is_empty())
-		_check("héros armés depuis l'arsenal (essai %d)" % (attempt + 1), from_arsenal.size() >= 3, "; ".join(armed))
+		var fighters := GameData.team_members(0).filter(func(hero): return not GameData.uses_magic(hero))
+		_check("héros armés depuis l'arsenal (essai %d)" % (attempt + 1), from_arsenal.size() >= mini(3, fighters.size()), "; ".join(armed))
 		# (prompt 3) placement des héros : le combat attend « Commencer »
 		_check("placement avant le combat (essai %d)" % (attempt + 1), dungeons.battle_view.placing, "")
 		await _press(dungeons.battle_view, "Commencer")
