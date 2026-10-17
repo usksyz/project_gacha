@@ -203,7 +203,33 @@ func _on_action() -> void:
 		target = {}  # revenir au choix du héros à renforcer
 		_refresh()
 		return
-	_confirm()
+	_hint_or_confirm()
+
+
+## (prompt 4) Avant la fenêtre rouge : si un sacrifié a un talent caché, un indice de ce qu'on voit de lui
+## (GameData.synthesis_hints : jamais de chiffres, sauf la raison en mode dev). Puis la confirmation.
+func _hint_or_confirm() -> void:
+	var hints := GameData.synthesis_hints(sacrifices)
+	if hints.is_empty():
+		_confirm()
+		return
+	var box := _overlay_box()
+	var lines := []
+	for hint in hints:
+		lines.append(hint["text"])
+		if Settings.dev_mode:
+			lines.append("(mode dev) %s" % hint["reason"])
+	lines.append("En es-tu sûr ?")
+	box.add_child(UI.make_system_window("Un détail", lines))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	for entry in [["Revoir mon choix", func(): overlay.visible = false], ["Continuer", _confirm]]:
+		var button := UI.make_button(entry[0], entry[1], 24)
+		button.custom_minimum_size.y = 90
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(button)
+	overlay.visible = true
 
 
 ## Fenêtre rouge : le sacrifice est définitif.
