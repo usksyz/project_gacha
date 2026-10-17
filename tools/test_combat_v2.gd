@@ -302,9 +302,18 @@ func _check_frozen_floors() -> void:
 	var enemies: Array = first["enemies"].duplicate(true)
 	var battle := Battle.new(team, enemies, GameData.floor_quest(3))
 	battle.map_data = first["map"]
+	battle.forced_disposition = "horde"  # (étape E : en horde, comme avant ; sinon la disposition les place)
 	battle.start()
 	var at_start := battle.enemies.filter(func(e): return e["present"]).all(func(e): return battle._cell_of(e["pos"]) == e["source"]["start"])
-	_ok(at_start, "au combat, chaque ennemi part de sa case")
+	_ok(at_start, "au combat (horde), chaque ennemi part de sa case")
+	# Étape E : avec la disposition de l'étage, les ennemis sont placés autrement, mais toujours au même endroit.
+	var places := []
+	for attempt in 2:
+		var arranged := Battle.new([GameData._create_hero(3)], first["enemies"].duplicate(true), GameData.floor_quest(3))
+		arranged.map_data = first["map"]
+		arranged.start()
+		places.append(var_to_str(arranged.enemies.map(func(e): return [e["pos"], e["state"]])))
+	_ok(places[0] == places[1], "étape E : même étage, même disposition, mêmes places")
 	battle.run()
 	_ok(var_to_str(GameData.floors[3]) == var_to_str(first), "après le combat, l'étage est toujours le même")
 

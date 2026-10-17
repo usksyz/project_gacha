@@ -13,6 +13,8 @@ extends Node
 ## contact à moins de MASTER_TIRED de son endurance échange sa place, au plus toutes les MASTER_SWAP_COOLDOWN s).
 ## « potions » : potions de soin dans l'entrepôt (0 par défaut).
 ## « carte » : graine de carte imposée à tous les combats (sinon une carte par combat, tirée de la graine).
+## « dispo » (étape E) : disposition des ennemis imposée (horde = comme avant l'étape E ; camp, endormis, poste,
+## patrouilles, embuscade, pillage) ; sans, celle de l'étage. Victoires et durée affichées par disposition.
 ## Chaque lancement relit et réécrit user://sauvegarde.cfg : le lancer dans une copie du projet avec un
 ## override.cfg (dossier de sauvegarde à part), voir CLAUDE.md, section P1a-bis.
 ## Affiche, par étage : victoires (%), morts, peurs et ruptures par combat, temps de calcul moyen d'un combat (ms), unités
@@ -42,7 +44,7 @@ var _diag := {}
 
 func _ready() -> void:
 	var args := {"etages": "1,2,3,4,5", "combats": "200", "equipe": "brute", "graine": "1", "meneur": "libre", "meneur_toit": "",
-		"maitre": "non", "potions": "0", "carte": "", "perception": "", "ia": "", "personnalite": ""}
+		"maitre": "non", "potions": "0", "carte": "", "perception": "", "ia": "", "personnalite": "", "dispo": ""}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
 		if parts.size() == 2:
@@ -72,6 +74,7 @@ func _ready() -> void:
 		var with_trait := {}  # {trait: [combats où l'équipe l'a, victoires]}
 		var surprised := [0, 0]  # attaques surprises subies par les héros, par les ennemis (C3)
 		var cobaye := [0, 0, 0.0]  # le héros testé : morts, mis à terre (agonie, mort), part de vie à la fin (total)
+		var by_dispo := {}  # (étape E) {disposition: [combats, victoires, alarmes générales, durée totale]}
 		for i in count:
 			GameData.arsenal = []
 			GameData.warehouse = {}
@@ -106,7 +109,19 @@ func _ready() -> void:
 				battle.set("perception_on", args["perception"] != "non")
 			if args["ia"] != "":
 				battle.set("tactical_ai", args["ia"] != "fonce")
+			# Étape E : « dispo=horde » (comme avant : les monstres savent où sont les héros), ou une disposition imposée
+			# (camp, endormis, poste, patrouilles, embuscade, pillage) ; sans : celle de l'étage (tirée de la carte).
+			if args["dispo"] != "":
+				battle.set("forced_disposition", args["dispo"])
 			var result := _play(battle, master, i)
+			if battle.get("alert") != null:
+				var dispo: String = battle.alert.disposition
+				var entry: Array = by_dispo.get(dispo, [0, 0, 0, 0.0])
+				entry[0] += 1
+				entry[1] += 1 if battle.victory else 0
+				entry[2] += 1 if battle.alert.alarm and dispo != "horde" else 0
+				entry[3] += battle.duration
+				by_dispo[dispo] = entry
 			usec += Time.get_ticks_usec() - started
 			for kind in blocked:
 				blocked[kind] += result["blocked"][kind]
@@ -139,6 +154,10 @@ func _ready() -> void:
 			float(fears) / count, float(ruptures) / count, usec / 1000.0 / count, blocked["sans raison"], blocked["foule"],
 			blocked["escalade"], ", ".join(trait_parts)])
 		print("  surprises par combat : subies par les héros %.1f, par les ennemis %.1f" % [surprised[0] / float(count), surprised[1] / float(count)])
+		for dispo in by_dispo:
+			var entry: Array = by_dispo[dispo]
+			print("  disposition %s : %d combats, victoires %.1f%%, alarme générale %.0f%%, durée moyenne %.0f s" % [dispo, entry[0],
+				100.0 * entry[1] / entry[0], 100.0 * entry[2] / entry[0], entry[3] / entry[0]])
 		if _args.get("cobaye", "") != "":
 			print("  cobaye %s : mort %.1f %%, à terre %.1f %%, vie restante moyenne %.0f %%" % [_args["cobaye"],
 				100.0 * cobaye[0] / count, 100.0 * cobaye[1] / count, 100.0 * cobaye[2] / count])

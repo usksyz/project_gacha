@@ -213,8 +213,9 @@ func _play() -> void:
 		var from_arsenal := GameData.team_members(0).filter(func(hero): return not GameData.equipped(hero, "weapon").is_empty())
 		var fighters := GameData.team_members(0).filter(func(hero): return not GameData.uses_magic(hero))
 		_check("héros armés depuis l'arsenal (essai %d)" % (attempt + 1), from_arsenal.size() >= mini(3, fighters.size()), "; ".join(armed))
-		# (étape B) pas d'écran de placement pendant le tutoriel : le combat démarre tout de suite
-		_check("pas de placement au tutoriel (essai %d)" % (attempt + 1), not dungeons.battle_view.placing, "")
+		# (étape E) plus de placement : le combat démarre tout de suite, et les héros explorent le village (pillage)
+		_check("le combat démarre tout de suite (essai %d)" % (attempt + 1), dungeons.battle_view.pause_button.visible,
+			dungeons.battle_view.battle.alert.disposition)
 		Engine.time_scale = float(_args["vitesse"])
 		await _seconds(1.0)  # (temps réel : environ 6 s de combat)
 		Engine.time_scale = 1.0

@@ -10,8 +10,8 @@ extends Node
 ##   ordres : touche un héros, puis un toit, puis la rue, comme un doigt (lancer de rayon), et vérifie la case
 ##     visée et que le héros monte bien sur le toit.
 ##   identique : le même combat joué deux fois (graine du hasard égale), sans écran puis à travers l'écran 3D :
-##     tout doit être pareil (vainqueur, temps, vie de chacun, journal). « placement=oui » (prompt 3) : l'écran passe
-##     par le placement des héros (« Placement automatique » puis « Commencer », sans rien déplacer).
+##     tout doit être pareil (vainqueur, temps, vie de chacun, journal). (Le placement du prompt 3 n'existe plus
+##     depuis l'étape E.)
 ## Affiche « C2 ... OK » ou « C2 ... ÉCHEC » et quitte.
 
 var _args := {}
@@ -64,16 +64,11 @@ func _make_team(floor_number: int) -> Array:
 	return team
 
 
-## « placement » (prompt 3) : l'écran commence par le placement des héros ; on touche « Placement automatique »
-## puis « Commencer » sans rien déplacer (le combat doit rester identique).
-func _make_view(battle: Battle, title: String, placement := false) -> BattleView:
+func _make_view(battle: Battle, title: String) -> BattleView:
 	var view := BattleView.new()
 	view.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(view)
-	view.play(battle, title, Callable(), placement)
-	if placement:
-		view._auto_place()
-		view._start_battle()
+	view.play(battle, title)
 	return view
 
 
@@ -270,7 +265,7 @@ func _check_identical() -> void:
 		seed(500 + n)
 		var b := _make_battle(floor_number, map_seed)
 
-		var view := _make_view(b, "Identique", _args.get("placement", "non") == "oui")
+		var view := _make_view(b, "Identique")
 		while not b.finished:
 			view._process(Battle.TICK)
 			if b.time > 600.0:

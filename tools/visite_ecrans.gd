@@ -68,7 +68,7 @@ func _run() -> void:
 	collection._show_detail(heroes[0])
 	await _frames(10)
 	await _capture("fiche_haut")
-	# Le choix de l'équipe d'un étage, puis le combat (placement), puis quelques secondes de combat.
+	# Le choix de l'équipe d'un étage, puis le combat (exploration, étape E), puis quelques secondes de combat.
 	main.show_screen("dungeons")
 	await _frames(5)
 	var dungeons: Node = main.screens["dungeons"]
@@ -81,8 +81,7 @@ func _run() -> void:
 	await _capture("choix_equipe")
 	dungeons._start_fight()
 	await _frames(20)
-	await _capture("placement")
-	dungeons.battle_view._start_battle()
+	await _capture("exploration")
 	for i in 240:
 		await process_frame
 	await _capture("combat")
