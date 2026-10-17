@@ -439,25 +439,94 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# Entraînement automatique (étape A)
+# Entraînement : chaque héros travaille ce qu'il veut (étape D)
 # ---------------------------------------------------------------------------
-# Demande du porteur du projet : « en auto, suggestions, à plusieurs ».
-# Le Système suggère à chaque héros le programme qui lui sert le plus (training_suggestion) : la maîtrise de l'arme
-# qu'il porte ou qu'il prendra (son arme de prédilection d'abord), puis le bouclier pour ceux qui en portent, puis
-# Mouvement souple. Un héros en « auto » (hero["training_auto"]) suit la suggestion et passe tout seul au programme
-# suivant quand le sien est au niveau maximum (ou qu'il stagne). « Entraîner automatiquement » remplit les places
-# libres avec les héros de la cité qui ne font rien, chacun en auto.
+# Le porteur du projet : « On ne choisit pas l'entraînement : les héros s'entraînent à ce qu'ils veulent. Un archer, par
+# ses autres expériences, peut se rendre compte qu'il a besoin du corps à corps ; un épéiste comme Han peut vouloir
+# apprendre à parer les tirs ; une équipe avec un mage élémentaire peut souhaiter développer une résistance à cet
+# élément pour ne pas être laissée de côté en combattant à côté ; la répétition d'une action avec un sens permet de
+# débloquer et améliorer des compétences. » (Remplace la suggestion et le bouton « Auto » de l'étape A.)
+# Ce qu'il a vécu en combat devient un besoin (hero["practice_needs"], merge_practice, tower.gd) ; au terrain, il
+# travaille le plus fort de ses besoins (training_wish), revu à chaque séance. Sans vécu (héros neuf), il veut
+# maîtriser son arme. Le Maître l'envoie au terrain ou le met au repos ; il ne choisit pas le programme.
+# Personnalité : un Curieux préfère ce qu'il ne sait pas encore, un Persévérant tient à ce qu'il travaille déjà.
 
-## Le programme que le Système suggère à ce héros ("" : rien d'utile, par exemple un mage ou tout est au maximum).
-func training_suggestion(hero: Dictionary) -> String:
-	for skill_name in training_order(hero):
-		if skill_level(hero["skills"], skill_name) < SKILL_MAX_LEVEL and PersonalityEngine.has_affinity(hero, skill_name) \
-				and not skill_name in hero.get("stalled_skills", []):
-			return skill_name
-	return ""
+## Ce que veut travailler ce héros : {"skill": compétence ("" : rien d'utile), "reason": pourquoi, en mots (sans
+## chiffres), "weights": {compétence: poids} (mode dev)}.
+func training_wish(hero: Dictionary) -> Dictionary:
+	var weights := {}
+	for skill_name in hero.get("practice_needs", {}):
+		weights[skill_name] = float(hero["practice_needs"][skill_name])
+	# Sans vécu marquant, il veut maîtriser son arme (ordre de training_order, poids faibles).
+	var order := training_order(hero)
+	for i in order.size():
+		weights[order[i]] = weights.get(order[i], 0.0) + 0.5 / (i + 1)
+	var curious := PersonalityEngine.tier(hero, "CUR")
+	var stubborn := PersonalityEngine.tier(hero, "PER")
+	var best := ""
+	var best_weight := 0.0
+	for skill_name in weights:
+		if not skill_name in TRAINING_SKILLS or not _can_train(hero, skill_name):
+			continue
+		var weight: float = weights[skill_name]
+		if skill_level(hero["skills"], skill_name) == 0:
+			weight *= 1.0 + maxi(0, curious) * 0.05
+		if skill_name == hero.get("training", ""):
+			weight *= 1.0 + maxi(0, stubborn) * 0.05
+		if weight > best_weight:
+			best = skill_name
+			best_weight = weight
+	return {"skill": best, "reason": _wish_reason(hero, best), "weights": weights}
 
 
-## Les programmes utiles à ce héros, du plus utile au moins utile.
+## Peut-il encore progresser dans cette compétence (pas au maximum, dans ses affinités, sans incompatibilité) ?
+func _can_train(hero: Dictionary, skill_name: String) -> bool:
+	var level := skill_level(hero["skills"], skill_name)
+	if level >= SKILL_MAX_LEVEL or skill_name in hero.get("stalled_skills", []):
+		return false
+	if not PersonalityEngine.has_affinity(hero, skill_name):
+		return false
+	return level > 0 or can_learn_skill(hero, hero["skills"], skill_name)
+
+
+## Pourquoi il veut travailler cette compétence (ce que voit le Maître : des faits, pas de chiffres).
+func _wish_reason(hero: Dictionary, skill_name: String) -> String:
+	var name: String = hero["name"]
+	var needs: Dictionary = hero.get("practice_needs", {})
+	var lived: bool = needs.get(skill_name, 0.0) >= 1.0
+	match skill_name:
+		"":
+			return "%s n'a plus rien d'utile à apprendre au terrain pour l'instant." % name
+		"Maîtrise de la dague":
+			if lived and (hero["class"] == "Archer" or fighting_weapon(hero).get("type", "") == "Arc"):
+				return "%s veut apprendre à se battre au corps à corps : des ennemis l'ont souvent pris au contact." % name
+		"Parade des projectiles":
+			return "%s veut apprendre à parer les tirs : les flèches et les sorts l'ont souvent touché." % name
+		"Mouvement souple":
+			if lived:
+				return "%s veut apprendre à esquiver : on le touche trop souvent." % name
+		"Utilisation du bouclier":
+			if lived:
+				return "%s veut mieux se servir de son bouclier : il encaisse beaucoup de coups." % name
+	for element in ELEMENT_RESISTANCES:
+		if ELEMENT_RESISTANCES[element] == skill_name:
+			var word: String = {"Feu": "le feu", "Vent": "le vent", "Froid": "le froid"}[element]
+			if alive_heroes().any(func(h): return h["class"] == "Mage" and h.get("element", "") == element and h["id"] != hero["id"]):
+				return "%s veut s'endurcir contre %s, pour pouvoir se battre aux côtés de son mage." % [name, word]
+			return "%s veut s'endurcir contre %s : il en a souffert au combat." % [name, word]
+	for type in WEAPON_WORDS:
+		if WEAPON_TYPES[type]["skill"] == skill_name:
+			if lived:
+				return "%s veut mieux manier %s : c'est l'arme dont il se sert le plus." % [name, WEAPON_WORDS[type]]
+			return "%s veut apprendre à manier %s." % [name, WEAPON_WORDS[type]]
+	return "%s veut travailler : %s." % [name, skill_name]
+
+
+const WEAPON_WORDS := {"Épée": "l'épée", "Lance": "la lance", "Dague": "la dague", "Fouet": "le fouet", "Arc": "l'arc"}
+
+
+## Les programmes qu'un héros sans vécu marquant veut, dans l'ordre : son arme de prédilection, l'arme qu'il porte, les
+## armes de sa classe, le bouclier (classes à bouclier), l'esquive.
 func training_order(hero: Dictionary) -> Array:
 	var order := []
 	if uses_magic(hero):
@@ -476,16 +545,17 @@ func training_order(hero: Dictionary) -> Array:
 	return order
 
 
-## Met un héros en entraînement automatique (programme suggéré). Renvoie faux si c'est impossible.
-func set_auto_training(hero: Dictionary) -> bool:
-	var suggestion := training_suggestion(hero)
-	if suggestion == "":
-		last_refusal = "%s n'a plus rien d'utile à apprendre au terrain." % hero["name"]
+## Le Maître envoie un héros au terrain : il y travaille ce qu'il veut. Renvoie faux si c'est impossible (raison dans
+## last_refusal : terrain plein, refus, rien à apprendre).
+func send_to_training(hero: Dictionary) -> bool:
+	var wish := training_wish(hero)
+	if wish["skill"] == "":
+		last_refusal = wish["reason"]
 		return false
-	if not set_training(hero, suggestion):
+	if not set_training(hero, wish["skill"]):
+		if last_refusal == "":
+			last_refusal = "Le terrain est plein (%d places) : renvoie d'abord un héros au repos." % TRAINING_SLOTS
 		return false
-	hero["training_auto"] = true
-	save_game()
 	return true
 
 
@@ -498,40 +568,41 @@ func idle_heroes() -> Array[Dictionary]:
 	return result
 
 
-## « Entraîner automatiquement » : remplit les places libres avec les héros qui ne font rien (les plus rares
-## d'abord), chacun sur son programme suggéré. Renvoie les noms inscrits, et les refus (textes).
+## « Envoyer au terrain les héros libres » : remplit les places libres avec les héros qui ne font rien (ceux qui ont le
+## plus envie d'abord), chacun sur ce qu'il veut. Renvoie les noms inscrits, et les refus (textes).
 func auto_fill_training() -> Dictionary:
 	var enrolled := []
 	var refusals := []
-	var heroes := idle_heroes()
-	heroes.sort_custom(func(a, b): return a["rarity"] > b["rarity"] or (a["rarity"] == b["rarity"] and a["level"] > b["level"]))
+	var heroes := idle_heroes().filter(func(h): return training_wish(h)["skill"] != "")
+	heroes.sort_custom(func(a, b): return _wish_strength(a) > _wish_strength(b))
 	for hero in heroes:
 		if trainees().size() >= TRAINING_SLOTS:
 			break
-		if training_suggestion(hero) == "":
-			continue
-		if set_auto_training(hero):
+		if send_to_training(hero):
 			enrolled.append(hero["name"])
 		elif last_refusal != "":
 			refusals.append(last_refusal)
 	return {"enrolled": enrolled, "refusals": refusals}
 
 
-## Un héros en auto dont le programme est fini (niveau maximum) ou qui y stagne passe au suivant ; sinon il quitte le
-## terrain (rien d'utile). Renvoie l'annonce, ou "".
-func _auto_next_program(hero: Dictionary) -> String:
-	var current: String = hero.get("training", "")
-	if not hero.get("training_auto", false) or current == "":
-		return ""
-	if skill_level(hero["skills"], current) < SKILL_MAX_LEVEL and not current in hero.get("stalled_skills", []):
-		return ""
-	var next := training_suggestion(hero)
-	hero["training"] = next
-	if next == "":
-		hero["training_auto"] = false
-		return "%s a fini tout ce qu'il pouvait apprendre au terrain : il retourne au repos." % hero["name"]
-	return "%s passe au programme suivant : %s." % [hero["name"], next]
+func _wish_strength(hero: Dictionary) -> float:
+	var wish := training_wish(hero)
+	return float(wish["weights"].get(wish["skill"], 0.0))
 
+
+## À chaque séance, le héros travaille ce qu'il veut maintenant (son envie a pu changer après un combat). Renvoie
+## l'annonce d'un changement, ou "". (Déclarée vide dans training.gd, qui l'appelle.)
+func _wished_program(hero: Dictionary) -> String:
+	var current: String = hero.get("training", "")
+	if current == "":
+		return ""
+	var wish := training_wish(hero)
+	if wish["skill"] == current:
+		return ""
+	hero["training"] = wish["skill"]
+	if wish["skill"] == "":
+		return "%s a fini tout ce qu'il pouvait apprendre au terrain : il retourne au repos." % hero["name"]
+	return wish["reason"]
 
 
 # ---------------------------------------------------------------------------

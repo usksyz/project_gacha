@@ -91,13 +91,13 @@ func _check_training() -> void:
 	for rarity in [2, 1, 1, 1, 1]:
 		game.dev_create_hero(rarity)
 	_check(game.TRAINING_SKILLS.size() >= 7, "programmes : %s" % ", ".join(game.TRAINING_SKILLS))
-	_check(game.training_suggestion(archer) == "Maîtrise de l'arc", "suggestion pour un archer : %s" % game.training_suggestion(archer))
+	_check(game.training_wish(archer)["skill"] == "Maîtrise de l'arc", "un archer sans vécu veut l'arc : %s" % game.training_wish(archer)["skill"])
 	var knight_order: Array = game.training_order(knight)
 	_check(knight_order.slice(0, 2).has("Utilisation du bouclier"), "un chevalier : le bouclier tôt (%s)" % ", ".join(knight_order))
 	var result: Dictionary = game.auto_fill_training()
 	print("    inscrits : %s ; refus : %s" % [result["enrolled"], result["refusals"]])
 	_check(game.trainees().size() == mini(game.TRAINING_SLOTS, 7) or not result["refusals"].is_empty(), "à plusieurs : %d places remplies" % game.trainees().size())
-	_check(game.trainees().all(func(h): return h["training_auto"] and h["training"] == game.training_suggestion(h)), "chacun en auto sur sa suggestion")
+	_check(game.trainees().all(func(h): return h["training"] == game.training_wish(h)["skill"]), "chacun sur ce qu'il veut (étape D)")
 	# Programme fini : il passe au suivant tout seul.
 	if game.trainees().has(archer):
 		for skill in archer["skills"]:
@@ -120,7 +120,7 @@ func _check_training() -> void:
 	for i in 5:
 		await process_frame
 	var texts := _texts(main.screens["training"])
-	_check(texts.any(func(t): return t.begins_with("Suggestion du Système")), "suggestions affichées sur l'écran")
+	_check(texts.any(func(t): return t.contains(" veut ")), "ce que chacun veut est affiché sur l'écran")
 	if captures != "" and DisplayServer.get_name() != "headless":
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png(captures.path_join("terrain.png"))

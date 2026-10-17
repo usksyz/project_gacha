@@ -1,15 +1,16 @@
 class_name TrainingScreen
 extends Control
 ## Terrain d'entraînement (ouvert depuis le hub).
-## On y envoie des héros travailler une compétence : la maîtrise d'une arme (épée, bouclier, lance, dague, fouet,
-## arc) ou l'esquive (Mouvement souple). Étape A : le Système suggère un programme à chacun, « Auto » le suit (et
-## passe au suivant une fois fini), « Entraîner automatiquement » remplit les places libres d'un coup.
+## On y envoie des héros : chacun y travaille ce qu'IL veut (étape D, GameData.training_wish), selon ce qu'il a vécu en
+## combat (pris au contact, touché par des tirs, éclaboussé par un mage allié...), et l'écran dit pourquoi. Le Maître
+## choisit qui y va et qui se repose, pas le programme. « Envoyer au terrain les héros qui ne font rien » remplit les
+## places libres d'un coup.
 ## Chaque séance (quelques minutes de temps réel, même jeu fermé) leur donne des points de progrès ;
 ## à 100 points, ils apprennent la compétence ou gagnent un niveau. Les règles sont dans GameData.
 ## L'écran ne montre que les héros à l'entraînement ; « Ajouter un héros » ouvre une fenêtre
 ## avec une recherche et des filtres (HeroFilter), pour s'y retrouver parmi des centaines de héros.
 
-## Texte court de chaque programme, pour les boutons.
+## Texte court de chaque programme.
 const PROGRAM_LABELS := {
 	"Maîtrise de l'épée": "Épée",
 	"Utilisation du bouclier": "Bouclier",
@@ -18,8 +19,12 @@ const PROGRAM_LABELS := {
 	"Maîtrise du fouet": "Fouet",
 	"Maîtrise de l'arc": "Arc",
 	"Mouvement souple": "Esquive",
+	"Parade des projectiles": "Parade des tirs",
+	"Résistance aux flammes": "Résistance au feu",
+	"Résistance au vent": "Résistance au vent",
+	"Résistance au froid": "Résistance au froid",
 }
-## (Étape A) « Entraîner automatiquement » : remplit les places libres (GameData.auto_fill_training).
+## « Envoyer au terrain les héros qui ne font rien » : remplit les places libres (GameData.auto_fill_training).
 var auto_fill_button: Button
 
 ## Demande à l'écran principal d'afficher un autre écran (retour au hub).
@@ -140,11 +145,11 @@ func _refresh() -> void:
 	add_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var free_places := GameData.TRAINING_SLOTS - trainees.size()
 	auto_fill_button.disabled = full or GameData.idle_heroes().is_empty()
-	auto_fill_button.text = "Entraîner automatiquement (%d place%s libre%s) : le Système choisit les héros qui ne font rien et leur programme" \
+	auto_fill_button.text = "Envoyer au terrain les héros qui ne font rien (%d place%s libre%s) : chacun y travaillera ce qu'il veut" \
 		% [free_places, "s" if free_places > 1 else "", "s" if free_places > 1 else ""]
 
 
-## (Étape A) Remplit les places libres : chacun sur le programme que le Système lui suggère, en auto.
+## Remplit les places libres : ceux qui ont le plus envie d'abord, chacun sur ce qu'il veut (étape D).
 func _auto_fill() -> void:
 	var result := GameData.auto_fill_training()
 	_refresh()
@@ -227,8 +232,8 @@ func _refresh_picker() -> void:
 		picker_list.add_child(label)
 
 
-## Ligne compacte d'un héros dans la fenêtre : nom, niveaux des compétences d'entraînement,
-## occupation actuelle, et un bouton par programme.
+## Ligne compacte d'un héros dans la fenêtre : nom, compétences d'entraînement apprises, ce qu'il veut travailler et
+## pourquoi (étape D : c'est lui qui choisit), et « Envoyer au terrain ».
 func _make_candidate_row(hero: Dictionary) -> Control:
 	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
 	var panel := PanelContainer.new()
@@ -250,46 +255,37 @@ func _make_candidate_row(hero: Dictionary) -> Control:
 	info.modulate = Color(1, 1, 1, 0.7)
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(info)
-	box.add_child(_suggestion_label(hero))
-	var buttons := HFlowContainer.new()
-	buttons.add_theme_constant_override("h_separation", 8)
-	buttons.add_theme_constant_override("v_separation", 8)
-	box.add_child(buttons)
-	var auto := UI.make_button("Auto", func():
+	box.add_child(_wish_label(hero))
+	var send := UI.make_button("Envoyer au terrain", func():
 		picker.visible = false
-		_choose_auto(hero), 22)
-	auto.custom_minimum_size = Vector2(110, 56)
-	auto.disabled = GameData.training_suggestion(hero) == ""
-	auto.add_theme_color_override("font_color", Color("f5b82e"))
-	buttons.add_child(auto)
-	for skill_name in GameData.TRAINING_SKILLS:
-		var button := UI.make_button(PROGRAM_LABELS[skill_name], func():
-			picker.visible = false
-			_choose(hero, skill_name), 22)
-		button.custom_minimum_size = Vector2(110, 56)
-		button.disabled = GameData.skill_level(hero["skills"], skill_name) >= GameData.SKILL_MAX_LEVEL
-		buttons.add_child(button)
+		_send(hero), 22)
+	send.custom_minimum_size.y = 56
+	send.disabled = GameData.training_wish(hero)["skill"] == ""
+	box.add_child(send)
 	return panel
 
 
-## « Suggestion du Système : Lance » (étape A), ou rien d'utile.
-func _suggestion_label(hero: Dictionary) -> Label:
-	var suggestion := GameData.training_suggestion(hero)
-	var text := "Suggestion du Système : %s" % PROGRAM_LABELS[suggestion] if suggestion != "" \
-		else "Suggestion du Système : rien d'utile à apprendre ici pour l'instant."
+## Ce qu'il veut travailler, et pourquoi (en mots). Mode dev : ses besoins chiffrés.
+func _wish_label(hero: Dictionary) -> Label:
+	var wish := GameData.training_wish(hero)
+	var text: String = wish["reason"]
+	if Settings.dev_mode:
+		var parts := PackedStringArray()
+		for skill_name in wish["weights"]:
+			parts.append("%s %.1f" % [PROGRAM_LABELS.get(skill_name, skill_name), wish["weights"][skill_name]])
+		text += "\n(mode dev) besoins : " + ", ".join(parts)
 	var label := UI.make_label(text, 18)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_color_override("font_color", Color("9ad1ff"))
 	return label
 
 
-## « Auto » : le programme suggéré, et il passera tout seul au suivant (GameData.set_auto_training).
-func _choose_auto(hero: Dictionary) -> void:
-	var accepted: bool = GameData.set_auto_training(hero)
+## Le Maître envoie un héros au terrain : il y travaille ce qu'il veut (GameData.send_to_training).
+func _send(hero: Dictionary) -> void:
+	var accepted: bool = GameData.send_to_training(hero)
 	_refresh()
 	if not accepted:
-		slots_label.text = GameData.last_refusal if GameData.last_refusal != "" \
-			else "Le terrain est plein (%d places) : renvoie d'abord un héros au repos." % GameData.TRAINING_SLOTS
+		slots_label.text = GameData.last_refusal
 
 
 ## Le joueur a lu les nouveautés : on les efface.
@@ -299,7 +295,8 @@ func _clear_news() -> void:
 	_refresh()
 
 
-## Carte d'un héros : nom, progrès dans chaque programme, et boutons pour choisir son programme.
+## Carte d'un héros au terrain : nom, ce qu'il travaille (sa progression), pourquoi il le veut, sa prochaine séance, et
+## « Repos » (étape D : le Maître ne choisit pas le programme).
 func _make_hero_row(hero: Dictionary) -> Control:
 	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
 	var panel := PanelContainer.new()
@@ -310,56 +307,24 @@ func _make_hero_row(hero: Dictionary) -> Control:
 
 	box.add_child(UI.make_label("%s (%s) — %s, niv. %d" % [hero["name"], "★".repeat(hero["rarity"]),
 		GameData.class_label(hero), hero["level"]], 24))
-	# Le programme en cours (et s'il est en auto), puis la suggestion du Système (étape A).
 	var current: String = hero.get("training", "")
 	if current != "":
-		var line := UI.make_label(_progress_text(hero, current) + ("  (auto)" if hero.get("training_auto", false) else ""), 20)
+		var line := UI.make_label(_progress_text(hero, current), 20)
 		line.modulate = Color(1, 1, 1, 0.75)
 		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(line)
-	box.add_child(_suggestion_label(hero))
+	box.add_child(_wish_label(hero))
 	var status := UI.make_label(_status_text(hero), 20)
 	status.add_theme_color_override("font_color", Color("f5b82e"))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(status)
 	status_labels[hero["id"]] = status
-
-	# « Auto », un bouton par programme, puis « Repos ». Le programme en cours est enfoncé (ou « Auto »).
-	var buttons := HFlowContainer.new()
-	buttons.add_theme_constant_override("h_separation", 8)
-	buttons.add_theme_constant_override("v_separation", 8)
-	box.add_child(buttons)
-	var auto_on: bool = hero.get("training_auto", false)
-	var auto := UI.make_button("Auto ✓" if auto_on else "Auto", func(): _choose_auto(hero), 22)
-	auto.custom_minimum_size = Vector2(110, 64)
-	auto.toggle_mode = true
-	auto.button_pressed = auto_on
-	if auto_on:  # (bien visible : en auto, il suit la suggestion du Système)
-		auto.add_theme_stylebox_override("pressed", UI.make_panel_style(Color("5a4310"), Color("f5b82e"), 2))
-	auto.add_theme_color_override("font_color", Color("f5b82e"))
-	buttons.add_child(auto)
-	for skill_name in GameData.TRAINING_SKILLS:
-		buttons.add_child(_make_program_button(hero, PROGRAM_LABELS[skill_name], skill_name, current == skill_name and not auto_on))
-	buttons.add_child(_make_program_button(hero, "Repos", "", current == ""))
+	var rest := UI.make_button("Repos", func():
+		GameData.set_training(hero, "")
+		_refresh(), 22)
+	rest.custom_minimum_size.y = 64
+	box.add_child(rest)
 	return panel
-
-
-func _make_program_button(hero: Dictionary, text: String, skill_name: String, selected: bool) -> Button:
-	var button := UI.make_button(text, func(): _choose(hero, skill_name), 22)
-	button.custom_minimum_size = Vector2(110, 64)
-	button.toggle_mode = true
-	button.button_pressed = selected
-	return button
-
-
-func _choose(hero: Dictionary, skill_name: String) -> void:
-	var accepted: bool = hero.get("training", "") == skill_name or GameData.set_training(hero, skill_name)
-	# On redessine même en cas de refus : le bouton touché ne doit pas rester enfoncé.
-	_refresh()
-	if not accepted and GameData.last_refusal != "":
-		slots_label.text = GameData.last_refusal  # le héros refuse (rupture, Paresseux)
-	elif not accepted:
-		slots_label.text = "Le terrain est plein (%d places) : renvoie d'abord un héros au repos." % GameData.TRAINING_SLOTS
 
 
 ## « Maîtrise de l'épée : niv. 2 — 40 / 100 » (ou « pas encore apprise »).
@@ -378,6 +343,6 @@ func _status_text(hero: Dictionary) -> String:
 	if training == "":
 		return GameData.activity_text(hero)  # au repos, ou assistant dans un bâtiment
 	if GameData.is_away(hero):
-		return "%s : reprendra l'entraînement (%s) à son retour" % [GameData.activity_text(hero), PROGRAM_LABELS[training]]
+		return "%s : reprendra l'entraînement (%s) à son retour" % [GameData.activity_text(hero), PROGRAM_LABELS.get(training, training)]
 	var seconds := GameData.seconds_to_next_session(hero)
-	return "À l'entraînement (%s) : prochaine séance dans %d:%02d" % [PROGRAM_LABELS[training], seconds / 60, seconds % 60]
+	return "À l'entraînement (%s) : prochaine séance dans %d:%02d" % [PROGRAM_LABELS.get(training, training), seconds / 60, seconds % 60]

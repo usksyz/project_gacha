@@ -24,9 +24,9 @@ const TRAINING_STATS := {"Maîtrise de l'épée": "str", "Utilisation du bouclie
 const TRAINING_ACTIVITY_PER_SESSION := 3
 
 
-## (Étape A) Entraînement automatique : voir lobby.gd, section « Entraînement automatique ». Déclarée ici (vide) pour
-## que update_training puisse l'appeler ; la vraie fonction est dans lobby.gd (plus haut dans la pile, elle voit les armes).
-func _auto_next_program(_hero: Dictionary) -> String:
+## (Étape D) Ce que le héros veut travailler maintenant : voir lobby.gd, section « Entraînement ». Déclarée ici (vide)
+## pour que update_training puisse l'appeler ; la vraie fonction est dans lobby.gd (plus haut dans la pile, elle voit les armes).
+func _wished_program(_hero: Dictionary) -> String:
 	return ""
 
 
@@ -65,7 +65,7 @@ func set_training(hero: Dictionary, skill_name: String) -> bool:
 		return false
 	update_training()  # les séances déjà faites dans l'ancien programme sont comptées
 	hero["training"] = skill_name
-	hero["training_auto"] = false  # (choisi par le Maître ; set_auto_training le remet en auto juste après)
+	hero.erase("training_auto")  # (étape A, remplacé à l'étape D : c'est le héros qui choisit son programme)
 	if skill_name != "":
 		hero["post"] = ""  # un héros ne travaille qu'à un endroit à la fois
 	hero["training_since"] = Time.get_unix_time_from_system()
@@ -99,7 +99,14 @@ func update_training() -> void:
 		hero["training_since"] = since + sessions * TRAINING_SESSION_SECONDS
 		# Des héros Mauvais à la cité baissent l'efficacité (voir personality.gd) : on le remarque ici.
 		var efficiency := lobby_efficiency()
+		# (étape D) il travaille ce qu'il veut maintenant : son envie a pu changer depuis la dernière séance
+		var switched := _wished_program(hero)
+		if switched != "":
+			training_news.append(switched)
 		var program: String = hero["training"]
+		if program == "":
+			changed = true
+			continue  # (plus rien d'utile à apprendre : il est retourné au repos)
 		var needed := skill_progress_needed(program)
 		# (les compétences qui comptent autrement, comme l'arc par flèche, gardent le même nombre de séances par niveau)
 		var points: int = maxi(1, roundi(sessions * (TRAINING_POINTS_BASE + hero["growth"]) * efficiency \
@@ -108,9 +115,6 @@ func update_training() -> void:
 		# Chaque séance oriente aussi la croissance de ses stats (voir heroes.gd) : l'épée exerce la Force,
 		# le bouclier la Santé. (L'entraînement ne donne ni stats ni niveaux : seulement au prochain niveau.)
 		add_activity(hero, {TRAINING_STATS.get(program, "str"): sessions * TRAINING_ACTIVITY_PER_SESSION})
-		var switched := _auto_next_program(hero)  # (étape A) en auto : programme suivant quand celui-ci est fini
-		if switched != "":
-			training_news.append(switched)
 		if efficiency < 1.0:
 			training_news.append_array(notice_bad_heroes())
 		changed = true
