@@ -836,6 +836,34 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   un coup (`_hit`), soigne (`_try_heal`) ou protège (`_cover`). Un survivant qui n'a rien fait ne gagne pas
   d'expérience (`finish_tower_battle`, `report["idle"]`) ; le résultat dit « +15 expérience pour chaque
   survivant qui a combattu » et « Pas d'expérience pour X : il n'a rien fait pendant le combat. ».
+- Préparer et comprendre un combat (prompt 3 ; Sommaire du cahier : « une défaite doit pouvoir se comprendre et se
+  préparer »).
+  1. Aperçu de l'étage : `GameData.floor_knowledge(étage)` (`tower.gd`) : ce que les héros en savent : le carnet de
+  l'étage à la bibliothèque (`library["floors"]["tour:N"]`) et la mémoire des héros VIVANTS qui y ont combattu
+  (`hero["recent_battles"]`, 3 derniers combats : un souvenir s'efface ; ennemis vus = « contact » de leur journal).
+  Étage déjà visité : sur la page d'annonce, fenêtre « Ce que tes héros savent » (qui s'en souvient, la carte figée en
+  petit, `scripts/floor_preview.gd` `FloorPreview` : couleurs de la vue de dessus, zone de départ en vert, place de
+  départ des ennemis déjà vus en rouge ; puis ces ennemis) ; la liste des ennemis du choix de l'équipe ne montre que
+  ceux déjà vus (« Et des ennemis que tes héros n'ont jamais vus. »). Première visite : seulement la quête (avant, la
+  liste de tous les ennemis s'affichait toujours).
+  2. Placement : après « Formation de groupe », `BattleView.play(..., placement = true)` (`DungeonsScreen._start_fight`) :
+  le combat est démarré (`start()`) mais n'avance pas ; zone de départ (`Battle.start_zone()` : les lignes `hero_rows`
+  et celles entre elles) encadrée en vert dans les deux vues ; on glisse un pion (vue de dessus : `_placement_input` ;
+  vue 3D : appuyer sur un héros le prend au lieu de bouger la caméra, `BattleView3D._gui_input`) ou on touche un héros
+  puis une case ; sur un autre héros, ils échangent (`Battle.place_hero`). Boutons « Placement automatique »
+  (`auto_place` : les places habituelles) et « Commencer » (`_start_battle`, à la place de « Pause »). Un héros placé
+  par le Maître (`fighter["placed"]`) tient ce poste (`held`, comme arrivé là sur son ordre) et le Meneur ne le déplace
+  pas (`_organize_defense`). Les places sont notées dans le combat en cours (`pending_battle["placement"]`, par numéro de
+  héros) : un combat repris au lancement les garde (`_resolve_pending_battle`). Rien n'est tiré au hasard : vérifié avec
+  `capture_c2 mode=identique combats=10` avec et sans `placement=oui` (écran de placement puis « Commencer » sans rien
+  bouger) : identiques. Les duels n'ont pas de placement.
+  3. Bilan : après une défaite ou une mort, `GameData.battle_debrief(battle)` (`report["debrief"]`) : `DEBRIEF_MIN` à
+  `DEBRIEF_MAX` (3 à 5) moments clés des journaux de combat (le premier contact, puis par importance `DEBRIEF_WEIGHTS` :
+  morts, agonie, secours, boss abattu, blessures graves, formations), remis dans l'ordre, racontés par le survivant qui
+  a le plus vécu (« je » quand c'est lui), sans chiffres (`_plain` enlève les niveaux des causes). Aucun survivant :
+  « Personne n'est revenu pour raconter ce qui s'est passé. » Fenêtre « Bilan » après les fenêtres des héros tombés.
+  Banc : `tools/test_prompt3.gd` (copie du projet, avec une fenêtre ; `-- captures=<dossier>` : aperçu, placement vue
+  de dessus et 3D, bilan) ; `test_tutoriel` touche « Commencer » avant le combat de l'étage 1.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
