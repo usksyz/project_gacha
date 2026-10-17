@@ -435,14 +435,63 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   de la Tour complet (journal, carnet d'étage, bibliothèque, mémorial), enregistrer puis relire à l'identique (les
   nombres à virgule relus se comparent à 0,0001 près : arrondi connu de la sauvegarde). P1b est terminée : P2
   branchera les effets (sujets et appréhension en combat, besoins, opinions) sur ces structures.
-- Personnalité v2, étape P2 : commencée puis mise en attente (le porteur du projet a fait passer C2 avant), sur la
-  branche `p2-personnalite`, pas encore dans `main` : P2a table MODIFIERS et vrai `modifier()`, P2b stress revu
-  (sensibilité, type, accoutumance), P2c effets des sujets en combat, P2d `can_learn` et affinités (conditions du
-  catalogue réécrites sur les paliers, choix « recréer et adapter »), P2e Berserk et éveils selon le caractère. Reste
-  P2f armes de prédilection et plafonds, P2g exclusives. Coefficients du cahier suivis à la lettre (choix du porteur
-  du projet). À reprendre après le réglage de la difficulté des étages 5 et 10 (fusionner `main` dans la branche).
-  À la fusion : rapprocher `TacticsData.PERSONALITY` (IA tactique, C3 : poids et seuils lus par `axis` et
-  `composite`, hors de `modifier()`) de la table MODIFIERS. La branche est sur GitHub (`origin/p2-personnalite`).
+- Personnalité v2, étape P2 (les effets de la personnalité ; faite sur la branche `p2-personnalite`, reprise et
+  fusionnée dans `main` au prompt 2). Coefficients du cahier suivis à la lettre (choix du porteur du projet), les
+  autres marqués « projet » dans les tables. Contrat inchangé : tout passe par `PersonalityEngine`.
+  P2a : table `MODIFIERS` (`personality_data.gd`) et vrai `modifier()` / `modified()` (op « add », « mul », « none »,
+  bornes, `with_base`) et `ACCESS_MODIFIERS` (traits majeurs et signatures qui modifient une mécanique) : peur (-3 points
+  par palier de Courage), fuite, retour de la peur, désobéissance (Discipline, 50 % au plus), éveil ou effondrement en
+  rupture, remontée de la santé mentale (Résilience), endurance (Constitution, Vitalité ; Infatigable, Économe, Sens
+  de la limite), planchers (Inébranlable, Esprit d'acier). Remplacent Lâche x2 / Courageux /2, Loyal /2, Courageux 25 %
+  d'éveil, Lâche 80 % de fuite (les traits se révèlent toujours). Mode dev : « Effets en jeu (P2) » sur la fiche.
+  P2b : stress revu (`STRESS_TYPES`, `PersonalityEngine.stress`) : Stabilité, sensibilité au type d'événement,
+  accoutumance (appréhension du sujet / son danger, 0,1 à 2 ; pas pour le deuil d'un ami), Roc, Sang-froid ; toutes
+  les pertes de santé mentale y passent (`Battle._stress(fighter, perte, type, contexte)`).
+  P2c : sujets en combat : la chance de peur x l'appréhension de l'ennemi le plus redouté à portée (`Battle._dread`) ;
+  après chaque combat de la Tour, ce que chaque survivant apprend de chaque sorte de monstre (`learn_from_battle`).
+  P2d : qui peut apprendre quoi (`SKILL_CONDITIONS`, conditions du catalogue réécrites sur les paliers, choix
+  « recréer et adapter » ; `can_learn`, `has_affinity`) : éveils, portes de la mort, entraînement et usage ; « X stagne »
+  annoncé une fois ; la synthèse et la promotion passent outre.
+  P2e : Berserk et éveils selon le caractère (seuils lus au début du combat : `berserk_trigger_hp` Colère,
+  `berserk_stop_hp` Prudence, `berserk_stop_mental` Maîtrise ; Increvable, Rage maîtrisée, À fleur de peau).
+  P2f (prompt 2) : armes de prédilection (`PersonalityEngine.favorite_weapon` : parmi les armes que sa classe prend
+  (`CLASS_WEAPONS`), celle dont l'aptitude (`persona["aptitudes"]`, `WEAPON_DOMAINS`) est d'au moins
+  `PREFERENCE_MIN_APTITUDE` (4) et plus haute que les autres) : en partant en mission (`gear_up`), il la prend même
+  `PREFERENCE_GRADE_TOLERANCE` (2) crans de grade sous la meilleure arme ; après `PREFERENCE_REVEAL_MISSIONS` (3)
+  missions avec elle (`hero["weapon_pref_missions"]`, `note_weapon_preference`), le Maître l'a remarqué
+  (`hero["weapon_pref_revealed"]`) : la fiche dit « X revient toujours à l'arc. » (`weapon_preference_text`). Mode dev :
+  arme de prédilection et compteur. Les plafonds de maîtrise ne sont pas faits : le cahier (onglets Personnalité)
+  n'était pas lisible pendant cette étape, à reprendre avec lui (le Persévérant 90 « Indomptable » parle de rangs de
+  maîtrise, qui n'existent pas encore).
+  P2g (prompt 2) : compétences exclusives (`EXCLUSIVE_SKILLS`) : l'accès du palier 50 d'un pôle (`POLE_ACCESS[...][5]`)
+  réserve une compétence (`SKILL_CONDITIONS`) ; elle s'acquiert une fois par un événement de combat (noté dans
+  `fighter["exclusive_events"]`, tiré à la fin du combat pour un héros debout qui a l'accès, `exclusives_for_event`,
+  « chance » ; la même chance la monte d'un niveau ensuite), puis elle s'utilise (passive). Premier lot (choix tranché :
+  celles dont l'événement existe déjà en combat) : Sixième sens (Acuité, après avoir été surpris), Vigilance (Méfiance,
+  après avoir été surpris : `VIGILANCE_CHANCE` 30 % de voir venir une surprise), Premiers soins (Empathie, après avoir
+  stabilisé un allié ou arrêté une hémorragie : secours `FIRST_AID_SPEEDUP` 30 % plus rapides, `Battle._first_aid`),
+  Premier sang (Impulsivité, en portant le premier coup du combat : premier coup +`FIRST_BLOOD_BONUS` 25 %) ; Calme et
+  Esprit combatif l'étaient déjà (leur propre éveil). Noms et effets des trois nouvelles : interprétés depuis
+  l'identifiant (cahier illisible pendant l'étape), à confronter à l'onglet « Axes ». Les autres exclusives : P4.
+  Bancs : `tools/test_p2fg.gd` (copie du projet, `-s`) ; 40 combats de l'étage 3 avec les quatre accès : environ 4
+  surprises subies par combat, un premier coup par combat, 18 secours ; 22 exclusives éveillées.
+  Fusion (prompt 2) : un seul conflit (`sim_tower.gd`, les deux côtés gardés) ; un bug trouvé et corrigé : le code de
+  C1 appelait `PersonalityEngine.modifier("climb")`, que la vraie table ne connaissait pas (ajouté, neutre comme avant).
+  Reste à faire à la fusion : rapprocher `TacticsData.PERSONALITY` (IA tactique, C3 : poids et seuils lus par `axis` et
+  `composite`, hors de `modifier()`) de la table MODIFIERS (pas fait : cela changerait le comportement de main).
+  Mesures avant / après la fusion (prompt 2 ; avant = `main` 23934d8, après = c976f47 : P2a à P2e et la correction ;
+  P2f et P2g ne jouent pas dans `sim_tower`, qui donne les armes à la main et refait ses héros à chaque combat). Bancs :
+  `test_personality` 125 contrôles bons → 162 bons (contrôles P2 en plus), `test_combat_v2` bon avant et après.
+  `sim_tower ... combats=300 equipe=brute|preparee graine=7`, un étage par lancement, 12 en parallèle. Victoires %
+  (morts par combat) avant → après ; après : peurs et ruptures par combat :
+  brute étages 1 / 2 / 3 / 4 / 5 / 10 : 99,7 (0,17) / 49,3 (2,83) / 36 (3,35) / 38,3 (3,28) / 28 (2,76) / 19 (3,77) →
+  100 (0,11) / 52 (2,63) / 42,3 (3,12) / 40 (3,18) / 31 (2,61) / 18 (3,48) ; peurs 0,78 / 1,05 / 1,15 / 1,09 / 2,78 /
+  3,37, ruptures 0 à 0,17 ;
+  préparée : 100 (0) / 90,7 (0,66) / 89,7 (0,94) / 87,3 (1,05) / 59,7 (1,82) / 35 (2,97) → 100 (0,01) / 91,7 (0,64) /
+  83 (1,06) / 79,3 (1,31) / 59,3 (1,76) / 35,3 (3,24) ; peurs 0,79 / 0,93 / 1 / 1,02 / 2,83 / 3,44.
+  Plus gros écarts : préparée étages 3 et 4, -6,7 et -8 points (environ 3 écarts-types sur 300 combats : réel) ; brute
+  étage 3, +6,3. Pas de rééquilibrage (coefficients du cahier gardés, choix du porteur du projet). Temps de calcul :
+  +2 à +5 %.
 - Longues listes de héros (200 et plus) : barre `HeroFilter` (`scripts/hero_filter.gd` : recherche par nom,
   classe, étoiles, tri ; `apply()` renvoie la liste filtrée) dans la collection, l'armurerie et la fenêtre
   « Ajouter un héros » du terrain d'entraînement, qui n'affiche plus que les héros inscrits. Au-delà de
