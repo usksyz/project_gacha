@@ -265,6 +265,12 @@ static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
 		Settings.vibrate(400)
 	for death in report["dead"]:
 		windows.append(make_death_window(death["hero"]))
+	# Bilan (prompt 3) : après une défaite ou une mort, un survivant raconte les moments clés.
+	var debrief: Dictionary = report.get("debrief", {})
+	if not debrief.is_empty():
+		var lines: Array = ["Récit de %s :" % debrief["narrator"]] if debrief["narrator"] != "" else []
+		lines.append_array(debrief["lines"])
+		windows.append(make_system_window("Bilan", lines))
 	if not report.get("lost_weapons", []).is_empty():
 		windows.append(make_system_window("Armes perdues", report["lost_weapons"], true))
 	if not report["notices"].is_empty():

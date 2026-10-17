@@ -34,6 +34,7 @@ func _run() -> void:
 			game.gain_xp(hero, game.xp_to_next(hero["level"]) - hero["xp"])
 	await _check_preview()
 	await _check_placement()
+	await _check_debrief()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -130,6 +131,47 @@ func _check_placement() -> void:
 	_check(survival.formations_used.any(func(f): return f.begins_with("défense du Meneur")), "le Meneur organise la défense")
 	_check(placed["order"].is_empty() and survival.map.cell_of(placed["pos"]) == spot, "le héros placé n'est pas déplacé par le Meneur")
 	_check(survival.heroes[2]["order"].get("by", "") == "meneur", "un autre bouclier est placé par le Meneur")
+
+
+## Point 3 : bilan après une défaite (ou une mort), 3 à 5 phrases sans chiffres, racontées par un survivant.
+func _check_debrief() -> void:
+	print("Point 3 : bilan")
+	var shown := false
+	var digits := RegEx.create_from_string("\\d")
+	for attempt in 30:
+		var team := []
+		for rarity in [2, 1, 1, 1, 1]:
+			var member: Dictionary = game.dev_create_hero(rarity)
+			team.append(member)
+		var quest: Dictionary = game.floor_quest(4)
+		var layout: Dictionary = load("res://scripts/map_generator.gd").generate(4, quest, 900 + attempt)
+		game.pending_battle = {"floor": 4, "team": [], "enemies": [], "quest": quest}
+		var battle = load("res://scripts/battle.gd").new(team, layout["enemies"], quest)
+		battle.map_data = layout["map"]
+		battle.run()
+		var report: Dictionary = game.finish_tower_battle(battle)
+		var expected: bool = not battle.victory or not report["dead"].is_empty()
+		_check(report.has("debrief") == expected, "essai %d : bilan %s" % [attempt + 1, "montré" if expected else "absent (victoire sans mort)"])
+		if not report.has("debrief"):
+			continue
+		var lines: Array = report["debrief"]["lines"]
+		print("    récit de %s : %s" % [report["debrief"]["narrator"], " / ".join(lines)])
+		var narrator: String = report["debrief"]["narrator"]
+		_check(narrator == "" or battle.heroes.any(func(f): return f["name"] == narrator and (f["hp"] > 0 or f.get("stabilized", false))), "narrateur survivant")
+		_check(narrator == "" or (lines.size() >= 3 and lines.size() <= 5), "3 à 5 moments (%d)" % lines.size())
+		_check(not lines.any(func(line): return digits.search(line) != null), "aucun chiffre")
+		if not shown and narrator != "":
+			shown = true
+			var screen = await _open_screen(VBoxContainer.new())
+			for window in load("res://scripts/ui.gd").make_battle_report_windows(report):
+				screen.add_child(window)
+			for i in 5:
+				await process_frame
+			await _capture("bilan")
+			screen.get_parent().queue_free()
+		if shown and attempt >= 4:
+			break
+	_check(shown, "au moins un bilan raconté")
 
 
 ## Ouvre un écran par-dessus tout (dans un calque), attend qu'il soit prêt.

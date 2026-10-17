@@ -611,6 +611,91 @@ func _combat_feats(hero: Dictionary, fighter: Dictionary, battle: Battle) -> Arr
 	return news
 
 
+## Bilan d'un combat (prompt 3, point 3 ; Sommaire du cahier : « une défaite doit pouvoir se comprendre ») :
+## DEBRIEF_MIN à DEBRIEF_MAX moments clés tirés des journaux des héros (Battle, « Journal de combat »), dans
+## l'ordre, racontés par un survivant en phrases simples, sans chiffres. Le narrateur : le survivant qui a le
+## plus vécu (le plus d'événements dans son journal). Les moments : le premier contact, les blessures graves, les
+## formations, l'agonie, les secours, un boss abattu, les morts ; les plus graves d'abord s'il y en a trop.
+## Renvoie {"narrator": nom ("" : aucun survivant), "lines": [textes]}.
+const DEBRIEF_MIN := 3
+const DEBRIEF_MAX := 5
+## Importance de chaque sorte de moment (la plus haute est gardée en premier).
+const DEBRIEF_WEIGHTS := {"death": 6, "agony": 5, "rescued": 4, "kill": 3, "wound": 2, "formation": 1, "contact": 0}
+
+
+func battle_debrief(battle: Battle) -> Dictionary:
+	var survivors := battle.heroes.filter(func(fighter): return fighter["hp"] > 0 or fighter["immortal"] \
+		or fighter.get("stabilized", false))
+	if survivors.is_empty():
+		return {"narrator": "", "lines": ["Personne n'est revenu pour raconter ce qui s'est passé."]}
+	survivors.sort_custom(func(a, b): return a["journal"].size() > b["journal"].size())
+	var narrator: Dictionary = survivors[0]
+	var moments := []
+	var seen := {}
+	for fighter in battle.heroes:
+		for event in fighter["journal"]:
+			var kind: String = event.get("kind", "")
+			if not DEBRIEF_WEIGHTS.has(kind) or (kind == "kill" and not event.get("boss", false)):
+				continue
+			# Une seule fois chaque formation, et seulement le tout premier contact du combat.
+			var key: String = kind + ":" + (event.get("name", "") if kind == "formation" else ("" if kind == "contact" else str(fighter["id"])))
+			if kind in ["wound", "agony", "death", "rescued"]:
+				key += ":%s" % event.get("t", 0.0)
+			if seen.has(key):
+				continue
+			seen[key] = true
+			moments.append({"t": event.get("t", 0.0), "weight": DEBRIEF_WEIGHTS[kind], "who": fighter, "event": event})
+	# Le premier contact (pour situer le récit), puis les plus importants ; remis dans l'ordre du combat.
+	var contact := moments.filter(func(m): return m["event"]["kind"] == "contact")
+	moments = moments.filter(func(m): return m["event"]["kind"] != "contact")
+	moments.sort_custom(func(a, b): return a["weight"] > b["weight"] or (a["weight"] == b["weight"] and a["t"] < b["t"]))
+	moments = moments.slice(0, DEBRIEF_MAX - contact.size()) + contact
+	moments.sort_custom(func(a, b): return a["t"] < b["t"])
+	var lines := []
+	for moment in moments:
+		lines.append(_debrief_line(moment["who"], moment["event"], narrator))
+	if lines.size() < DEBRIEF_MIN:
+		lines.append("Nous avons dû battre en retraite." if not battle.victory else "Nous avons tenu, mais à quel prix.")
+	return {"narrator": narrator["name"], "lines": lines}
+
+
+## Une phrase du bilan, dite par le narrateur (« je » quand c'est lui). Aucun chiffre (niveaux enlevés des causes).
+func _debrief_line(who: Dictionary, event: Dictionary, narrator: Dictionary) -> String:
+	var me: bool = who["id"] == narrator["id"]
+	var name: String = who["name"]
+	match event.get("kind", ""):
+		"contact":
+			return "Le combat a commencé quand nous sommes tombés sur un %s." % _plain(event.get("with", "ennemi"))
+		"wound":
+			return ("J'ai été gravement blessé par un %s." if me else name + " a été gravement blessé par un %s.") \
+				% _plain(event.get("by", "ennemi"))
+		"formation":
+			var formation: String = event.get("name", "")
+			if formation.begins_with("défense du Meneur"):
+				return "%s a organisé la défense." % formation.get_slice("(", 1).trim_suffix(")")
+			if formation == "mur de boucliers":
+				return "Nous avons formé un mur de boucliers."
+			return "Nous tenions toutes les portées, de près comme de loin."
+		"agony":
+			return ("Je suis tombé (%s), je sentais la vie me quitter." if me else name + " est tombé (%s), entre la vie et la mort.") \
+				% _plain(event.get("cause", "blessé"))
+		"rescued":
+			var by := _plain(event.get("by", "quelqu'un"))
+			by = by.left(1).to_upper() + by.substr(1)  # (« une potion de soin » → « Une potion de soin »)
+			return "%s m'a sauvé de justesse." % by if me else "%s a sauvé %s de justesse." % [by, name]
+		"kill":
+			return ("J'ai abattu le %s." if me else name + " a abattu le %s.") % _plain(event.get("with", "chef"))
+		"death":
+			return "Nous avons perdu %s (%s)." % [name, _plain(event.get("cause", "tombé"))]
+	return ""
+
+
+## Un texte du journal sans chiffres : « tué par Gobelin A (niv. 3) » → « tué par Gobelin A ».
+func _plain(text: String) -> String:
+	var regex := RegEx.create_from_string("\\s*\\([^)]*\\d[^)]*\\)|\\d+")
+	return regex.sub(text, "", true).strip_edges()
+
+
 ## Combats gardés dans hero["recent_battles"] (le mémorial en relit jusqu'à trois).
 const RECENT_BATTLES_KEPT := 3
 
@@ -705,6 +790,9 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 					report["lost_weapons"].append("%s : %s" % [fighter["source"]["name"], weapon_name(weapon)])
 	if not report["dead"].is_empty():
 		report["tips"].append("mort")  # conseil du Système à la première mort
+	# Bilan (prompt 3, point 3) : après une défaite ou une mort, un survivant raconte les moments clés.
+	if not battle.victory or not report["dead"].is_empty():
+		report["debrief"] = battle_debrief(battle)
 	_keep_battle_journals(battle, floor_number, report["dead"].map(func(dead): return dead["cause"]))
 
 	var rewards := tower_rewards(floor_number)
