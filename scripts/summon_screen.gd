@@ -97,7 +97,8 @@ func _show_results(heroes: Array[Dictionary]) -> void:
 
 
 func _refresh_labels() -> void:
-	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %d invocations" % GameData.summons_before_pity()
+	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %d tirages, 4 étoiles dans %d" % [
+		GameData.summons_before_pity(), GameData.summons_before_pity4()]
 	var alive := GameData.alive_heroes().size()
 	roster_label.text = "Héros : %d / %d" % [alive, GameData.HERO_LIMIT]
 	if GameData.free_hero_slots() == 0:
@@ -240,7 +241,17 @@ func _show_rates(summon_type: String) -> void:
 	var rarities: Array = info["rates"].keys().filter(func(r): return info["rates"][r] > 0.0)
 	var lines := ["Héros de %d à %d étoiles." % [rarities.min(), rarities.max()]]
 	if summon_type == "special":
-		lines.append("Garantie : un 5★ sûr au bout de %d invocations spéciales sans 5★." % GameData.PITY5_LIMIT)
+		lines.append("Taux de base : 5★ %s %%, 4★ %s %%, 3★ %s %%." % [_percent(info["rates"][5]),
+			_percent(info["rates"][4]), _percent(info["rates"][3])])
+		lines.append("Garantie : à partir du %de tirage sans 5★, sa chance monte de %d points par tirage ; un 5★ est sûr au %de. Un 4★ ou mieux est sûr tous les %d tirages." % [
+			GameData.PITY5_SOFT_START, roundi(GameData.PITY5_SOFT_STEP * 100), GameData.PITY5_LIMIT, GameData.PITY4_LIMIT])
+		lines.append("Taux réel du 5★, garantie comprise : environ %s %% (un tous les %d tirages en moyenne)." % [
+			String.num(GameData.five_star_real_rate() * 100.0, 1).replace(".", ","), roundi(1.0 / GameData.five_star_real_rate())])
+		lines.append("Tes compteurs : 5★ garanti dans %d tirages, 4★ ou mieux garanti dans %d tirages." % [
+			GameData.summons_before_pity(), GameData.summons_before_pity4()])
+		lines.append("Mages : %s %% des tirages, quel que soit le rang (la garantie n'en donne jamais)." % _percent(GameData.MAGE_CHANCE))
+	else:
+		lines.append("Aucune garantie.")
 	for rarity in info["rates"]:
 		if info["rates"][rarity] <= 0.0:
 			continue
@@ -288,7 +299,7 @@ func _rates_text(info: Dictionary) -> String:
 		parts.append("%d★ %s %%" % [rarity, _percent(info["rates"][rarity])])
 	var text := "  ".join(parts)
 	if info["mages"]:
-		text += "  — mages : très très rares"
+		text += "  — mages %s %%" % _percent(GameData.MAGE_CHANCE)
 	return text
 
 
