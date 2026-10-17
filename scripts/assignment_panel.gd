@@ -36,6 +36,13 @@ func _ready() -> void:
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.add_theme_color_override("font_color", Color("f5b82e"))
 	layout.add_child(info)
+	# (Étape C) les postes libres d'un coup : les héros qui ne font rien, le plus doué pour chaque bâtiment.
+	var auto := UI.make_button("Affecter automatiquement", func():
+		var lines := GameData.auto_fill_posts()
+		info.text = "Affectés : " + " ; ".join(lines) if not lines.is_empty() else "Personne de libre pour les postes vides."
+		_refresh(), 22)
+	auto.custom_minimum_size.y = 70
+	layout.add_child(auto)
 	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
 	list = VBoxContainer.new()

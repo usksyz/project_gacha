@@ -60,6 +60,26 @@ func _run() -> void:
 	main._check_held_windows()
 	await _frames(3)
 	_check(main.has_node("Request"), "puis la demande")
+	main._close_window(main.get_node("Request"))
+	game.pending_requests = []
+	print("Point 3 : affectations automatiques")
+	for building in ["forge", "synthese"]:
+		if not building in game.buildings:
+			game.buildings.append(building)
+	for rarity in [1, 1, 2]:
+		game.dev_create_hero(rarity)
+	for h in game.alive_heroes():
+		h["post"] = ""
+		h["training"] = ""
+	var lines: Array = game.auto_fill_posts()
+	print("    %s" % " ; ".join(lines))
+	_check(game.posted_heroes("forge").size() == 2 and game.posted_heroes("synthese").size() == 2, "4 postes remplis")
+	# Personne de libre (ou à la synthèse) n'est plus doué pour la forge que ceux qui y sont (un Paresseux peut refuser).
+	var forge_min := 1000.0
+	for h in game.posted_heroes("forge"):
+		forge_min = minf(forge_min, game.post_score(h, "forge"))
+	var better: Array = game.alive_heroes().filter(func(h): return h.get("post", "") == "synthese" and game.post_score(h, "forge") > forge_min)
+	_check(better.is_empty(), "les plus doués pour les métiers sont à la forge")
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)

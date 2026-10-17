@@ -45,6 +45,45 @@ const MAGIC_HALL_NAME := "Hall de magie"
 const POSTS_PER_BUILDING := 2
 
 
+## (Étape C) « Affecter automatiquement » : chaque poste libre reçoit un héros de la cité qui ne fait rien (ni poste,
+## ni entraînement, ni repos, pas parti), le plus doué pour ce bâtiment (post_score). Renvoie les annonces (textes).
+func auto_fill_posts() -> Array[String]:
+	var lines: Array[String] = []
+	# Les bâtiments qui demandent un talent d'abord (forge, magie), les autres ensuite.
+	var order: Array = BUILDINGS.keys().filter(func(b): return b == "forge" or BUILDINGS[b].get("mage", false))
+	order.append_array(BUILDINGS.keys().filter(func(b): return not b in order))
+	for building_id in order:
+		if not building_id in buildings:
+			continue
+		while posted_heroes(building_id).size() < POSTS_PER_BUILDING:
+			var candidates := alive_heroes().filter(func(h): return h.get("post", "") == "" and h.get("training", "") == "" \
+				and not is_away(h) and not is_resting(h) and not h.get("auto_post_refused", false))
+			if candidates.is_empty():
+				break
+			candidates.sort_custom(func(a, b): return post_score(a, building_id) > post_score(b, building_id))
+			var hero: Dictionary = candidates[0]
+			if set_post(hero, building_id):
+				lines.append("%s → %s" % [hero["name"], BUILDINGS[building_id]["name"]])
+			else:
+				hero["auto_post_refused"] = true  # (pour cette fois : on passe au suivant)
+				if last_refusal != "":
+					lines.append(last_refusal)
+	for hero in alive_heroes():
+		hero.erase("auto_post_refused")
+	save_game()
+	return lines
+
+
+## À quel point un héros convient à un bâtiment : la forge, son talent pour les métiers (et l'artisan déjà formé) ;
+## les bâtiments de magie, son Intelligence ; les autres, son niveau.
+func post_score(hero: Dictionary, building_id: String) -> float:
+	if building_id == "forge":
+		return PersonalityEngine.aptitude(hero, "metiers") * 10.0 + skill_level(hero["skills"], "Forge") * 20.0
+	if BUILDINGS.get(building_id, {}).get("mage", false):
+		return float(hero["stats"].get("int", 0))
+	return float(hero["level"])
+
+
 ## Les héros vivants affectés à un bâtiment.
 func posted_heroes(building_id: String) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
