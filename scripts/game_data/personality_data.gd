@@ -706,6 +706,37 @@ const SKILL_CONDITIONS := {
 	"Esprit combatif": {"all": [["DOU", ">=", 2]], "text": "Seuil de douleur +20"},
 	# Catalogue : « Déterminés » (feuille de route : courage ou discipline haute).
 	"Résistance aux flammes": {"any": [["courage", ">=", 2], ["discipline", ">=", 2]], "text": "Courage +20 ou Discipline +20"},
+	# Exclusives (P2g, EXCLUSIVE_SKILLS) : seulement au palier 50 du pôle.
+	"Sixième sens": {"all": [["ACU", ">=", 5]], "text": "Acuité +50 (exclusive)"},
+	"Vigilance": {"all": [["LOY", "<=", -5]], "text": "Méfiance +50 (exclusive)"},
+	"Premiers soins": {"all": [["EMP", ">=", 5]], "text": "Empathie +50 (exclusive)"},
+	"Premier sang": {"all": [["MAI", "<=", -5]], "text": "Impulsivité +50 (exclusive)"},
+}
+
+
+# ---------------------------------------------------------------------------
+# Compétences exclusives (P2g ; « 2. Axes », section 2 : l'accès du palier 50 d'un pôle, POLE_ACCESS[...][5])
+# ---------------------------------------------------------------------------
+# Une exclusive est une compétence que seuls les héros à ±50 sur ce pôle peuvent avoir (SKILL_CONDITIONS). Comme
+# toute compétence, deux histoires séparées : elle s'acquiert une fois, par un événement de combat (« event »,
+# noté par battle.gd dans fighter["exclusive_events"]) : à la fin du combat, debout, il a « chance » de l'éveiller
+# (ou de la monter d'un niveau s'il l'a déjà) ; puis elle s'utilise (passive : voir GameData.SKILLS).
+# Premier lot (choix tranché : celles dont l'événement existe déjà en combat ; les autres en P4). Les noms et les
+# effets des nouvelles (Vigilance, Premiers soins, Premier sang) sont interprétés depuis l'identifiant : le cahier
+# (onglet « Axes ») n'était pas lisible pendant cette étape. Chiffres : projet, provisoires.
+# « event » vide : l'exclusive existait déjà, avec son propre éveil (Calme : situation critique ; Esprit combatif :
+# évolution de Résistance à la douleur).
+const EXCLUSIVE_SKILLS := {
+	"sixieme_sens": {"skill": "Sixième sens", "event": "surprised", "chance": 0.3,
+		"how": "a survécu à une attaque surprise"},
+	"vigilance": {"skill": "Vigilance", "event": "surprised", "chance": 0.3,
+		"how": "a survécu à une attaque surprise"},
+	"premiers_soins": {"skill": "Premiers soins", "event": "rescue", "chance": 0.5,
+		"how": "a sauvé un allié"},
+	"premier_sang": {"skill": "Premier sang", "event": "first_blood", "chance": 0.2,
+		"how": "a porté le premier coup"},
+	"calme_exclusif": {"skill": "Calme", "event": ""},
+	"esprit_combatif_exclusif": {"skill": "Esprit combatif", "event": ""},
 }
 
 

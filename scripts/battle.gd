@@ -760,6 +760,9 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"stabilized": false,       # sauvé de l'agonie : hors du combat, avec un peu de vie
 		"embedded": false,         # arme plantée dans la plaie (agonie) : seule une potion peut le sauver
 		"care": 0.0,               # soin d'urgence : temps passé avec un aidant à son côté pendant une hémorragie
+		# Compétences exclusives (P2g) : événements vécus qui peuvent les éveiller en fin de combat ; Premier sang.
+		"exclusive_events": {},
+		"first_blood_used": false,
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		# Usure de l'arme (voir GameData, tower.gd, WEAR_PER_HIT) : coups portés au contact pendant ce combat.
@@ -1300,6 +1303,8 @@ func range_band(unit: Dictionary) -> String:
 
 ## Formations utilisées pendant le combat (noms), dans l'ordre.
 var formations_used: Array = []
+## Un héros a déjà porté le premier coup du combat (P2g : il peut éveiller Premier sang).
+var _first_blood_given := false
 ## Événements gardés au plus par héros (les compteurs, eux, comptent tout).
 const JOURNAL_MAX := 60
 
@@ -2021,7 +2026,17 @@ func order_barrage(hero: Dictionary) -> void:
 ## Un coup : dégâts, effet à l'écran, saignement, situation critique, chute.
 func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool, kind: String) -> void:
 	var surprise := _surprise(attacker, target)
+	# Vigilance (exclusive, P2g) : une chance de voir venir l'attaque surprise (tirée seulement s'il l'a).
+	var vigilance := GameData.exclusive_effect(target["skills"], "Vigilance") if surprise else 0.0
+	if vigilance > 0.0 and randf() < vigilance:
+		surprise = false
 	var amount := _damage(attacker, target, power, critical, kind, surprise)
+	# Événements qui peuvent éveiller une exclusive en fin de combat (P2g) : surpris, premier coup du combat.
+	if surprise and amount >= 0 and target["is_hero"]:
+		target["exclusive_events"]["surprised"] = true
+	if attacker["is_hero"] and amount >= 0 and not _first_blood_given:
+		_first_blood_given = true
+		attacker["exclusive_events"]["first_blood"] = true
 	attacker["engaged"] = true  # il a pris part au combat (expérience méritée)
 	target["engaged"] = true
 	# Activité (croissance) : l'esquive exerce la Dextérité ; le coup porté, la stat de l'attaque ;
@@ -2070,6 +2085,10 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Maîtrise de l'arme que tient l'attaquant (épée, arc...) : chaque niveau renforce ses coups.
 	if kind != "spell" and attacker["weapon_skill"] != "":
 		power *= 1.0 + GameData.skill_level(attacker["skills"], attacker["weapon_skill"]) * GameData.WEAPON_SKILL_BONUS_PER_LEVEL
+	# Premier sang (exclusive, P2g) : son premier coup du combat (qui touche) frappe plus fort.
+	if not attacker["first_blood_used"] and GameData.skill_level(attacker["skills"], "Premier sang") > 0:
+		attacker["first_blood_used"] = true
+		power *= 1.0 + GameData.exclusive_effect(attacker["skills"], "Premier sang")
 	# Épée et bouclier (fusion) : un bonus en plus à l'épée.
 	if kind == "hit" and attacker["weapon"] == "Épée":
 		power *= 1.0 + GameData.skill_level(attacker["skills"], "Épée et bouclier") * GameData.SWORD_SHIELD_BONUS_PER_LEVEL
@@ -2524,6 +2543,13 @@ func _after_fight() -> void:
 		# Résistance aux flammes : un héros qui a subi du feu et tient debout peut l'apprendre (ou la monter).
 		if standing and fighter["took_fire"] and randf() < GameData.FIRE_RESIST_CHANCE:
 			_improve_skill(fighter, "Résistance aux flammes", "a appris du feu")
+		# Compétences exclusives (P2g) : un événement vécu peut les éveiller (ou les monter), chez un héros qui
+		# a l'accès du pôle et tient debout. Pas de tirage pour les autres (combats identiques à graine égale).
+		if standing and not quest.get("duel", false):
+			for event in fighter["exclusive_events"]:
+				for exclusive in PersonalityEngine.exclusives_for_event(fighter["source"], event):
+					if randf() < exclusive["chance"]:
+						_improve_skill(fighter, exclusive["skill"], exclusive["how"])
 	for fighter in heroes:
 		if not fighter["has_bled"] or (fighter["hp"] <= 0 and not fighter["immortal"]):
 			continue
@@ -2618,8 +2644,9 @@ func _agony_tick(fighter: Dictionary) -> void:
 	if helper.is_empty():
 		fighter["rescue"] = 0.0
 	else:
-		fighter["rescue"] += TICK
+		fighter["rescue"] += TICK * _first_aid(helper)
 		if fighter["rescue"] >= GameData.AGONY_RESCUE_SECONDS:
+			helper["exclusive_events"]["rescue"] = true  # (P2g : peut éveiller Premiers soins)
 			_stabilize(fighter, helper["name"])
 			return
 	if time >= fighter["agony_until"]:
@@ -2689,15 +2716,21 @@ func _care_tick(hero: Dictionary) -> void:
 	if carer.is_empty():
 		hero["care"] = 0.0
 		return
-	hero["care"] += TICK
+	hero["care"] += TICK * _first_aid(carer)
 	if hero["care"] < GameData.CARE_SECONDS:
 		return
 	hero["care"] = 0.0
 	hero["bleed"]["ticks"] = 0
 	hero["bleed"]["heavy"] = false
+	carer["exclusive_events"]["rescue"] = true  # (P2g : peut éveiller Premiers soins)
 	var text := "%s a arrêté le saignement de %s." % [carer["name"], hero["name"]]
 	_log(text, "awaken")
 	_alert("Soin d'urgence", [text])
+
+
+## Vitesse des secours d'un aidant : 1, plus vite avec Premiers soins (exclusive, P2g : 30 % de temps en moins).
+func _first_aid(helper: Dictionary) -> float:
+	return 1.0 / (1.0 - GameData.exclusive_effect(helper["skills"], "Premiers soins"))
 
 
 ## Au contact d'un ennemi (à moins de STAMINA_CONTACT_RANGE cases) ?

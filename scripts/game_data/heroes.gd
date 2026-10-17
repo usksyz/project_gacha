@@ -101,8 +101,12 @@ const SKILLS := {
 	"Esprit combatif": "Évolution de Résistance à la douleur (au niveau 10) : garde ses effets, et +5 % de dégâts par niveau sous la moitié de sa vie.",
 	"Analyse froide": "Observation logique : +10 % de précision (la cible esquive moins) et +10 % de coups critiques par niveau. Rare : 1 % de chances après une synthèse.",
 	"Œil de faucon": "Vision et précision à distance : pour les tirs (flèches et sorts), +0,3 case de portée et +5 % de précision par niveau. Active : en combat, il l'active de lui-même quand il ne voit plus l'ennemi (ou sur ton ordre) : sa vue porte deux fois plus loin pendant 15 s (30 s avant de pouvoir recommencer). S'obtient en synthèse, pour ceux qui se battent de loin.",
-	# Ajout du cahier (« Combat v2 », section 4), étape C3 : pas encore de moyen de l'apprendre.
-	"Sixième sens": "Passive : il sent ce qui se passe dans son dos (3 bâtonnets courts vers l'arrière). Plus jamais surpris de dos à courte portée.",
+	# Ajout du cahier (« Combat v2 », section 4), étape C3. Exclusive (P2g) : voir PersonalityData.EXCLUSIVE_SKILLS.
+	"Sixième sens": "Passive : il sent ce qui se passe dans son dos (3 bâtonnets courts vers l'arrière). Plus jamais surpris de dos à courte portée. Exclusive (Acuité) : peut s'éveiller après avoir survécu à une attaque surprise.",
+	# Exclusives (P2g, personnalité) : noms et effets interprétés par le projet (voir PersonalityData.EXCLUSIVE_SKILLS).
+	"Vigilance": "Passive, exclusive (Méfiance) : une attaque surprise a 30 % de chances (+5 % par niveau) d'être vue venir. Peut s'éveiller après avoir survécu à une attaque surprise.",
+	"Premiers soins": "Passive, exclusive (Empathie) : stabilise un allié à l'agonie et arrête une hémorragie 30 % plus vite (+3 % par niveau). Peut s'éveiller après avoir sauvé un allié en combat.",
+	"Premier sang": "Passive, exclusive (Impulsivité) : son premier coup de chaque combat fait +25 % de dégâts (+2,5 % par niveau). Peut s'éveiller en portant le premier coup d'un combat.",
 	"Volonté de fer": "Compétence de promotion : +10 % de vie maximum par niveau.",
 	"Second souffle": "Compétence de promotion : une fois par combat, sous 25 % de sa vie, reprend 15 % de sa vie (+5 % par niveau au-delà du premier).",
 	"Coup précis": "Compétence de promotion : +5 % de coups critiques par niveau.",
@@ -181,6 +185,30 @@ const GOBLIN_SLAYER_PER_LEVEL := 0.1
 const GOBLIN_KILLS_PER_LEVEL := 50
 ## Esprit combatif : dégâts en plus par niveau, sous la moitié de sa vie.
 const FIGHTING_SPIRIT_PER_LEVEL := 0.05
+## Compétences exclusives (P2g, voir PersonalityData.EXCLUSIVE_SKILLS) : effets au niveau 1, puis par niveau.
+const VIGILANCE_CHANCE := 0.3
+const VIGILANCE_PER_LEVEL := 0.05
+const FIRST_AID_SPEEDUP := 0.3       # temps de secours en moins (stabiliser, arrêter une hémorragie)
+const FIRST_AID_PER_LEVEL := 0.03
+const FIRST_BLOOD_BONUS := 0.25      # dégâts en plus du premier coup du combat
+const FIRST_BLOOD_PER_LEVEL := 0.025
+
+
+## Effet d'une compétence exclusive à son niveau (0 si le héros ne l'a pas) : base + par niveau au-delà du premier.
+func exclusive_effect(skills: Array, skill_name: String) -> float:
+	var level := skill_level(skills, skill_name)
+	if level <= 0:
+		return 0.0
+	match skill_name:
+		"Vigilance":
+			return VIGILANCE_CHANCE + VIGILANCE_PER_LEVEL * (level - 1)
+		"Premiers soins":
+			return FIRST_AID_SPEEDUP + FIRST_AID_PER_LEVEL * (level - 1)
+		"Premier sang":
+			return FIRST_BLOOD_BONUS + FIRST_BLOOD_PER_LEVEL * (level - 1)
+	return 0.0
+
+
 ## Éléments de la magie : chaque mage en maîtrise un (le feu pour les ennemis sorciers).
 const MAGIC_ELEMENTS := ["Feu", "Vent", "Froid"]
 

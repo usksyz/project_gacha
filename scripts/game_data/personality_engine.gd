@@ -1494,6 +1494,17 @@ static func favorite_weapon(hero: Dictionary, types: Array) -> String:
 	return best
 
 
+## Compétences exclusives (P2g) que cet événement de combat peut éveiller chez ce héros (il a l'accès du pôle) :
+## [{"skill", "chance", "how"}].
+static func exclusives_for_event(hero: Dictionary, event: String) -> Array:
+	var result := []
+	for access_id in D.EXCLUSIVE_SKILLS:
+		var data: Dictionary = D.EXCLUSIVE_SKILLS[access_id]
+		if data["event"] == event and has_access(hero, access_id):
+			result.append(data)
+	return result
+
+
 ## Les compétences à condition et ce que le héros en a (mode dev) : « Calme (Stabilité +50) : oui ».
 static func affinity_lines(hero: Dictionary) -> Array[String]:
 	var lines: Array[String] = []
