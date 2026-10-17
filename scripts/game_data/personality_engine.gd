@@ -444,6 +444,24 @@ static func trust(hero: Dictionary) -> float:
 	return float(mind(hero).get("trust", 0.0))
 
 
+## Change la confiance envers le Maître (bornée ; prompt 4 : réponses aux demandes des héros).
+static func add_trust(hero: Dictionary, delta: float) -> void:
+	if not hero.has("persona"):
+		return
+	var brick: Dictionary = hero["persona"]["mind"]
+	brick["trust"] = clampf(float(brick.get("trust", 0.0)) + delta, D.OPINION_MIN, D.OPINION_MAX)
+
+
+## Aptitude du héros dans un domaine (APTITUDE_DOMAINS, 1 à 5 ; 0 sans profil).
+static func aptitude(hero: Dictionary, domain: String) -> int:
+	return int(hero.get("persona", {}).get("aptitudes", {}).get(domain, 0))
+
+
+## Les tics du héros (identifiants, voir tic_text).
+static func tics(hero: Dictionary) -> Array:
+	return hero.get("persona", {}).get("tics", [])
+
+
 # ---------------------------------------------------------------------------
 # Lecture (aucune mécanique ne lit les paliers bruts : elles passent par ici)
 # ---------------------------------------------------------------------------

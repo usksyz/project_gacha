@@ -799,6 +799,11 @@ func mental_after_synthesis(sacrifice_count: int) -> String:
 	return "Tes héros ont vu la synthèse : leur santé mentale baisse (chacun le vit à sa façon ; moins avec Calme)."
 
 
+## (prompt 4) Un héros en jour de repos (demande acceptée, voir answer_request) : ni entraînement ni poste.
+func is_resting(hero: Dictionary) -> bool:
+	return hero.get("rest_until", 0.0) > Time.get_unix_time_from_system()
+
+
 ## Remontée au lobby : depuis la dernière fois, chaque héros à la cité regagne de la santé mentale
 ## (repos ou travail, voir MENTAL_REST_PER_HOUR). Appelée régulièrement et avant chaque sauvegarde ;
 ## ne sauvegarde pas elle-même (la valeur est recalculée au lancement depuis mental_updated_at).
@@ -812,8 +817,297 @@ func update_mental() -> void:
 	for hero in alive_heroes():
 		if is_away(hero):
 			continue
-		var working: bool = hero.get("post", "") != "" or hero.get("training", "") != ""
+		var working: bool = (hero.get("post", "") != "" or hero.get("training", "") != "") and not is_resting(hero)
 		var rate := MENTAL_WORK_PER_HOUR if working else MENTAL_REST_PER_HOUR
 		rate = PersonalityEngine.modified("mental_regen", hero, rate)  # Résilience (P2)
 		rate -= bad_coworkers(hero) * MAUVAIS_COWORKER_LOSS_PER_HOUR  # un Mauvais au même travail use les autres
 		change_mental(hero, hours * rate)
+
+
+# ---------------------------------------------------------------------------
+# Vie de la cité : une personnalité qu'on voit (prompt 4 ; feuille de route v2, phase 5.2 : première tranche de P3)
+# ---------------------------------------------------------------------------
+# Le Maître ne voit jamais de chiffres : seulement ce que font et disent les héros. Tout se lit par
+# PersonalityEngine (axes, tics, aptitudes, confiance). Textes et chiffres : projet, provisoires.
+# Mode dev : la raison de chaque bulle et de chaque demande (avec les chiffres).
+
+# --- 1. Bulles dans la cité 3D (HubCity3D) ---
+## Chance qu'un héros qui flâne dise ou fasse quelque chose à chaque pause, durée d'une bulle (secondes),
+## bulles à la fois au plus, distance (cité 3D) à laquelle il remarque les autres.
+const CHATTER_CHANCE := 0.3
+const CHATTER_SECONDS := 4.5
+const CHATTER_MAX_SHOWN := 3
+const CHATTER_RANGE := 7.0
+const CHATTER_LINES := {
+	"complain": ["Encore une journée à tourner en rond…", "J'ai mal partout.", "Personne ne nous dit rien…",
+		"Je n'en peux plus.", "Ça va mal finir, tout ça."],
+	"cheer": ["Belle journée !", "On va y arriver.", "La Tour n'a qu'à bien se tenir !"],
+	"encourage": ["Tiens bon, %s !", "On y arrivera, %s.", "Content de te voir, %s.", "Courage, %s, on est ensemble."],
+	"avoid": ["Pas envie de croiser %s.", "Encore %s…", "Je vais voir ailleurs."],
+}
+
+
+## Ce qu'un héros qui flâne dit (ou fait) en ce moment, selon ses axes, ses tics, ses liens et son état ;
+## « nearby » : les héros près de lui. Renvoie {"kind": "complain" | "cheer" | "encourage" | "avoid" | "tic",
+## "text", "target": le héros visé ({} sinon), "reason": pourquoi, avec les chiffres (mode dev)}, ou {}.
+func chatter(hero: Dictionary, nearby: Array) -> Dictionary:
+	var options := []  # [poids, sorte, cible, raison]
+	var opt := PersonalityEngine.tier(hero, "OPT")
+	var sta := PersonalityEngine.tier(hero, "STA")
+	var emp := PersonalityEngine.tier(hero, "EMP")
+	var value := mental(hero)
+	var complain := 0.4 + maxi(0, -opt) * 0.25 + maxi(0, -sta) * 0.25 + (1.5 if value < 50.0 else 0.0) \
+		+ (1.5 if is_broken(hero) else 0.0)
+	options.append([complain, "complain", {}, "se plaint : santé mentale %d, Optimisme %+d, Stabilité %+d" % [
+		roundi(value), opt * 10, sta * 10]])
+	if value >= 70.0 and opt > 0:
+		options.append([opt * 0.25, "cheer", {}, "bonne humeur : santé mentale %d, Optimisme %+d" % [roundi(value), opt * 10]])
+	for other in nearby:
+		var level := bond_level(hero, other)
+		if level == BOND_HOSTILE:
+			options.append([3.0, "avoid", other, "évite %s : hostiles" % other["name"]])
+		elif level >= BOND_FRIEND or (hero.get("group", "") != "" and hero.get("group", "") == other.get("group", "")):
+			options.append([1.0 + maxi(0, emp) * 0.3 + maxi(0, opt) * 0.2, "encourage", other,
+				"encourage %s : %s, Empathie %+d" % [other["name"], bond_name(level), emp * 10]])
+	var tics := PersonalityEngine.tics(hero)
+	if not tics.is_empty():
+		options.append([1.0, "tic", {}, "un de ses tics"])
+	var total := 0.0
+	for option in options:
+		total += option[0]
+	var roll := randf() * total
+	for option in options:
+		roll -= option[0]
+		if roll > 0.0:
+			continue
+		var kind: String = option[1]
+		var target: Dictionary = option[2]
+		var text := ""
+		match kind:
+			"tic":
+				var tic := PersonalityEngine.tic_text(tics.pick_random())
+				text = "(%s)" % (tic.left(1).to_lower() + tic.substr(1))
+			"encourage", "avoid":
+				var line: String = CHATTER_LINES[kind].pick_random()
+				text = line % target["name"] if line.contains("%s") else line
+			_:
+				text = CHATTER_LINES[kind].pick_random()
+		return {"kind": kind, "text": text, "target": target, "reason": option[3]}
+	return {}
+
+
+# --- 2. Demandes des héros (cartes Oui / Non) ---
+# Chaque heure réelle à la cité, une demande peut arriver (REQUEST_CHANCE_PER_HOUR ; REQUESTS_MAX en attente) :
+# - « X souhaite rejoindre l'équipe N » : un héros sans équipe, ambitieux, loyal, ou dont un ami est dans
+#   l'équipe N (qui a de la place) ;
+# - « X demande un jour de repos » : un héros qui s'entraîne ou tient un poste, fatigué (santé mentale sous 60),
+#   peu persévérant ou peu vif.
+# Répondre change la confiance envers le Maître (REQUEST_TRUST). Le jour de repos accordé : ni entraînement ni
+# poste pendant REST_SECONDS (le temps du lobby ira plus tard 3 fois plus vite), et un peu de santé mentale.
+const REQUEST_CHANCE_PER_HOUR := 0.1
+const REQUESTS_MAX := 3
+const REQUEST_TRUST := 5.0
+const REST_SECONDS := 6 * 3600
+const REST_MENTAL := 10.0
+const REFUSED_REST_MENTAL := 3.0
+
+
+## Appelée toutes les 5 s (comme update_quarrels) : une chance par heure réelle écoulée (24 h au plus d'un coup).
+func update_requests() -> void:
+	var now := Time.get_unix_time_from_system()
+	if requests_checked_at <= 0.0 or requests_checked_at > now:
+		requests_checked_at = now  # première fois, ou l'horloge de l'appareil a reculé
+		return
+	var hours := int((now - requests_checked_at) / 3600.0)
+	if hours < 1:
+		return
+	requests_checked_at += hours * 3600.0
+	var added := false
+	for hour in mini(hours, QUARREL_MAX_HOURS):
+		if tutorial_step != "" or pending_requests.size() >= REQUESTS_MAX or randf() >= REQUEST_CHANCE_PER_HOUR:
+			continue
+		var request := roll_request()
+		if not request.is_empty():
+			pending_requests.append(request)
+			added = true
+	if added:
+		requests_changed.emit()
+	save_game()
+
+
+## Tire une demande parmi les héros présents (selon leurs axes et leur état), ou {} si personne n'a rien à demander.
+## {"kind": "join" | "rest", "hero": numéro, "team": index (join), "reason": pourquoi (mode dev)}.
+func roll_request() -> Dictionary:
+	var options := []  # [poids, demande]
+	for hero in alive_heroes():
+		if is_away(hero) or pending_requests.any(func(r): return r["hero"] == hero["id"]):
+			continue
+		if not teams.any(func(team): return hero["id"] in team):
+			var amb := PersonalityEngine.tier(hero, "AMB")
+			var loy := PersonalityEngine.tier(hero, "LOY")
+			for index in TEAM_COUNT:
+				if teams[index].size() >= TEAM_SIZE:
+					continue
+				var friend := team_members(index).any(func(member): return bond_level(hero, member) >= BOND_FRIEND)
+				var weight := maxi(0, amb) * 0.3 + maxi(0, loy) * 0.2 + (1.5 if friend else 0.0)
+				if weight > 0.0:
+					options.append([weight, {"kind": "join", "hero": hero["id"], "team": index,
+						"reason": "veut rejoindre : Ambition %+d, Loyauté %+d%s" % [amb * 10, loy * 10,
+							", un ami dans l'équipe" if friend else ""]}])
+		if (hero.get("training", "") != "" or hero.get("post", "") != "") and not is_resting(hero):
+			var per := PersonalityEngine.tier(hero, "PER")
+			var vit := PersonalityEngine.tier(hero, "VIT")
+			var weight := (1.5 if mental(hero) < 60.0 else 0.0) + maxi(0, -per) * 0.3 + maxi(0, -vit) * 0.2
+			if weight > 0.0:
+				options.append([weight, {"kind": "rest", "hero": hero["id"],
+					"reason": "veut du repos : santé mentale %d, Persévérance %+d, Vitalité %+d" % [roundi(mental(hero)),
+						per * 10, vit * 10]}])
+	var total := 0.0
+	for option in options:
+		total += option[0]
+	var roll := randf() * total
+	for option in options:
+		roll -= option[0]
+		if roll <= 0.0:
+			return option[1]
+	return {}
+
+
+## La prochaine demande encore valable (les autres sont oubliées) : la demande, avec « hero » (le héros) et
+## « text » (la carte), ou {}.
+func next_request() -> Dictionary:
+	while not pending_requests.is_empty():
+		var entry: Dictionary = pending_requests[0]
+		var hero := hero_by_id(entry["hero"])
+		var valid: bool = not hero.is_empty() and hero["alive"]
+		if valid and entry["kind"] == "join":
+			valid = teams[entry["team"]].size() < TEAM_SIZE and not teams.any(func(team): return hero["id"] in team)
+		if valid and entry["kind"] == "rest":
+			valid = not is_resting(hero)
+		if valid:
+			var result := entry.duplicate()
+			result["hero"] = hero
+			result["text"] = "%s souhaite rejoindre l'équipe %d." % [hero["name"], entry["team"] + 1] \
+				if entry["kind"] == "join" else "%s demande un jour de repos." % hero["name"]
+			return result
+		pending_requests.pop_front()
+	return {}
+
+
+## Le Maître répond à une demande (rendue par next_request). Renvoie ce que l'on voit (textes, sans chiffres).
+func answer_request(request: Dictionary, accept: bool) -> Array[String]:
+	var hero: Dictionary = request["hero"]
+	pending_requests = pending_requests.filter(func(r): return not (r["hero"] == hero["id"] and r["kind"] == request["kind"]))
+	PersonalityEngine.add_trust(hero, REQUEST_TRUST if accept else -REQUEST_TRUST)
+	var lines: Array[String] = []
+	match request["kind"]:
+		"join":
+			if accept:
+				teams[request["team"]].append(hero["id"])
+				lines.append("%s rejoint l'équipe %d. Il a l'air fier." % [hero["name"], request["team"] + 1])
+			else:
+				lines.append("%s baisse les yeux et s'éloigne." % hero["name"])
+		"rest":
+			if accept:
+				hero["rest_until"] = Time.get_unix_time_from_system() + REST_SECONDS
+				change_mental(hero, REST_MENTAL)
+				lines.append("%s pose ses affaires et souffle enfin." % hero["name"])
+			else:
+				change_mental(hero, -REFUSED_REST_MENTAL)
+				lines.append("%s retourne au travail sans un mot." % hero["name"])
+	save_game()
+	return lines
+
+
+# --- 3. Rapport du jour (la fée) ---
+# Une fois par jour de l'appareil, la fée raconte ce qu'elle a vu : REPORT_LINES_MIN à REPORT_LINES_MAX lignes
+# d'effets, jamais de causes (« X s'est entraîné seul toute la nuit », pas « X est persévérant »). Pas pendant le
+# tutoriel. Le jour est noté dans daily_report_day (sauvegardé).
+const REPORT_LINES_MIN := 3
+const REPORT_LINES_MAX := 5
+
+
+func daily_report_due() -> bool:
+	return tutorial_step == "" and daily_report_day != Time.get_date_string_from_system() \
+		and alive_heroes().any(func(hero): return not is_away(hero))
+
+
+## Le rapport du jour (lignes), et le jour est noté comme vu.
+func take_daily_report() -> Array[String]:
+	daily_report_day = Time.get_date_string_from_system()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(daily_report_day)
+	var candidates := []  # [numéro du héros (ou -1), texte]
+	var present := alive_heroes().filter(func(hero): return not is_away(hero))
+	for hero in present:
+		var name: String = hero["name"]
+		var training: bool = hero.get("training", "") != ""
+		var per := PersonalityEngine.tier(hero, "PER")
+		if training and per >= 3:
+			candidates.append([hero["id"], "%s s'est entraîné seul toute la nuit." % name])
+		elif training and per <= -3:
+			candidates.append([hero["id"], "%s a quitté le terrain d'entraînement avant tout le monde." % name])
+		if is_broken(hero):
+			candidates.append([hero["id"], "%s n'est pas sorti de sa chambre." % name])
+		elif mental(hero) < 40.0:
+			candidates.append([hero["id"], "%s n'a presque pas dormi." % name])
+		elif mental(hero) >= 90.0 and PersonalityEngine.tier(hero, "OPT") >= 3:
+			candidates.append([hero["id"], "%s a chanté une bonne partie de la soirée." % name])
+		if is_resting(hero):
+			candidates.append([hero["id"], "%s a dormi jusqu'à midi." % name])
+		if hero.get("post", "") == "forge":
+			candidates.append([hero["id"], "%s est rentré de la forge couvert de suie." % name])
+		var tics := PersonalityEngine.tics(hero)
+		if not tics.is_empty():
+			var tic := PersonalityEngine.tic_text(tics[rng.randi_range(0, tics.size() - 1)])
+			candidates.append([hero["id"], "%s %s." % [name, tic.left(1).to_lower() + tic.substr(1)]])
+	for pair in hostile_pairs(present):
+		candidates.append([pair[0]["id"], "%s et %s ne se sont pas adressé la parole." % [pair[0]["name"], pair[1]["name"]]])
+	for i in present.size():
+		for j in range(i + 1, present.size()):
+			if bond_level(present[i], present[j]) >= BOND_FRIEND:
+				candidates.append([present[i]["id"], "%s et %s ont mangé ensemble." % [present[i]["name"], present[j]["name"]]])
+	# Mélangées avec la graine du jour (le même rapport si on le relit), un héros par ligne si possible.
+	for i in range(candidates.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var swap = candidates[i]
+		candidates[i] = candidates[j]
+		candidates[j] = swap
+	var lines: Array[String] = []
+	var used := {}
+	for pass_index in 2:
+		for candidate in candidates:
+			if lines.size() >= REPORT_LINES_MAX or candidate[1] in lines:
+				continue
+			if pass_index == 0 and used.has(candidate[0]):
+				continue
+			used[candidate[0]] = true
+			lines.append(candidate[1])
+		if lines.size() >= REPORT_LINES_MIN:
+			break
+	save_game()
+	return lines
+
+
+# --- 4. Synthèse : un indice avant le sacrifice ---
+## Mots pour les aptitudes (« X manie l'épée mieux que personne »).
+const APTITUDE_WORDS := {"epee": "l'épée", "lance": "la lance", "dague": "la dague", "fouet": "le fouet", "arc": "l'arc",
+	"bouclier": "le bouclier", "magie": "la magie", "soin": "les soins", "metiers": "les outils"}
+
+
+## Avant la fenêtre rouge de la synthèse : pour chaque sacrifié qui a un talent caché (croissance au-dessus de sa
+## rareté, ou une aptitude exceptionnelle), un indice de ce qu'on voit de lui, jamais le chiffre.
+## Renvoie [{"text", "reason": avec les chiffres (mode dev)}].
+func synthesis_hints(sacrifices: Array) -> Array:
+	var hints := []
+	for hero in sacrifices:
+		if hero["growth"] > GROWTH[hero["rarity"]]:
+			hints.append({"text": "%s s'entraîne seul tous les soirs." % hero["name"],
+				"reason": "talent caché : croissance %d (habituelle : %d)" % [hero["growth"], GROWTH[hero["rarity"]]]})
+			continue
+		for domain in APTITUDE_WORDS:
+			if PersonalityEngine.aptitude(hero, domain) >= PersonalityData.APTITUDE_MAX:
+				hints.append({"text": "%s manie %s mieux que personne." % [hero["name"], APTITUDE_WORDS[domain]],
+					"reason": "aptitude %d en %s" % [PersonalityEngine.aptitude(hero, domain), domain]})
+				break
+	return hints

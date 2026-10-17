@@ -718,7 +718,10 @@ func _refresh_walkers() -> void:
 
 
 ## Ce que fait un héros : "train" (terrain d'entraînement), "post:<bâtiment>" (assistant), "idle".
+## (Un jour de repos, prompt 4 : il flâne.)
 func _activity_of(hero: Dictionary) -> String:
+	if GameData.is_resting(hero):
+		return "idle"
 	if hero.get("training", "") != "" and GameData.training_unlocked():
 		return "train"
 	var post: String = hero.get("post", "")
@@ -849,6 +852,55 @@ func _arrived(walker: Dictionary) -> void:
 	else:
 		walker["state"] = "wait"
 		walker["wait"] = randf_range(2.0, 7.0)
+		_maybe_chatter(walker)  # (prompt 4) il dit peut-être quelque chose
+
+
+# --- Bulles (prompt 4) : un héros qui flâne se plaint, encourage un ami, évite un rival, ou laisse voir un tic
+# (GameData.chatter). Jamais de chiffres ; en mode dev, la raison sous la bulle.
+
+## Bulles visibles en ce moment : [walker, Label, fin (temps en secondes)].
+var bubbles: Array = []
+
+
+func _maybe_chatter(walker: Dictionary) -> void:
+	if bubbles.size() >= GameData.CHATTER_MAX_SHOWN or randf() >= GameData.CHATTER_CHANCE or paused or animating:
+		return
+	if bubbles.any(func(entry): return entry[0] == walker):
+		return
+	var nearby := []
+	for other in walkers:
+		if other != walker and other["activity"] != "away" \
+				and other["node"].position.distance_to(walker["node"].position) <= GameData.CHATTER_RANGE:
+			nearby.append(other["hero"])
+	var said := GameData.chatter(walker["hero"], nearby)
+	if said.is_empty():
+		return
+	var text: String = said["text"]
+	if Settings.dev_mode:
+		text += "\n[%s]" % said["reason"]
+	var label := _make_label(text, 15, Color("1b1d29"))
+	label.remove_theme_constant_override("outline_size")
+	label.add_theme_stylebox_override("normal", UI.make_panel_style(Color(1, 1, 1, 0.9)))
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	bubbles.append([walker, label, Time.get_ticks_msec() / 1000.0 + GameData.CHATTER_SECONDS])
+	# Il évite son rival : il s'en va ailleurs après l'avoir vu.
+	if said["kind"] == "avoid":
+		walker["wait"] = 1.0
+
+
+## Chaque image : les bulles suivent la tête de leur héros, puis disparaissent.
+func _place_bubbles() -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	for entry in bubbles.duplicate():
+		var walker: Dictionary = entry[0]
+		var label: Label = entry[1]
+		if now >= entry[2] or not walkers.has(walker):
+			label.queue_free()
+			bubbles.erase(entry)
+			continue
+		_stick_label(label, walker["node"].position + Vector3(0, 3.0, 0))
+		# (gardée dans le cadre de la cité : sinon le bord la coupe)
+		label.position.x = clampf(label.position.x, 4.0, maxf(4.0, overlay.size.x - label.size.x - 4.0))
 
 
 func _animate_walker(walker: Dictionary, delta: float) -> void:
@@ -1034,6 +1086,7 @@ func _place_labels() -> void:
 		if entry[2] in pending_constructions or not place_groups[entry[2]].visible:
 			entry[0].visible = false
 	_place_tutorial_pointer()
+	_place_bubbles()
 	var show_names := cam_distance < NAME_DISTANCE
 	for walker in walkers:
 		var label: Label = walker["label"]
