@@ -516,6 +516,8 @@ func _camp_color(unit: Dictionary) -> Color:
 
 ## Position d'un combattant sur la carte (glissée entre deux pas du combat, comme la vue de dessus).
 func unit_map_pos(unit: Dictionary) -> Vector2:
+	if view.placing and view.drag_id == unit["id"]:
+		return view.drag_map_pos  # (placement : le pion glissé suit le doigt)
 	var weight := clampf(view.accumulator / Battle.TICK, 0.0, 1.0)
 	return unit["prev_pos"].lerp(unit["pos"], weight)
 
@@ -649,15 +651,27 @@ func _gui_input(event: InputEvent) -> void:
 				pressing = true
 				moved = false
 				press_pos = event.position
+				# Placement (prompt 3) : appuyer sur un héros le prend ; le glisser le déplace (pas la caméra).
+				if view.placing:
+					var unit := unit_at_screen(event.position)
+					if not unit.is_empty() and unit["is_hero"]:
+						view.drag_id = unit["id"]
+						view.drag_map_pos = unit_map_pos(unit)
 			else:
-				if pressing and not moved:
+				if view.placing and view.drag_id >= 0 and moved:
+					view.placement_drop(view.drag_id, pick_cell(event.position)["pos"])
+				elif pressing and not moved:
+					view.drag_id = -1
 					tap(event.position)
+				view.drag_id = -1
 				pressing = false
 		accept_event()
 	elif event is InputEventMouseMotion and pressing:
 		if event.position.distance_to(press_pos) > TAP_THRESHOLD:
 			moved = true
-		if moved and touches.size() < 2:
+		if view.placing and view.drag_id >= 0:
+			view.drag_map_pos = pick_cell(event.position)["pos"]  # le pion suit le doigt
+		elif moved and touches.size() < 2:
 			# Un doigt : la carte suit le doigt.
 			var per_pixel := zoom / maxf(size.x, 1.0)
 			var right := camera.basis.x
@@ -802,6 +816,15 @@ func _draw_overlay() -> void:
 		var big := BOSS_SCALE if unit["boss"] else 1.0
 		heads[unit["id"]] = project(feet + Vector3(0, (BODY_HEIGHT + HEAD_RADIUS * 2.2) * big, 0))
 		bodies[unit["id"]] = project(feet + Vector3(0, BODY_HEIGHT * 0.5 * big, 0))
+	# Placement (prompt 3) : la zone de départ, chaque case encadrée en vert sur son dessus.
+	if view.placing:
+		for zone_cell in view.zone_cells:
+			var top := _surface_at(BattleMap.center(zone_cell)) + 0.02
+			var corners := PackedVector2Array()
+			for offset in [Vector2(0.05, 0.05), Vector2(0.95, 0.05), Vector2(0.95, 0.95), Vector2(0.05, 0.95), Vector2(0.05, 0.05)]:
+				var p: Vector2 = Vector2(zone_cell) + offset
+				corners.append(project(Vector3(p.x, top, p.y)))
+			overlay.draw_polyline(corners, BattleView.ZONE_COLOR, 1.5, true)
 	_draw_orders(bodies, k)
 	_draw_rays()
 	for unit in battle.units:

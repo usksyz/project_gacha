@@ -909,7 +909,8 @@ func _start_fight() -> void:
 	battle.start()
 
 	_show_page(battle_view)
-	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]])
+	# (prompt 3) le Maître place d'abord ses héros, puis « Commencer »
+	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]], Callable(), true)
 
 
 func _make_margin() -> MarginContainer:

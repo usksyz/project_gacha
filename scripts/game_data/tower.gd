@@ -576,7 +576,14 @@ func _resolve_pending_battle() -> void:
 		return
 	var battle := Battle.new(team, pending_battle["enemies"], pending_battle["quest"])
 	battle.map_data = pending_battle.get("map", {})  # (combat d'avant C1 : une carte neuve)
-	battle.run()
+	battle.start()
+	# Les places choisies par le Maître avant « Commencer » (prompt 3) ; sans elles, le placement automatique.
+	var placement: Dictionary = pending_battle.get("placement", {})
+	for fighter in battle.heroes:
+		if placement.has(fighter["source"]["id"]):
+			battle.place_hero(fighter, placement[fighter["source"]["id"]])
+	while not battle.finished:
+		battle.step()
 	absence_report = {"floor": floor_number, "report": finish_tower_battle(battle)}
 
 

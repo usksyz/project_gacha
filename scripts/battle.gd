@@ -493,8 +493,8 @@ func _organize_defense() -> void:
 	if leader.is_empty():
 		return
 	_defense_organized = true
-	# (un héros qui a déjà un ordre du Maître le garde)
-	var free := _alive(heroes).filter(func(h): return h["order"].is_empty() and h["present"])
+	# (un héros qui a déjà un ordre du Maître le garde ; un héros placé par le Maître avant le combat aussi)
+	var free := _alive(heroes).filter(func(h): return h["order"].is_empty() and h["present"] and not h.get("placed", false))
 	var shields := free.filter(func(h): return h["shield"] and not h["ranged"])
 	var others := free.filter(func(h): return not h["shield"] and not h["ranged"])
 	var shooters := free.filter(func(h): return h["ranged"])
@@ -870,6 +870,20 @@ func height_cells() -> Array:
 
 ## Place les héros en formation en bas (les tireurs derrière), et les premiers ennemis en haut.
 func _place_units() -> void:
+	_place_heroes()
+	# (Survie : seulement la première vague ; les autres attendent leur tour, voir current_wave.)
+	var first := enemies.filter(func(e): return e["wave"] == 0)
+	for i in mini(ENEMY_SLOTS, first.size()):
+		var start = first[i]["source"].get("start")  # (place fixée par l'étage, voir MapGenerator.generate)
+		if start != null:
+			_spawn_enemy(first[i], start.y, start.x)
+		else:
+			var enemy_rows: Vector2i = map_data.get("enemy_rows", MapGenerator.ENEMY_ROWS)
+			_spawn_enemy(first[i], randi_range(enemy_rows.x, enemy_rows.y))
+
+
+## Le placement automatique des héros : la première ligne, et les tireurs derrière (lignes « hero_rows »).
+func _place_heroes() -> void:
 	var front: Array[Dictionary] = []
 	var back: Array[Dictionary] = []
 	for hero in heroes:
@@ -880,15 +894,59 @@ func _place_units() -> void:
 	for hero in heroes:
 		hero["post"] = hero["pos"]
 
-	# (Survie : seulement la première vague ; les autres attendent leur tour, voir current_wave.)
-	var first := enemies.filter(func(e): return e["wave"] == 0)
-	for i in mini(ENEMY_SLOTS, first.size()):
-		var start = first[i]["source"].get("start")  # (place fixée par l'étage, voir MapGenerator.generate)
-		if start != null:
-			_spawn_enemy(first[i], start.y, start.x)
-		else:
-			var enemy_rows: Vector2i = map_data.get("enemy_rows", MapGenerator.ENEMY_ROWS)
-			_spawn_enemy(first[i], randi_range(enemy_rows.x, enemy_rows.y))
+
+# --- Placement par le Maître (prompt 3, point 2) ---
+# Avant de commencer (le combat est démarré par start() mais aucun pas n'a été joué), le Maître peut déplacer ses
+# héros dans la zone de départ. Un héros placé par le Maître tient ce poste (comme arrivé là sur son ordre, voir
+# _follow_order) et le Meneur ne le déplace pas (_organize_defense). Rien n'est tiré au hasard : sans placement,
+# le combat reste identique.
+
+## Les cases de la zone de départ des héros : les lignes « hero_rows » et celles entre elles.
+func start_zone() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var rows: Array = map_data.get("hero_rows", [MapGenerator.HERO_FRONT_ROW, MapGenerator.HERO_BACK_ROW])
+	for row in range(mini(rows[0], rows[1]), maxi(rows[0], rows[1]) + 1):
+		for x in GRID_W:
+			if map.walkable(Vector2i(x, row)):
+				cells.append(Vector2i(x, row))
+	return cells
+
+
+## Le Maître pose un héros sur une case de la zone de départ (avant le premier pas). S'il y a déjà un héros, ils
+## échangent leur place. Renvoie faux si c'est impossible (hors de la zone, combat commencé).
+func place_hero(hero: Dictionary, cell: Vector2i) -> bool:
+	if time > 0.0 or not hero["is_hero"] or not cell in start_zone():
+		return false
+	var other: Dictionary = {}
+	for unit in units:
+		if unit["present"] and unit["id"] != hero["id"] and _cell_of(unit["pos"]) == cell:
+			other = unit
+	if not other.is_empty() and not other["is_hero"]:
+		return false
+	if not other.is_empty():
+		_set_start(other, hero["pos"])
+	_set_start(hero, BattleMap.center(cell))
+	return true
+
+
+func _set_start(hero: Dictionary, pos: Vector2) -> void:
+	hero["pos"] = pos
+	hero["prev_pos"] = pos
+	hero["post"] = pos
+	hero["placed"] = true  # placé par le Maître : il tient ce poste, le Meneur ne le déplace pas
+	hero["held"] = tactical_ai
+	_settle(hero)
+
+
+## « Placement automatique » : les héros reprennent leur place de départ habituelle.
+func auto_place() -> void:
+	if time > 0.0:
+		return
+	for hero in heroes:
+		hero["present"] = false
+		hero["placed"] = false
+		hero["held"] = false
+	_place_heroes()
 
 
 ## Aligne des combattants sur une ligne, centrés, sur des cases libres.

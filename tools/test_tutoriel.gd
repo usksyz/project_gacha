@@ -211,6 +211,9 @@ func _play() -> void:
 				"" if GameData.equipped(hero, "shield").is_empty() else " + " + GameData.weapon_name(GameData.equipped(hero, "shield"))])
 		var from_arsenal := GameData.team_members(0).filter(func(hero): return not GameData.equipped(hero, "weapon").is_empty())
 		_check("héros armés depuis l'arsenal (essai %d)" % (attempt + 1), from_arsenal.size() >= 3, "; ".join(armed))
+		# (prompt 3) placement des héros : le combat attend « Commencer »
+		_check("placement avant le combat (essai %d)" % (attempt + 1), dungeons.battle_view.placing, "")
+		await _press(dungeons.battle_view, "Commencer")
 		Engine.time_scale = float(_args["vitesse"])
 		await _seconds(1.0)  # (temps réel : environ 6 s de combat)
 		Engine.time_scale = 1.0

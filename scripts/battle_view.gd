@@ -96,6 +96,16 @@ var use_3d := false
 var view_button: Button
 
 var paused := false
+## Placement (prompt 3, point 2) : avant le premier pas, le Maître place ses héros dans la zone de départ (glisser un
+## pion, ou toucher un héros puis une case), puis « Commencer ». Le combat n'avance pas pendant ce temps.
+var placing := false
+var zone_cells: Array[Vector2i] = []
+## Le héros qu'on glisse (son numéro, -1 sinon) et où est le doigt (en cases).
+var drag_id := -1
+var drag_map_pos := Vector2.ZERO
+var auto_button: Button
+var start_button: Button
+const ZONE_COLOR := Color(0.35, 0.85, 0.45, 0.85)
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
 var finish_callback := Callable()
 ## Rapport du dernier combat de la Tour terminé (GameData.finish_tower_battle), vide sinon :
@@ -140,9 +150,13 @@ func _ready() -> void:
 ## Lance l'affichage d'un combat déjà préparé (battle.start() a été appelée).
 ## « on_finish » : appelée avec le combat terminé, elle renvoie les fenêtres de fin à afficher (duel) ;
 ## sans elle, c'est un combat de la Tour (GameData.finish_tower_battle).
-func play(new_battle: Battle, title: String, on_finish := Callable()) -> void:
+## « placement » : le Maître place d'abord ses héros (prompt 3), le combat attend « Commencer ».
+func play(new_battle: Battle, title: String, on_finish := Callable(), placement := false) -> void:
 	battle = new_battle
 	finish_callback = on_finish
+	placing = placement and not new_battle.quest.get("duel", false)
+	zone_cells = battle.start_zone() if placing else ([] as Array[Vector2i])
+	drag_id = -1
 	last_report = {}
 	accumulator = 0.0
 	next_event = 0
@@ -254,6 +268,57 @@ func _build(title: String) -> void:
 	pause_button.custom_minimum_size.y = 80
 	pause_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls.add_child(pause_button)
+	# Placement (prompt 3) : à la place de « Pause », jusqu'à « Commencer ».
+	auto_button = UI.make_button("Placement automatique", _auto_place, 22)
+	start_button = UI.make_button("Commencer", _start_battle, 26)
+	for button in [auto_button, start_button]:
+		button.custom_minimum_size.y = 80
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		button.visible = placing
+		controls.add_child(button)
+	start_button.add_theme_color_override("font_color", ORDER_COLOR)
+	pause_button.visible = not placing
+
+
+## Placement : les héros reprennent leur place habituelle (Battle.auto_place).
+func _auto_place() -> void:
+	battle.auto_place()
+	selected_id = -1
+	drag_id = -1
+	_update_hint()
+	arena.queue_redraw()
+
+
+## Fin du placement : le combat commence.
+func _start_battle() -> void:
+	placing = false
+	selected_id = -1
+	drag_id = -1
+	auto_button.visible = false
+	start_button.visible = false
+	pause_button.visible = true
+	accumulator = 0.0
+	# Noté dans le combat en cours (sauvegarde) : repris au lancement suivant avec les mêmes places.
+	if finish_callback.is_null() and not GameData.pending_battle.is_empty():
+		var placement := {}
+		for hero in battle.heroes:
+			if hero.get("placed", false):
+				placement[hero["source"]["id"]] = battle.map.cell_of(hero["pos"])  # (numéro du héros, pas du pion)
+		GameData.pending_battle["placement"] = placement
+		GameData.save_game()
+	_update_hint()
+
+
+## Placement : pose le héros glissé (ou choisi) sur la case visée, s'il le peut (Battle.place_hero).
+func placement_drop(hero_id: int, map_pos: Vector2) -> void:
+	if hero_id >= 0 and battle.place_hero(battle.units[hero_id], Vector2i(map_pos.floor())):
+		Settings.vibrate(20)
+	selected_id = -1
+	drag_id = -1
+	_update_hint()
+	arena.queue_redraw()
+	portraits.queue_redraw()
 
 
 ## Mode dev : vue 3D ↔ vue de dessus (le combat continue, rien ne change dans la simulation).
@@ -282,6 +347,11 @@ func _toggle_pause() -> void:
 func _process(delta: float) -> void:
 	if battle == null or battle.finished or paused:
 		return
+	if placing:
+		if arena.visible:
+			arena.queue_redraw()
+		portraits.queue_redraw()
+		return  # (placement : le combat attend « Commencer »)
 	accumulator += delta
 	while accumulator >= Battle.TICK and not battle.finished:
 		battle.step()
@@ -504,7 +574,11 @@ func _show_event(event: Dictionary) -> void:
 # ---------------------------------------------------------------------------
 
 func _update_hint() -> void:
-	if battle.quest.get("duel", false):
+	if placing:
+		hint_label.text = "Place tes héros dans la zone verte : glisse un pion (ou touche un héros puis une case). Puis « Commencer »."
+		if selected_id >= 0:
+			hint_label.text = "%s : touche une case de la zone verte." % battle.units[selected_id]["name"]
+	elif battle.quest.get("duel", false):
 		hint_label.text = "Duel : les deux héros règlent leur conflit seuls, sans ordres. Il s'arrête à %d %% de vie." \
 			% roundi(GameData.DUEL_STOP_HP * 100)
 	elif paused and Settings.dev_mode and selected_id >= 0:
@@ -548,7 +622,7 @@ func tactic_text(hero: Dictionary) -> String:
 func _update_berserk_button() -> void:
 	if berserk_button == null or not is_instance_valid(berserk_button):
 		return
-	var hero: Dictionary = battle.units[selected_id] if selected_id >= 0 else {}
+	var hero: Dictionary = battle.units[selected_id] if selected_id >= 0 and not placing else {}
 	var shown: bool = not paused and not hero.is_empty() and battle.can_berserk(hero)
 	if berserk_button.visible != shown:
 		berserk_button.visible = shown
@@ -615,6 +689,9 @@ func _order_berserk() -> void:
 
 
 func _on_arena_input(event: InputEvent) -> void:
+	if placing and battle != null:
+		_placement_input(event)
+		return
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
@@ -623,9 +700,44 @@ func _on_arena_input(event: InputEvent) -> void:
 	_arena_tap(_unit_at(map_pos), map_pos, Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos))
 
 
+## Placement, vue de dessus : on appuie sur un héros et on le glisse ; relâché sur une case de la zone, il y va.
+func _placement_input(event: InputEvent) -> void:
+	var button := event as InputEventMouseButton
+	if button != null and button.button_index == MOUSE_BUTTON_LEFT:
+		var map_pos: Vector2 = (button.position - _origin()) / _cell_size()
+		if button.pressed:
+			var unit := _unit_at(map_pos)
+			if not unit.is_empty() and unit["is_hero"]:
+				drag_id = unit["id"]
+				drag_map_pos = map_pos
+			else:
+				_arena_tap({}, map_pos, Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos))
+		elif drag_id >= 0:
+			if Vector2i(map_pos.floor()) == battle.map.cell_of(battle.units[drag_id]["pos"]):
+				var hero_id := drag_id
+				drag_id = -1
+				_arena_tap(battle.units[hero_id], map_pos, true)  # simple toucher : il est choisi
+			else:
+				placement_drop(drag_id, map_pos)
+		arena.queue_redraw()
+	elif event is InputEventMouseMotion and drag_id >= 0:
+		drag_map_pos = (event.position - _origin()) / _cell_size()
+		arena.queue_redraw()
+
+
 ## Un toucher sur le champ de bataille (vue de dessus ou vue 3D) : « touched » le combattant touché ({} sinon),
 ## « map_pos » le point de la carte (en cases), « inside » s'il est sur la carte. Mêmes ordres dans les deux vues.
 func _arena_tap(touched: Dictionary, map_pos: Vector2, inside: bool) -> void:
+	if placing and battle != null:
+		# Placement : toucher un héros le choisit, puis toucher une case l'y pose.
+		if not touched.is_empty() and touched["is_hero"]:
+			selected_id = -1 if selected_id == touched["id"] else touched["id"]
+		elif selected_id >= 0 and inside:
+			placement_drop(selected_id, map_pos)
+			return
+		_update_hint()
+		arena.queue_redraw()
+		return
 	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
 		return  # pas d'ordre pendant la pause, ni pendant un duel
 	if not touched.is_empty() and touched["is_hero"]:
@@ -694,6 +806,12 @@ func _draw_arena() -> void:
 		if unit["present"]:
 			positions[unit["id"]] = unit["prev_pos"].lerp(unit["pos"], weight)
 
+	# Placement (prompt 3) : la zone de départ encadrée en vert ; le pion glissé suit le doigt.
+	if placing:
+		for zone_cell in zone_cells:
+			arena.draw_rect(Rect2(origin + Vector2(zone_cell) * cell, Vector2.ONE * cell).grow(-1.0), ZONE_COLOR, false, 1.5)
+		if drag_id >= 0:
+			positions[drag_id] = drag_map_pos
 	_draw_orders(positions, cell)
 	_draw_rays(positions)
 	for id in positions:
