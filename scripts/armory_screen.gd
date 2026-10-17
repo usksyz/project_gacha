@@ -19,6 +19,7 @@ var info_label: Label
 var result_box: VBoxContainer
 var arsenal_box: HFlowContainer
 var arsenal_title: Label
+var sale_box: VBoxContainer
 var heroes_box: VBoxContainer
 ## Calque pour choisir une arme dans l'arsenal, par-dessus l'écran.
 var picker: Control
@@ -83,6 +84,8 @@ func _ready() -> void:
 	arsenal_box.add_theme_constant_override("h_separation", 8)
 	arsenal_box.add_theme_constant_override("v_separation", 8)
 	content.add_child(arsenal_box)
+	sale_box = VBoxContainer.new()  # vente à l'entrepôt (déchets, armes F rangées), redessinée par _refresh
+	content.add_child(sale_box)
 	content.add_child(UI.make_label("Équipement des héros", 24))
 	filter = HeroFilter.new()
 	filter.changed.connect(_refresh_heroes)
@@ -150,6 +153,10 @@ func _refresh() -> void:
 	arsenal_title.text = "Arsenal : %d arme%s rangée%s" % [free.size(), "s" if free.size() > 1 else "", "s" if free.size() > 1 else ""]
 	for weapon in free:
 		arsenal_box.add_child(_make_weapon_tag(weapon))
+	for child in sale_box.get_children():
+		sale_box.remove_child(child)
+		child.queue_free()
+	sale_box.add_child(UI.make_sale_section(self, _refresh))
 	_refresh_heroes()
 
 

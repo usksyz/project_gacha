@@ -63,6 +63,7 @@ func _refresh() -> void:
 		return
 
 	_add_section("Entrepôt", _warehouse_lines())
+	content.add_child(UI.make_sale_section(self, _refresh))  # vendre les déchets et les armes F rangées
 	_add_section("Assistants", _assistant_lines())
 	_add_potion()
 

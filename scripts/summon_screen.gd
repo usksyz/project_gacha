@@ -109,8 +109,8 @@ func _show_results(heroes: Array[Dictionary]) -> void:
 
 
 func _refresh_labels() -> void:
-	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %d tirages, 4 étoiles dans %d" % [
-		GameData.summons_before_pity(), GameData.summons_before_pity4()]
+	pity_label.text = "Invocation spéciale : 5 étoiles garanti dans %s, 4 étoiles dans %d" % [
+		_pulls(GameData.summons_before_pity()), GameData.summons_before_pity4()]
 	var alive := GameData.alive_heroes().size()
 	roster_label.text = "Héros : %d / %d" % [alive, GameData.HERO_LIMIT]
 	if GameData.free_hero_slots() == 0:
@@ -265,8 +265,8 @@ func _show_rates(summon_type: String) -> void:
 			GameData.PITY5_SOFT_START, roundi(GameData.PITY5_SOFT_STEP * 100), GameData.PITY5_LIMIT, GameData.PITY4_LIMIT])
 		lines.append("Taux réel du 5★, garantie comprise : environ %s %% (un tous les %d tirages en moyenne)." % [
 			String.num(GameData.five_star_real_rate() * 100.0, 1).replace(".", ","), roundi(1.0 / GameData.five_star_real_rate())])
-		lines.append("Tes compteurs : 5★ garanti dans %d tirages, 4★ ou mieux garanti dans %d tirages." % [
-			GameData.summons_before_pity(), GameData.summons_before_pity4()])
+		lines.append("Tes compteurs : 5★ garanti dans %s, 4★ ou mieux garanti dans %s." % [
+			_pulls(GameData.summons_before_pity()), _pulls(GameData.summons_before_pity4())])
 		lines.append("Mages : %s %% des tirages, quel que soit le rang (la garantie n'en donne jamais)." % _percent(GameData.MAGE_CHANCE))
 	else:
 		lines.append("Aucune garantie.")
@@ -299,6 +299,11 @@ func _show_rates(summon_type: String) -> void:
 	var close := UI.make_button("Fermer", func(): overlay.queue_free(), 24)
 	close.custom_minimum_size.y = 80
 	box.add_child(close)
+
+
+## « 1 tirage », « 12 tirages ».
+func _pulls(count: int) -> String:
+	return "%d tirage%s" % [count, "s" if count > 1 else ""]
 
 
 ## Un pourcentage lisible : 0.012 -> « 1,2 », 0.3 -> « 30 ».
