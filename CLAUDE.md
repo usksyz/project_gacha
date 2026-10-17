@@ -124,6 +124,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   `tools/detour_gemme.gd`, qui lévite) via `UI.make_gem_amount()`. Les positions dans les images
   (CROP, rectangles) sont en pixels de l'image source, dans le script ET le shader : à refaire si une
   image est remplacée par une version plus grande.
+- `scripts/battle.gd` (`Battle`, le combat) : en haut d'une pile de classes rangées par thème dans `scripts/battle/`
+  (comme `GameData` ; voir `docs/combat.md`, « Fichiers de `Battle` »). `tools/check_scripts.gd` compile tous les
+  scripts avec les autoloads (dans une copie du projet).
 - Un script par écran (`class_name`), dont l'interface est construite par le code :
   `hub_screen.gd` (+ `hub_map.gd`, la cité circulaire dessinée ; clavier des codes secrets),
   `summon_screen.gd`, `collection_screen.gd`, `dungeons_screen.gd` (liste des donjons, composition des

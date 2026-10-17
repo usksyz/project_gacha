@@ -13,7 +13,7 @@ func _process(_delta: float) -> bool:
 	started = true
 	var count := 0
 	var failed := []
-	for folder in ["res://scripts", "res://scripts/game_data"]:
+	for folder in ["res://scripts", "res://scripts/game_data", "res://scripts/battle"]:
 		for file in DirAccess.get_files_at(folder):
 			if not file.ends_with(".gd"):
 				continue

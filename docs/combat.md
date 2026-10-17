@@ -22,6 +22,18 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
+- Fichiers de `Battle` (prompt 5, point 3, sans rien changer au comportement) : une pile de classes, comme `GameData`,
+  chaque fichier `extends` le précédent et `scripts/battle.gd` (`Battle`) est en haut ; on écrit toujours `Battle` ou
+  `battle.xxx`. De bas en haut, dans `scripts/battle/` : `battle_base.gd` (`BattleBase` : constantes, état du combat,
+  champ de bataille et placement, petits outils), `battle_journal.gd` (journal de combat), `battle_formations.gd`
+  (formations, Protecteur, liens, rotation, Meneur), `battle_moves.gd` (déplacements, endurance, chemins, flux, chutes),
+  `battle_mind.gd` (peur, santé mentale, rupture, désobéissance), `battle_berserk.gd` (situation critique, éveil,
+  Berserk), `battle_care.gd` (saignement, agonie, secours, mort) ; `battle.gd` : début et pas du combat, ordres, choix
+  des cibles, attaques, fin du combat. Toute variable ou constante va dans `battle_base.gd`. Une fonction appelée plus
+  bas que son fichier est déclarée vide en bas de `battle_base.gd` avec la même signature (13 aujourd'hui, comme
+  `save_game` dans `GameData`) : en ajouter une si la compilation dit « Function not found in base self ».
+  Vérifié : `sim_tower` (8 séries, dont Maître simulé, Meneur, ancienne IA) et une trace pas à pas identiques avant et
+  après, au caractère près (hors temps de calcul) ; `capture_c2 mode=identique` (10 combats) identique ; bancs bons.
 - Combat v2, étape C1 (cahier, onglet « Combat v2 », sections 0, 2, 3, 8, 8 bis, 9) : la simulation devient
   « 3D sur grille » ; la vue isométrique, c'est C2 (plus bas). Chiffres provisoires.
   1. `scripts/battle_map.gd` (`BattleMap`) : hauteur de chaque case (0 à 4 niveaux) et type (`Kind` : sol,
