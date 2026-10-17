@@ -378,6 +378,56 @@ func tower_rewards(floor_number: int) -> Dictionary:
 	}
 
 
+## Prochain palier (prompt 5, écran Donjons) : ce qu'un étage de boss débloque en plus de ses récompenses (x3,
+## pierres d'attribut, palier suivant). Seul le donjon journalier dépend de la Tour pour l'instant.
+const MILESTONE_UNLOCKS := {DAILY_UNLOCK_FLOOR: "le donjon journalier"}
+## L'avis sur l'équipe compare le niveau moyen des meilleurs héros à celui des monstres de l'étage (en niveaux).
+const MILESTONE_READY_MARGIN := 2
+
+
+## Le prochain étage de boss et l'avis du Système sur les héros, en mots (jamais de chiffres de niveau) :
+## {"floor", "quest": nom de la quête, "verdict": phrase, "advice": [conseils], "unlocks": [ce qu'il débloque]}.
+## Les héros jugés : les TEAM_SIZE plus forts (niveau x étoiles) parmi les vivants.
+func next_milestone() -> Dictionary:
+	var floor_number := tower_floor + (BOSS_EVERY - tower_floor % BOSS_EVERY) % BOSS_EVERY
+	var quest := floor_quest(floor_number)
+	var heroes := alive_heroes()
+	heroes.sort_custom(func(a, b): return a["level"] * a["rarity"] > b["level"] * b["rarity"])
+	heroes = heroes.slice(0, TEAM_SIZE)
+	var verdict := "Tu n'as pas encore de héros pour cet étage."
+	var advice: Array[String] = []
+	if not heroes.is_empty():
+		var average := 0.0
+		for hero in heroes:
+			average += hero["level"]
+		average /= heroes.size()
+		var monsters := floor_enemy_level(floor_number)
+		if average < monsters - MILESTONE_READY_MARGIN:
+			verdict = "Tes héros ne sont pas prêts."
+		elif average < monsters:
+			verdict = "Tes héros ne sont pas encore prêts : il leur faut de l'expérience."
+		elif average < monsters + MILESTONE_READY_MARGIN:
+			verdict = "Tes héros peuvent tenter leur chance, mais ce sera dur."
+		else:
+			verdict = "Tes héros semblent prêts."
+		if heroes.size() < TEAM_SIZE:
+			advice.append("Ton équipe n'est pas complète.")
+		var fighters := heroes.filter(func(hero): return not uses_magic(hero))
+		var armed := fighters.filter(func(hero): return not equipped(hero, "weapon").is_empty()).size() \
+			+ free_weapons().filter(func(weapon): return weapon["type"] != "Bouclier").size()
+		if armed < fighters.size():
+			advice.append("Tous n'auront pas d'arme : passe à l'armurerie.")
+		if quest.get("lasting", false) and material_count(POTION) == 0:
+			advice.append("Le combat sera long : prépare des potions de soin à la forge.")
+		if quest.get("warnings", 0) > 0:
+			advice.append("Une défense de la cité : le palier le plus dur, réservé aux héros équipés et aguerris.")
+	var unlocks: Array[String] = ["des récompenses triplées et des pierres d'attribut",
+		"le palier suivant, avec des matériaux de meilleure qualité"]
+	if MILESTONE_UNLOCKS.has(floor_number) and floor_number >= tower_floor:
+		unlocks.push_front(MILESTONE_UNLOCKS[floor_number])
+	return {"floor": floor_number, "quest": quest["name"], "verdict": verdict, "advice": advice, "unlocks": unlocks}
+
+
 ## Grade des matériaux gagnés dans la Tour, selon le palier (étages 1-4, 5-9, 10-14...).
 ## Chiffres provisoires : le cahier montre du « Fer (C) » dès l'étage 1, mais à la forge le grade du minerai
 ## donne le rang de l'arme : du C si tôt rendrait le tirage d'armes inutile. À valider avec le porteur du projet.

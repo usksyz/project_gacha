@@ -33,6 +33,7 @@ var presets_box: HBoxContainer
 var floor_quest: Dictionary = {}
 
 var floor_label: Label
+var milestone_box: VBoxContainer  # (prompt 5) encart « Prochain palier »
 var daily_label: Label
 ## Contenu changeant de la carte du donjon journalier (boutons, ramassages, retour).
 var daily_box: VBoxContainer
@@ -100,7 +101,31 @@ func _show_page(page: Control) -> void:
 		floor_label.text = "Étage actuel : %d (%s)" % [GameData.tower_floor, quest["name"]]
 		replay_button.disabled = GameData.tower_floor <= 1  # aucun étage conquis à refaire
 		enter_button.disabled = GameData.tutorial_step == "equipe"
+		_refresh_milestone()
 		_refresh_daily()
+
+
+## Encart « Prochain palier » (prompt 5, GameData.next_milestone).
+func _refresh_milestone() -> void:
+	var info := GameData.next_milestone()
+	for child in milestone_box.get_children():
+		if child.has_meta("milestone"):
+			milestone_box.remove_child(child)
+			child.queue_free()
+	var lines: Array = ["Étage %d — %s (boss)" % [info["floor"], info["quest"]], info["verdict"]]
+	lines.append_array(info["advice"])
+	lines.append("Il débloque : %s." % ", ".join(info["unlocks"]))
+	for i in lines.size():
+		var label := UI.make_label(lines[i], 26 if i == 0 else 20)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.set_meta("milestone", true)
+		if i == 0:
+			label.add_theme_color_override("font_color", Color("c9a2ff"))
+		elif i == 1:
+			label.add_theme_color_override("font_color", Color("f5b82e"))
+		else:
+			label.modulate = Color(1, 1, 1, 0.8)
+		milestone_box.add_child(label)
 
 
 # --- Page 1 : liste des donjons ---
@@ -125,6 +150,9 @@ func _build_list_page() -> Control:
 	var compose := UI.make_button("Composer les équipes", _open_teams, 24)
 	compose.custom_minimum_size.y = 70
 	tower.add_child(compose)
+
+	# (prompt 5) Prochain palier : le prochain étage de boss, l'avis du Système en mots, ce qu'il débloque.
+	milestone_box = _make_card(layout, "Prochain palier", "")
 
 	var daily := _make_card(layout, "Donjon journalier",
 		"Un festin de donjon qui change tous les jours : tes héros y récoltent des matériaux rares, sans combattre.")
@@ -326,6 +354,7 @@ func _make_card(parent: Control, title: String, info: String) -> VBoxContainer:
 	var info_label := UI.make_label(info, 22)
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info_label.modulate = Color(1, 1, 1, 0.7)
+	info_label.visible = info != ""
 	content.add_child(info_label)
 	return content
 
