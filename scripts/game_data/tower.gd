@@ -522,6 +522,29 @@ func floor_layout(floor_number: int) -> Dictionary:
 	return floors[floor_number]
 
 
+## Ce que les héros savent d'un étage (prompt 3, point 1 ; Sommaire du cahier : « une défaite doit pouvoir se
+## comprendre et se préparer ») : le carnet de l'étage à la bibliothèque, et la mémoire des héros vivants qui y
+## ont combattu (hero["recent_battles"], les RECENT_BATTLES_KEPT derniers combats : un souvenir s'efface).
+## Renvoie {"visited": vrai si quelqu'un s'en souvient, "seen": {nom de base d'ennemi: vrai} (premiers contacts
+## notés dans leur journal), "witnesses": [noms des héros vivants qui y étaient], "library": vrai s'il y a un carnet}.
+func floor_knowledge(floor_number: int) -> Dictionary:
+	var result := {"visited": false, "seen": {}, "witnesses": [], "library": false}
+	if library.get("floors", {}).has("tour:%d" % floor_number):
+		result["visited"] = true
+		result["library"] = true
+	for hero in alive_heroes():
+		for memory in hero.get("recent_battles", []):
+			if memory.get("floor", 0) != floor_number:
+				continue
+			result["visited"] = true
+			if not hero["name"] in result["witnesses"]:
+				result["witnesses"].append(hero["name"])
+			for event in memory.get("events", []):
+				if event.get("kind", "") == "contact":
+					result["seen"][event.get("with", "")] = true
+	return result
+
+
 ## Début d'un combat de la Tour : on le note dans la sauvegarde (voir pending_battle).
 ## « floor_number » : l'étage joué (un étage déjà conquis peut être rejoué, voir REPLAY_GOLD_RATE).
 ## Les héros prennent leurs armes dans l'arsenal au départ (gear_up) : à appeler avant Battle.new.

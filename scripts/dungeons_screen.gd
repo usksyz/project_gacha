@@ -51,6 +51,8 @@ var fight_button: Button
 var floor_enemies: Array[Dictionary] = []
 ## Carte de cet étage (figée, voir GameData.floor_layout).
 var floor_map: Dictionary = {}
+## Ce que les héros savent de l'étage choisi (GameData.floor_knowledge, prompt 3).
+var knowledge: Dictionary = {}
 ## Étage qu'on s'apprête à jouer (l'étage actuel, ou un étage déjà conquis qu'on refait).
 var chosen_floor := 1
 var replay_button: Button
@@ -499,6 +501,9 @@ func _play_announce(floor_number: int) -> void:
 	if GameData.is_boss_floor(floor_number):
 		lines.append("Un boss garde cet étage. Palier : la difficulté monte d'un cran, prépare-toi bien.")
 	announce_box.add_child(UI.make_system_window("Étage %d" % floor_number, lines))
+	var preview := _floor_preview_window()  # (prompt 3) étage déjà visité : ce que les héros en savent
+	if preview != null:
+		announce_box.add_child(preview)
 	announce_button.disabled = false
 
 
@@ -668,6 +673,7 @@ func _open_tower(floor_number: int) -> void:
 	var layout := GameData.floor_layout(floor_number)
 	floor_enemies.assign(layout["enemies"].duplicate(true))
 	floor_map = layout["map"]
+	knowledge = GameData.floor_knowledge(floor_number)  # (prompt 3) ce que les héros en savent
 	selected_ids.clear()
 
 	team_title.text = "Étage %d — %s" % [floor_number, floor_quest["name"]]
@@ -695,11 +701,19 @@ func _open_tower(floor_number: int) -> void:
 
 ## Liste des ennemis regroupés par type : « Gobelin niv. 3 (Assassin) x4 ».
 ## En quête de survie, le niveau est caché : « niv. ? ».
+## Prompt 3 (point 1) : seulement ceux que les héros ont déjà vus (GameData.floor_knowledge) ; les autres sont
+## comptés à part ; à la première visite, on ne sait rien des ennemis (seulement le type de quête).
 func _enemy_summary() -> Array:
+	if not knowledge.get("visited", false):
+		return ["Première visite : tes héros ne savent rien des ennemis de cet étage."]
 	var counts := {}
 	var examples := {}
+	var unknown := 0
 	for enemy in floor_enemies:
 		var key: String = enemy["base_name"]
+		if not knowledge["seen"].has(key):
+			unknown += 1
+			continue
 		counts[key] = counts.get(key, 0) + 1
 		examples[key] = enemy
 	var lines := []
@@ -710,7 +724,32 @@ func _enemy_summary() -> Array:
 		if counts[key] > 1:
 			text += " x%d" % counts[key]
 		lines.append(text)
+	if unknown > 0:
+		lines.append("Et des ennemis que tes héros n'ont jamais vus.")
 	return lines
+
+
+## L'aperçu d'un étage déjà visité (prompt 3, point 1) : qui s'en souvient, la carte (FloorPreview, avec la place
+## de départ des ennemis déjà vus) et ces ennemis. Rien à la première visite.
+func _floor_preview_window() -> Control:
+	if not knowledge.get("visited", false):
+		return null
+	var lines := []
+	if not knowledge["witnesses"].is_empty():
+		var several: bool = knowledge["witnesses"].size() > 1
+		lines.append("%s s'en %s." % [", ".join(knowledge["witnesses"]), "souviennent" if several else "souvient"])
+	if knowledge["library"]:
+		lines.append("Un carnet de l'étage est rangé à la bibliothèque.")
+	var preview := FloorPreview.new()
+	var starts := []
+	for enemy in floor_enemies:
+		if knowledge["seen"].has(enemy["base_name"]) and enemy.has("start"):
+			starts.append(enemy["start"])
+	preview.setup(floor_map, starts)
+	lines.append(preview)
+	lines.append("Cadre vert : la zone de départ de tes héros. Points rouges : les ennemis déjà vus.")
+	lines.append_array(_enemy_summary())
+	return UI.make_system_window("Ce que tes héros savent", lines)
 
 
 func _refresh_team() -> void:

@@ -1,0 +1,505 @@
+class_name UI
+## Petites fonctions pour fabriquer les éléments d'interface utilisés par plusieurs écrans.
+## Exemple d'utilisation : UI.make_label("Bonjour", 24)
+
+
+static func make_label(text: String, font_size: int) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", font_size)
+	return label
+
+
+static func make_button(text: String, on_pressed: Callable, font_size := 28) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.add_theme_font_size_override("font_size", font_size)
+	button.pressed.connect(on_pressed)
+	return button
+
+
+## Fond de panneau arrondi, utilisé pour les cartes, les fiches, les barres...
+static func make_panel_style(background: Color, border: Color = Color.TRANSPARENT, border_width := 0) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(border_width)
+	style.set_corner_radius_all(12)
+	style.set_content_margin_all(12)
+	return style
+
+
+## Zone qui défile verticalement et prend toute la hauteur disponible.
+## Pas de barre visible : on fait défiler en glissant le doigt (voir drag_scroll.gd)
+## ou avec la molette de la souris.
+static func make_scroll() -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	return scroll
+
+
+## Applique le même style à tous les états d'un bouton (normal, survolé, appuyé...).
+static func set_button_style(button: Button, normal: StyleBox, pressed: StyleBox) -> void:
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", normal)
+	button.add_theme_stylebox_override("disabled", normal)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("hover_pressed", pressed)
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+## Fenêtre « système » : fond sombre, bordure violette, titre centré en majuscules.
+## « danger » = variante rouge, pour les alertes graves (mort d'un héros...).
+## Chaque ligne de « lines » devient un texte centré (une ligne peut aussi être un nœud déjà
+## fabriqué, comme un montant de gemmes avec son icône : il est centré tel quel).
+static func make_system_window(title: String, lines: Array, danger := false) -> PanelContainer:
+	var accent := Color("e05252") if danger else Color("9b6be0")
+	var panel := PanelContainer.new()
+	var style := make_panel_style(Color("15121f"), accent, 3)
+	style.set_content_margin_all(20)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 6)
+	panel.add_child(content)
+	var title_label := make_label(title.to_upper(), 26)
+	title_label.add_theme_color_override("font_color", accent.lightened(0.3))
+	content.add_child(title_label)
+	for line in lines:
+		if line is Control:
+			var centered := CenterContainer.new()
+			centered.add_child(line)
+			content.add_child(centered)
+			continue
+		var label := make_label(line, 22)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if danger:
+			label.add_theme_color_override("font_color", accent.lightened(0.4))
+		content.add_child(label)
+	for label in content.get_children():
+		if label is Label:
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return panel
+
+
+## Vente à l'entrepôt (GameData.sell_all : déchets et armes F rangées) : une ligne qui dit ce qui se vend et
+## combien, et un bouton « Vendre » qui ouvre une fenêtre de confirmation par-dessus « host » (Oui / Non).
+## « on_done » est appelée après la vente (pour redessiner l'écran).
+static func make_sale_section(host: Control, on_done: Callable) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var value: Dictionary = GameData.sale_value()
+	var text := "Vente : %d poubelle%s (%d or pièce), %d arme%s F rangée%s (%d or pièce)." % [
+		value["junk"], "s" if value["junk"] > 1 else "", GameData.JUNK_SELL_PRICE,
+		value["weapons"], "s" if value["weapons"] > 1 else "", "s" if value["weapons"] > 1 else "",
+		GameData.WEAPON_F_SELL_PRICE]
+	if GameData.tutorial_step != "":
+		text += " Pas pendant le tutoriel."
+	var label := make_label(text, 19)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(label)
+	var button := make_button("Vendre (%d or)" % value["gold"], func(): _confirm_sale(host, on_done), 22)
+	button.custom_minimum_size.y = 64
+	button.disabled = not GameData.can_sell()
+	box.add_child(button)
+	return box
+
+
+static func _confirm_sale(host: Control, on_done: Callable) -> void:
+	var value: Dictionary = GameData.sale_value()
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	host.add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.85)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(dim)
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 32)
+	overlay.add_child(margin)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 16)
+	margin.add_child(box)
+	box.add_child(make_system_window("Vente", [
+		"Vendre %d poubelle%s et %d arme%s de grade F rangée%s dans l'arsenal ?" % [value["junk"],
+			"s" if value["junk"] > 1 else "", value["weapons"], "s" if value["weapons"] > 1 else "",
+			"s" if value["weapons"] > 1 else ""],
+		"Tu recevras %d or. Les armes vendues sont perdues." % value["gold"]]))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	var answers := [["Non", func(): overlay.queue_free()], ["Oui", func():
+		GameData.sell_all()
+		overlay.queue_free()
+		on_done.call()]]
+	for entry in answers:
+		var button := make_button(entry[0], entry[1], 26)
+		button.custom_minimum_size.y = 90
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(button)
+
+
+## Fenêtre d'un héros tombé (le poids de la mort) : son portrait, son nom, ses étoiles, sa classe et son
+## niveau, la cause de sa mort, ses traits révélés et ses liens ; puis une ligne par ami ou frère d'armes
+## encore en vie (« Y a perdu un frère d'armes »). « memorial » : sa fiche figée, ouverte depuis la liste
+## des héros tombés (titre « En mémoire », avec le nombre de combats livrés).
+static func make_death_window(hero: Dictionary, memorial := false) -> PanelContainer:
+	var accent := Color("e05252")
+	var rarity_color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+	var panel := PanelContainer.new()
+	var style := make_panel_style(Color("15121f"), accent, 3)
+	style.set_content_margin_all(20)
+	panel.add_theme_stylebox_override("panel", style)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 10)
+	panel.add_child(content)
+
+	var title := make_label("EN MÉMOIRE" if memorial else "UN HÉROS EST TOMBÉ", 26)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", accent.lightened(0.3))
+	content.add_child(title)
+
+	# Le portrait (assombri) à gauche, son identité à droite.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	content.add_child(row)
+	var frame := PanelContainer.new()
+	var frame_style := make_panel_style(Color.BLACK, rarity_color.darkened(0.3), 3)
+	frame_style.set_content_margin_all(3)
+	frame.add_theme_stylebox_override("panel", frame_style)
+	frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_child(frame)
+	var portrait := FramedHeroCard.HeroPortrait.new()
+	portrait.hero = hero
+	portrait.custom_minimum_size = Vector2(130, 170)
+	portrait.modulate = Color(0.6, 0.6, 0.6)
+	frame.add_child(portrait)
+	var identity := VBoxContainer.new()
+	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	identity.add_theme_constant_override("separation", 4)
+	row.add_child(identity)
+	var name_label := make_label(hero["name"], 34)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	identity.add_child(name_label)
+	var stars := make_label("★".repeat(hero["rarity"]), 26)
+	stars.add_theme_color_override("font_color", rarity_color)
+	identity.add_child(stars)
+	identity.add_child(make_label("%s — niveau %d" % [GameData.class_label(hero), hero["level"]], 22))
+	if memorial:
+		identity.add_child(make_label("Combats dans la Tour : %d" % hero.get("fights", 0), 20))
+	var cause: String = hero.get("death_cause", "")
+	var cause_label := make_label("Cause : %s." % cause if cause != "" else "Cause inconnue.", 20)
+	cause_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cause_label.add_theme_color_override("font_color", accent.lightened(0.4))
+	identity.add_child(cause_label)
+
+	# Ce qu'on savait de lui : ses traits révélés, puis ses liens.
+	var known: Array = GameData.hero_traits(hero).filter(func(t): return t["known"]).map(func(t): return t["name"])
+	var traits_label := make_label("Caractère : %s" % (", ".join(known) if not known.is_empty() else "jamais révélé"), 20)
+	traits_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(traits_label)
+	var links := GameData.hero_bonds(hero)
+	var parts: Array[String] = []
+	for link in links:
+		parts.append("%s (%s)" % [link["hero"]["name"], GameData.bond_name(link["level"])])
+	var bonds_label := make_label("Liens : %s" % (", ".join(parts) if not parts.is_empty() else "aucun"), 20)
+	bonds_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bonds_label.modulate = Color(1, 1, 1, 0.8)
+	content.add_child(bonds_label)
+
+	# Ceux qui restent : une ligne par ami ou frère d'armes encore en vie.
+	for link in links:
+		var other: Dictionary = link["hero"]
+		if link["level"] < GameData.BOND_FRIEND or not other["alive"]:
+			continue
+		var brothers: bool = link["level"] >= GameData.BOND_BROTHERS
+		var loss := make_label("%s a perdu %s." % [other["name"], "un frère d'armes" if brothers else "un ami"], 22)
+		loss.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		loss.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		loss.add_theme_color_override("font_color", Color("f5c542") if brothers else Color("6fe08a"))
+		content.add_child(loss)
+	return panel
+
+
+## Un montant de gemmes : le texte (« 1 000 », « +5 »...) suivi du cristal qui lévite
+## (nouveaux visuels), ou du mot « gemmes » (anciens visuels).
+static func make_gem_amount(text: String, font_size: int, color := Color.WHITE) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var label := make_label(text if Settings.new_visuals else text + " gemmes", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	if Settings.new_visuals:
+		row.add_child(GemIcon.new(roundf(font_size * 1.7)))
+	return row
+
+
+## Un nombre avec des espaces entre les milliers : 50000 -> « 50 000 ».
+static func format_number(value: int) -> String:
+	var digits := str(absi(value))
+	var grouped := ""
+	for i in digits.length():
+		if i > 0 and (digits.length() - i) % 3 == 0:
+			grouped += " "
+		grouped += digits[i]
+	return ("-" if value < 0 else "") + grouped
+
+
+static func rarity_text(rarity: int) -> String:
+	return "%d étoile%s" % [rarity, "s" if rarity > 1 else ""]
+
+
+## Fenêtres de fin d'un combat de la Tour, à partir du rapport de GameData.finish_tower_battle :
+## une fenêtre rouge par héros mort, les annonces, l'éveil des compétences, puis le résultat.
+static func make_battle_report_windows(report: Dictionary) -> Array[Control]:
+	var windows: Array[Control] = []
+	if not report["dead"].is_empty():
+		Settings.vibrate(400)
+	for death in report["dead"]:
+		windows.append(make_death_window(death["hero"]))
+	if not report.get("lost_weapons", []).is_empty():
+		windows.append(make_system_window("Armes perdues", report["lost_weapons"], true))
+	if not report["notices"].is_empty():
+		windows.append(make_system_window("Félicitations !", report["notices"]))
+	if not report["skills"].is_empty():
+		windows.append(make_system_window("Progrès des compétences !", report["skills"]))
+	if not report.get("mental", []).is_empty():
+		windows.append(make_system_window("Personnalité", report["mental"]))
+	if not report.get("bonds", []).is_empty():
+		windows.append(make_system_window("Liens", report["bonds"]))
+
+	var lines := []
+	if report["victory"]:
+		lines.append(make_gem_amount("+%s or   +%d" % [format_number(report["gold"]), report["gems"]], 22))
+		var items: Array = report.get("items", [])
+		if not items.is_empty():
+			lines.append(make_reward_items(items))
+			lines.append("Rangés dans l'entrepôt.")
+	else:
+		lines.append("Les survivants sont ramenés à la cité.")
+	var idle: Array = report.get("idle", [])
+	lines.append("+%d expérience pour chaque survivant%s" % [report["xp"], " qui a combattu" if not idle.is_empty() else ""])
+	if not idle.is_empty():
+		# Expérience méritée : sans avoir porté ni reçu un seul coup, pas d'expérience.
+		lines.append("Pas d'expérience pour %s : %s rien fait pendant le combat." % [", ".join(idle),
+			"il n'a" if idle.size() == 1 else "ils n'ont"])
+	for level_up in report["level_ups"]:
+		var hero: Dictionary = level_up["hero"]
+		# Le détail de la croissance (selon ce qu'il a fait) : « Force +2, Santé +1, Intelligence -1 ».
+		var growth := GameData.growth_text(level_up.get("growth", {}))
+		lines.append("%s passe au niveau %d !%s" % [hero["name"], hero["level"], " (%s)" % growth if growth != "" else ""])
+	if report.get("potions", "") != "":
+		lines.append(report["potions"])  # (agonie : potions de soin bues)
+	if report.get("repairs", "") != "":
+		lines.append(report["repairs"])  # (usure des armes)
+	if report["mvp"] != "":
+		lines.append("MVP : %s" % report["mvp"])
+	var title := "Défaite"
+	if report["victory"]:
+		title = "Étage réussi (entraînement)" if report.get("replay", false) else "Étage conquis !"
+	windows.append(make_system_window(title, lines))
+	return windows
+
+
+## Icônes provisoires des objets (en attendant de vraies images) ; sinon, l'initiale du nom.
+const ITEM_ICONS := {"Minerai de fer": "Fe", "Charbon": "Ch", "Cristal brut": "Cr", "Pierre d'attribut": "◆", "Potion de soin": "Po",
+	"Bois": "Bo", "Peau de bête": "Pe", "Herbe médicinale": "He", "Pierre de taille": "Pi", "Plume": "Pl", "Lin": "Li"}
+
+
+## Les objets gagnés, une case par objet (cahier : « les récompenses s'affichent avec une icône par objet »).
+## « items » : [{"name", "grade", "count"}].
+static func make_reward_items(items: Array) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = mini(items.size(), 4)
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	for item in items:
+		grid.add_child(make_reward_item(item["name"], item["grade"], item["count"]))
+	return grid
+
+
+## Une case d'objet : l'icône (provisoire : l'initiale du matériau), le grade dans le coin,
+## la quantité en bas et le nom dessous. Le cadre a la couleur du grade.
+static func make_reward_item(item_name: String, grade: String, count: int) -> VBoxContainer:
+	var color := ArmoryScreen.grade_color(grade)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = Vector2(92, 92)
+	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	slot.add_theme_stylebox_override("panel", make_panel_style(color.darkened(0.75), color, 3))
+	box.add_child(slot)
+
+	var letter := make_label(ITEM_ICONS.get(item_name, item_name.left(1).to_upper()), 40)
+	letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	letter.add_theme_color_override("font_color", color.lightened(0.3))
+	slot.add_child(letter)
+
+	var grade_label := make_label(grade, 16)
+	grade_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	grade_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	grade_label.add_theme_color_override("font_color", color.lightened(0.4))
+	slot.add_child(grade_label)
+
+	var count_label := make_label("x%d" % count, 18)
+	count_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	count_label.size_flags_vertical = Control.SIZE_SHRINK_END
+	slot.add_child(count_label)
+
+	var name_label := make_label(item_name, 14)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.custom_minimum_size.x = 100
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(name_label)
+	return box
+
+
+## Carte d'un héros pour les listes : le cadre illustré (FramedHeroCard) avec les nouveaux visuels,
+## sinon l'ancienne carte simple (make_hero_card). « width » : largeur de la carte illustrée.
+static func make_card(hero: Dictionary, width := 120.0) -> Button:
+	if Settings.new_visuals:
+		return FramedHeroCard.new(hero, width)
+	return make_hero_card(hero)
+
+
+## Couleur de la santé mentale : verte, puis orange (sous le seuil du malus en combat), puis rouge.
+static func mental_color(value: float) -> Color:
+	if value >= GameData.MENTAL_MALUS_START:
+		return Color("4caf6a")
+	if value >= 30.0:
+		return Color("e0a052")
+	return Color("e05252")
+
+
+## Une barre de santé mentale (0 à 100) : la part restante, dans sa couleur.
+static func make_mental_bar(hero: Dictionary, height := 12.0) -> ProgressBar:
+	var value := GameData.mental(hero)
+	var bar := ProgressBar.new()
+	bar.max_value = GameData.MENTAL_MAX
+	bar.value = value
+	bar.show_percentage = false
+	bar.custom_minimum_size.y = height
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_theme_stylebox_override("background", make_panel_style(Color(0, 0, 0, 0.6)))
+	bar.add_theme_stylebox_override("fill", make_panel_style(mental_color(value)))
+	return bar
+
+
+## Cartes d'équipe : une fine barre de santé mentale posée en bas de la carte d'un héros vivant.
+static func add_mental_bar(card: Control, hero: Dictionary) -> void:
+	if not hero["alive"]:
+		return
+	var bar := make_mental_bar(hero, 8.0)
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_left = 8
+	bar.offset_right = -8
+	bar.offset_top = -14
+	bar.offset_bottom = -6
+	card.add_child(bar)
+	# En rupture (voir GameData.is_broken) : le mot, en rouge, juste au-dessus de la barre.
+	if GameData.is_broken(hero):
+		var broken := make_label("RUPTURE", 14)
+		broken.add_theme_color_override("font_color", Color("ff6060"))
+		broken.add_theme_color_override("font_outline_color", Color.BLACK)
+		broken.add_theme_constant_override("outline_size", 4)
+		broken.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		broken.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		broken.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		broken.offset_top = -34
+		broken.offset_bottom = -14
+		card.add_child(broken)
+
+
+## Marque une carte comme choisie (dans une équipe, pour un sacrifice...), avec la couleur voulue.
+static func mark_card_chosen(card: Button, hero: Dictionary, color := Color.WHITE) -> void:
+	if card is FramedHeroCard:
+		card.set_chosen(color)
+		return
+	var rarity_color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+	var style := make_panel_style(rarity_color.darkened(0.2), color, 8)
+	set_button_style(card, style, style)
+
+
+## Carte d'un héros (rareté, nom, classe). C'est un bouton : on peut appuyer dessus.
+static func make_hero_card(hero: Dictionary) -> Button:
+	var color: Color = GameData.RARITY_COLORS[hero["rarity"]]
+
+	var card := Button.new()
+	card.custom_minimum_size = Vector2(120, 170)
+	set_button_style(
+		card,
+		make_panel_style(color.darkened(0.6), color, 4),
+		make_panel_style(color.darkened(0.3), color, 4)
+	)
+
+	var content := VBoxContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(content)
+
+	var stars := make_label(rarity_text(hero["rarity"]), 15)
+	stars.add_theme_color_override("font_color", color)
+	content.add_child(stars)
+	content.add_child(make_label(hero["name"], 18))
+	var hero_class := make_label(GameData.class_label(hero), 14)
+	hero_class.modulate = Color(1, 1, 1, 0.7)
+	content.add_child(hero_class)
+	content.add_child(make_label("Niv. %d" % hero["level"], 14))
+
+	for label in content.get_children():
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	if GameData.is_favorite(hero):
+		add_favorite_mark(card, 22)
+	if not hero["alive"]:
+		card.modulate = Color(0.4, 0.4, 0.4)
+	return card
+
+
+## Symbole de lien en haut à gauche d'une carte d'équipe : deux anneaux entrelacés, verts pour un ami
+## dans la même équipe, dorés pour un frère d'armes (« level » : palier, voir GameData.BOND_LEVELS).
+static func add_bond_badge(card: Control, level: int) -> void:
+	var color := Color("f5c542") if level >= GameData.BOND_BROTHERS else Color("6fe08a")
+	var badge := Control.new()
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.position = Vector2(8, 8)
+	badge.size = Vector2(32, 20)
+	badge.draw.connect(func():
+		badge.draw_circle(Vector2(16, 10), 13, Color(0, 0, 0, 0.6))
+		for center in [Vector2(11, 10), Vector2(21, 10)]:
+			badge.draw_arc(center, 6.5, 0, TAU, 20, color, 2.5, true))
+	card.add_child(badge)
+
+
+## Le meilleur lien (ami ou frère d'armes) d'un héros avec les autres héros de « ids », ou 0.
+static func best_team_bond(hero: Dictionary, ids: Array) -> int:
+	var best := 0
+	for other_id in ids:
+		if other_id != hero["id"]:
+			best = maxi(best, GameData.bond_level(hero, GameData.hero_by_id(other_id)))
+	return best if best >= GameData.BOND_FRIEND else 0
+
+
+## Petit cœur rose en haut à droite d'une carte : le héros est un favori.
+static func add_favorite_mark(card: Control, font_size: int) -> void:
+	var heart := make_label("♥", font_size)
+	heart.add_theme_color_override("font_color", Color("ff5c8a"))
+	heart.add_theme_color_override("font_outline_color", Color.BLACK)
+	heart.add_theme_constant_override("outline_size", 4)
+	heart.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heart.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	heart.position += Vector2(-font_size * 0.9, 2)
+	card.add_child(heart)
