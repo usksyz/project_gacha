@@ -89,11 +89,14 @@ const SECRET_HEROES := {
 ## Ce que fait chaque compétence (affiché sur la fiche du héros).
 const SKILLS := {
 	"Résistance à la douleur": "Les blessures guérissent plus vite : saignements réduits de 10 % par niveau.",
-	"Mouvement souple": "Esquive : 3 % de chances par niveau d'éviter complètement un coup.",
+	"Mouvement souple": "Esquive : 3 % de chances par niveau d'éviter complètement un coup. S'apprend aussi au terrain d'entraînement (selon le caractère).",
 	"Calme": "Garde son sang-froid : sous la moitié de sa vie, subit 4 % de dégâts en moins par niveau.",
 	"Berserk": "Active, à bascule (acquise une fois, aux portes de la mort). En combat, il entre en rage de lui-même quand le combat est difficile (boss, horde, duel, allié en danger), ou sur ton ordre : Force, Santé et Dextérité +5, Intelligence -10 (+1 aux bonus par niveau suivant), mais il perd 1 % de sa vie et de la santé mentale chaque seconde. Il en sort quand le danger est passé, sous 15 % de vie, et à la fin du combat. Après : Migraine 3 minutes (-10 % de dégâts).",
-	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat.",
+	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat, et au terrain d'entraînement.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
+	"Maîtrise de la lance": "Avec une lance : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
+	"Maîtrise de la dague": "Avec une dague : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
+	"Maîtrise du fouet": "Avec un fouet : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
 	"Résistance aux flammes": "Dégâts de feu reçus : 5 % en moins par niveau. S'apprend en subissant du feu, ou en combattant aux côtés d'un mage de feu.",
 	"Indomptable": "Saignements et hémorragies : 10 % plus faibles par niveau. S'éveille chez un héros qui saigne en situation critique.",
@@ -133,9 +136,13 @@ const SHIELD_GUARD_PER_LEVEL := 0.03        # Utilisation du bouclier : -3 % de 
 const BOW_SHOTS_PER_LEVEL := 50
 
 ## Terrain d'entraînement : les programmes proposés (une compétence travaillée par programme).
-const TRAINING_SKILLS := ["Maîtrise de l'épée", "Utilisation du bouclier"]
-## Nombre de héros qui peuvent s'entraîner en même temps (terrain de niveau 1).
-const TRAINING_SLOTS := 3
+## (Étape A, demande du porteur du projet : « plus d'entraînements que bouclier et épée ».) Les maîtrises de toutes
+## les armes, et Mouvement souple (esquive, selon les affinités de la personnalité).
+const TRAINING_SKILLS := ["Maîtrise de l'épée", "Utilisation du bouclier", "Maîtrise de la lance", "Maîtrise de la dague",
+	"Maîtrise du fouet", "Maîtrise de l'arc", "Mouvement souple"]
+## Nombre de héros qui peuvent s'entraîner en même temps (terrain de niveau 1). Étape A (« à plusieurs ») : 5, une
+## équipe entière (avant : 3). Provisoire, grandira avec le niveau du terrain.
+const TRAINING_SLOTS := 5
 ## Le terrain d'entraînement s'ouvre après ce nombre d'armes tirées (cahier des charges).
 const TRAINING_UNLOCK_DRAWS := 10
 ## Durée d'une séance, en secondes de temps réel. L'entraînement continue même jeu fermé.

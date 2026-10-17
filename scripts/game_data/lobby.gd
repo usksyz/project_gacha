@@ -400,6 +400,102 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
+# Entraînement automatique (étape A)
+# ---------------------------------------------------------------------------
+# Demande du porteur du projet : « en auto, suggestions, à plusieurs ».
+# Le Système suggère à chaque héros le programme qui lui sert le plus (training_suggestion) : la maîtrise de l'arme
+# qu'il porte ou qu'il prendra (son arme de prédilection d'abord), puis le bouclier pour ceux qui en portent, puis
+# Mouvement souple. Un héros en « auto » (hero["training_auto"]) suit la suggestion et passe tout seul au programme
+# suivant quand le sien est au niveau maximum (ou qu'il stagne). « Entraîner automatiquement » remplit les places
+# libres avec les héros de la cité qui ne font rien, chacun en auto.
+
+## Le programme que le Système suggère à ce héros ("" : rien d'utile, par exemple un mage ou tout est au maximum).
+func training_suggestion(hero: Dictionary) -> String:
+	for skill_name in training_order(hero):
+		if skill_level(hero["skills"], skill_name) < SKILL_MAX_LEVEL and PersonalityEngine.has_affinity(hero, skill_name) \
+				and not skill_name in hero.get("stalled_skills", []):
+			return skill_name
+	return ""
+
+
+## Les programmes utiles à ce héros, du plus utile au moins utile.
+func training_order(hero: Dictionary) -> Array:
+	var order := []
+	if uses_magic(hero):
+		return ["Mouvement souple"]  # (les mages et les soigneurs n'ont pas d'arme)
+	var usable: Array = CLASS_WEAPONS.get(hero["class"], ["Épée"])
+	var favorite := PersonalityEngine.favorite_weapon(hero, usable)
+	var carried: String = fighting_weapon(hero).get("type", "")
+	for type in [favorite, carried] + usable:
+		if type != "" and WEAPON_TYPES.has(type) and type != "Bouclier":
+			var skill_name: String = WEAPON_TYPES[type]["skill"]
+			if skill_name in TRAINING_SKILLS and not skill_name in order:
+				order.append(skill_name)
+	if hero["class"] in SHIELD_CLASSES:
+		order.insert(mini(1, order.size()), "Utilisation du bouclier")
+	order.append("Mouvement souple")
+	return order
+
+
+## Met un héros en entraînement automatique (programme suggéré). Renvoie faux si c'est impossible.
+func set_auto_training(hero: Dictionary) -> bool:
+	var suggestion := training_suggestion(hero)
+	if suggestion == "":
+		last_refusal = "%s n'a plus rien d'utile à apprendre au terrain." % hero["name"]
+		return false
+	if not set_training(hero, suggestion):
+		return false
+	hero["training_auto"] = true
+	save_game()
+	return true
+
+
+## Les héros de la cité qui pourraient s'entraîner : vivants, pas partis, ni au terrain ni à un poste, pas en repos.
+func idle_heroes() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in alive_heroes():
+		if hero.get("training", "") == "" and hero.get("post", "") == "" and not is_away(hero) and not is_resting(hero):
+			result.append(hero)
+	return result
+
+
+## « Entraîner automatiquement » : remplit les places libres avec les héros qui ne font rien (les plus rares
+## d'abord), chacun sur son programme suggéré. Renvoie les noms inscrits, et les refus (textes).
+func auto_fill_training() -> Dictionary:
+	var enrolled := []
+	var refusals := []
+	var heroes := idle_heroes()
+	heroes.sort_custom(func(a, b): return a["rarity"] > b["rarity"] or (a["rarity"] == b["rarity"] and a["level"] > b["level"]))
+	for hero in heroes:
+		if trainees().size() >= TRAINING_SLOTS:
+			break
+		if training_suggestion(hero) == "":
+			continue
+		if set_auto_training(hero):
+			enrolled.append(hero["name"])
+		elif last_refusal != "":
+			refusals.append(last_refusal)
+	return {"enrolled": enrolled, "refusals": refusals}
+
+
+## Un héros en auto dont le programme est fini (niveau maximum) ou qui y stagne passe au suivant ; sinon il quitte le
+## terrain (rien d'utile). Renvoie l'annonce, ou "".
+func _auto_next_program(hero: Dictionary) -> String:
+	var current: String = hero.get("training", "")
+	if not hero.get("training_auto", false) or current == "":
+		return ""
+	if skill_level(hero["skills"], current) < SKILL_MAX_LEVEL and not current in hero.get("stalled_skills", []):
+		return ""
+	var next := training_suggestion(hero)
+	hero["training"] = next
+	if next == "":
+		hero["training_auto"] = false
+		return "%s a fini tout ce qu'il pouvait apprendre au terrain : il retourne au repos." % hero["name"]
+	return "%s passe au programme suivant : %s." % [hero["name"], next]
+
+
+
+# ---------------------------------------------------------------------------
 # Vente (deuxième source d'or)
 # ---------------------------------------------------------------------------
 # Prompt 1 (économie) : on vend à l'entrepôt les déchets (JUNK_NAME) et les armes de grade F rangées dans
