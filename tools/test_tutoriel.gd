@@ -213,9 +213,8 @@ func _play() -> void:
 		var from_arsenal := GameData.team_members(0).filter(func(hero): return not GameData.equipped(hero, "weapon").is_empty())
 		var fighters := GameData.team_members(0).filter(func(hero): return not GameData.uses_magic(hero))
 		_check("héros armés depuis l'arsenal (essai %d)" % (attempt + 1), from_arsenal.size() >= mini(3, fighters.size()), "; ".join(armed))
-		# (prompt 3) placement des héros : le combat attend « Commencer »
-		_check("placement avant le combat (essai %d)" % (attempt + 1), dungeons.battle_view.placing, "")
-		await _press(dungeons.battle_view, "Commencer")
+		# (étape B) pas d'écran de placement pendant le tutoriel : le combat démarre tout de suite
+		_check("pas de placement au tutoriel (essai %d)" % (attempt + 1), not dungeons.battle_view.placing, "")
 		Engine.time_scale = float(_args["vitesse"])
 		await _seconds(1.0)  # (temps réel : environ 6 s de combat)
 		Engine.time_scale = 1.0
@@ -236,8 +235,13 @@ func _play() -> void:
 	_check("étape « synthese »", GameData.tutorial_step == "synthese", GameData.tutorial_step)
 
 	# 5. La chambre de synthèse se construit sous les yeux du Maître, puis une synthèse.
-	await _seconds(20.0)
-	seen = await _close_windows(["TUTORIEL — ÉTAPE 5 / 5"])
+	# (l'animation de construction attend que les fenêtres soient fermées : on attend jusqu'à 60 s, pas 20 d'un coup)
+	seen = []
+	for wait in 30:
+		await _seconds(2.0)
+		seen.append_array(await _close_windows(["TUTORIEL — ÉTAPE 5 / 5"]))
+		if "TUTORIEL — ÉTAPE 5 / 5" in seen:
+			break
 	_check("fenêtre de l'étape 5", "TUTORIEL — ÉTAPE 5 / 5" in seen, str(seen))
 	await _seconds(1.0)
 	await _capture("hub_synthese")

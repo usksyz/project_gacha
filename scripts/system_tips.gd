@@ -108,6 +108,12 @@ static func lines(tip_id: String) -> Array:
 				"« Pause » arrête le temps pour regarder, mais aucun ordre n'est possible pendant la pause.",
 				"Lisez bien la quête : l'objectif n'est pas toujours d'éliminer tous les ennemis.",
 			]
+		"placement":
+			return [
+				"Avant le combat, vous pouvez placer vos héros dans la zone verte : glissez un pion, ou touchez un héros puis une case.",
+				"Un héros que vous placez tient ce poste. « Placement automatique » remet tout le monde à sa place habituelle.",
+				"Touchez « Commencer » quand vous êtes prêt : le combat ne démarre pas avant.",
+			]
 		"blessure":
 			return [
 				"Vos héros ont souffert. Les blessures se referment au retour à la cité.",

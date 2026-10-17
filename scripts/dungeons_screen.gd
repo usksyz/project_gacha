@@ -938,8 +938,12 @@ func _start_fight() -> void:
 	battle.start()
 
 	_show_page(battle_view)
-	# (prompt 3) le Maître place d'abord ses héros, puis « Commencer »
-	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]], Callable(), true)
+	# (prompt 3) le Maître place d'abord ses héros, puis « Commencer ». Étape B : pas pendant le tutoriel (le premier
+	# combat reste simple) ; au premier placement, un conseil du Système l'explique.
+	var placement := GameData.tutorial_step == ""
+	battle_view.play(battle, "Étage %d — %s" % [floor_number, floor_quest["name"]], Callable(), placement)
+	if placement:
+		GameData.show_tip("placement")
 
 
 func _make_margin() -> MarginContainer:
