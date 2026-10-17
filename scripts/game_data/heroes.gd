@@ -95,7 +95,11 @@ const SKILLS := {
 	"Maîtrise de l'arc": "Avec un arc : +3 % de dégâts par niveau. Progresse à chaque tir en combat, et au terrain d'entraînement.",
 	"Maîtrise de l'épée": "Avec une épée : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Maîtrise de la lance": "Avec une lance : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
-	"Maîtrise de la dague": "Avec une dague : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
+	"Maîtrise de la dague": "Avec une dague (et la dague de secours d'un archer) : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement, et à force de s'en servir.",
+	# Étape D : compétences que les héros veulent d'eux-mêmes, selon ce qu'ils vivent (voir lobby.gd, « Entraînement »).
+	"Parade des projectiles": "Un combattant au contact pare 4 % des flèches et des sorts par niveau (40 % au plus), sauf ceux qu'il ne voit pas venir. Il la veut quand les tirs l'ont souvent touché.",
+	"Résistance au vent": "Dégâts de vent reçus : 5 % en moins par niveau (80 % au plus). S'apprend en subissant le vent (un mage de vent allié éclabousse ceux qui se battent près de sa cible).",
+	"Résistance au froid": "Dégâts de froid reçus : 5 % en moins par niveau (80 % au plus). S'apprend en subissant le froid (un mage de froid allié éclabousse ceux qui se battent près de sa cible).",
 	"Maîtrise du fouet": "Avec un fouet : +3 % de dégâts par niveau. S'apprend au terrain d'entraînement.",
 	"Utilisation du bouclier": "Avec un bouclier : 3 % de dégâts subis en moins par niveau. S'apprend au terrain d'entraînement.",
 	"Résistance aux flammes": "Dégâts de feu reçus : 5 % en moins par niveau. S'apprend en subissant du feu, ou en combattant aux côtés d'un mage de feu.",
@@ -138,8 +142,19 @@ const BOW_SHOTS_PER_LEVEL := 50
 ## Terrain d'entraînement : les programmes proposés (une compétence travaillée par programme).
 ## (Étape A, demande du porteur du projet : « plus d'entraînements que bouclier et épée ».) Les maîtrises de toutes
 ## les armes, et Mouvement souple (esquive, selon les affinités de la personnalité).
+## Étape D (le porteur du projet : « les héros s'entraînent à ce qu'ils veulent ») : ce sont les programmes possibles ;
+## chacun choisit le sien selon ce qu'il a vécu (training_wish, lobby.gd).
 const TRAINING_SKILLS := ["Maîtrise de l'épée", "Utilisation du bouclier", "Maîtrise de la lance", "Maîtrise de la dague",
-	"Maîtrise du fouet", "Maîtrise de l'arc", "Mouvement souple"]
+	"Maîtrise du fouet", "Maîtrise de l'arc", "Mouvement souple", "Parade des projectiles", "Résistance aux flammes",
+	"Résistance au vent", "Résistance au froid"]
+## Étape D : la résistance de chaque élément de la magie (feu, vent, froid).
+const ELEMENT_RESISTANCES := {"Feu": "Résistance aux flammes", "Vent": "Résistance au vent", "Froid": "Résistance au froid"}
+## Parade des projectiles : part des flèches et des sorts parés par niveau, et au plus.
+const PARRY_PER_LEVEL := 0.04
+const PARRY_MAX := 0.4
+## Sort de zone d'un mage HÉROS : les alliés près de sa cible sont éclaboussés (cette part de son attaque, moins leur
+## résistance à l'élément ; jamais mis à terre). Ajout du projet (étape D), provisoire.
+const FRIENDLY_SPLASH := 0.25
 ## Nombre de héros qui peuvent s'entraîner en même temps (terrain de niveau 1). Étape A (« à plusieurs ») : 5, une
 ## équipe entière (avant : 3). Provisoire, grandira avec le niveau du terrain.
 const TRAINING_SLOTS := 5
@@ -421,8 +436,10 @@ func skill_progress_needed(skill_name: String) -> int:
 			return BOW_SHOTS_PER_LEVEL
 		"Tueur de gobelins":
 			return GOBLIN_KILLS_PER_LEVEL
-		"Résistance aux flammes":
+		"Résistance aux flammes", "Résistance au vent", "Résistance au froid":
 			return FIRE_MAGE_FIGHTS_PER_LEVEL
+		"Maîtrise de la dague":
+			return BOW_SHOTS_PER_LEVEL  # (étape D : progresse aussi coup par coup, comme l'arc tir par tir)
 	return TRAINING_POINTS_PER_LEVEL
 
 

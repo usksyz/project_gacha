@@ -80,6 +80,8 @@ const CONTACT_WAIT_MAX := 60.0
 const MELEE_RANGE := 1.0
 const RANGED_RANGE := 5.5
 const SPELL_RADIUS := 1.6
+## « a appris du feu » (étape D : aussi du vent, du froid).
+const ELEMENT_WORDS := {"Feu": "du feu", "Vent": "du vent", "Froid": "du froid"}
 ## Au-delà de cette portée, on tire (il faut voir la cible) ; en dessous, on frappe
 ## (épée, dague : 1 case ; lance, fouet : un peu plus, voir GameData.WEAPON_TYPES).
 const MELEE_REACH_MAX := 2.5

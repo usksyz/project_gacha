@@ -349,6 +349,12 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"journal_counts": {"hits_given": 0, "hits_taken": 0, "dodges": 0, "kills": 0},
 		"met": {},                 # ennemis déjà rencontrés (premier contact noté une fois)
 		"took_fire": false,        # a subi des dégâts de feu (pour Résistance aux flammes)
+		# Étape D : éléments subis (feu, vent, froid : chance d'en apprendre la résistance), ce que le héros a vécu
+		# (« pris au contact », « tirs subis »...) qui décide de ce qu'il voudra travailler (GameData.merge_practice),
+		# et ses coups portés avec la dague de secours (Maîtrise de la dague).
+		"took_elements": {},
+		"practice": {},
+		"dagger_hits": 0,
 		# Santé mentale, suivie en direct (voir _stress) ; recopiée sur le héros à la fin du combat.
 		"mental": GameData.mental(source) if is_hero else GameData.MENTAL_MAX,
 		"sulk_until": 0.0,         # a refusé un ordre : ignore les ordres jusqu'à ce moment
@@ -722,6 +728,11 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 				for foe in foes:
 					if foe["pos"].distance_to(target["pos"]) <= SPELL_RADIUS:
 						_hit(attacker, foe, 0.7, false, "spell")
+				# Étape D : le sort d'un mage héros éclabousse aussi ses alliés trop près de la cible (_splash).
+				if attacker["is_hero"]:
+					for ally in _alive(heroes):
+						if ally["id"] != attacker["id"] and ally["pos"].distance_to(target["pos"]) <= SPELL_RADIUS:
+							_splash(attacker, ally)
 			else:
 				# À court de mana : un petit trait de magie, sur la cible seulement.
 				_hit(attacker, target, MANA_BOLT_POWER, false, "bolt")
@@ -787,7 +798,7 @@ func _use_arrows(unit: Dictionary, count: int) -> void:
 		unit["reach"] = MELEE_RANGE
 		unit["ranged"] = false
 		unit["weapon_power"] = GameData.OUT_OF_ARROWS_POWER
-		unit["weapon_skill"] = ""
+		unit["weapon_skill"] = "Maîtrise de la dague"  # (étape D : sa dague de secours profite de cette maîtrise ; avant, aucune)
 		_log("%s n'a plus de flèches : il tire sa dague de secours." % _name_with_stars(unit), "disobey")
 
 
@@ -868,7 +879,8 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 	elif amount >= 0:
 		attacker["acts"][ACT_STAT.get(kind, "str")] += 1
 		target["acts"]["vit"] += 1
-	var text := "esquive !" if amount == -1 else ("couvert !" if amount < 0 else "-%d" % amount)
+	_note_practice(attacker, target, amount, kind)  # (étape D) ce que le héros vit, sans tirage
+	var text := "esquive !" if amount == -1 else ("paré !" if amount == -3 else ("couvert !" if amount < 0 else "-%d" % amount))
 	if surprise and amount >= 0:
 		text = "surprise ! " + text
 		surprises["heroes" if target["is_hero"] else "enemies"] += 1
@@ -889,6 +901,45 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 			_journal(attacker, "kill", {"with": target["base_name"], "boss": target["boss"]})
 
 
+## Étape D : un allié éclaboussé par le sort d'un mage de son équipe : FRIENDLY_SPLASH de l'attaque du mage, moins sa
+## résistance à l'élément ; jamais mis à terre (il reste au moins 1 point de vie). Aucun tirage au hasard. C'est
+## ce qui lui donne envie d'apprendre cette résistance (practice « mage:<élément> »).
+func _splash(mage: Dictionary, ally: Dictionary) -> void:
+	var element: String = mage["element"] if mage["element"] != "" else "Feu"
+	var resist := minf(0.8, GameData.skill_level(ally["skills"], GameData.ELEMENT_RESISTANCES.get(element, "")) \
+		* GameData.FIRE_RESIST_PER_LEVEL)
+	var amount := mini(roundi(mage["atk"] * GameData.FRIENDLY_SPLASH * (1.0 - resist)), ally["hp"] - 1)
+	ally["practice"]["mage:" + element] = ally["practice"].get("mage:" + element, 0) + 1
+	ally["took_elements"][element] = true
+	if amount <= 0:
+		return
+	ally["hp"] -= amount
+	_effect("spell", mage, ally, "-%d" % amount, false)
+
+
+## Étape D : ce qu'un héros vit à chaque coup (sans tirage) : pris au contact alors qu'il se bat de loin, touché par
+## des tirs alors qu'il se bat au contact, coups encaissés au bouclier, esquives, coups portés avec son arme.
+func _note_practice(attacker: Dictionary, target: Dictionary, amount: int, kind: String) -> void:
+	if target["is_hero"] and not attacker["is_hero"]:
+		var practice: Dictionary = target["practice"]
+		var from_afar: bool = target["ranged"] or not target["bow"].is_empty() or target["class"] in ["Mage", "Soigneur"]
+		if amount == -1:
+			practice["esquives"] = practice.get("esquives", 0) + 1
+		elif amount >= 0:
+			if kind == "hit" and from_afar:
+				practice["pris_au_contact"] = practice.get("pris_au_contact", 0) + 1
+			elif kind != "hit" and not from_afar:
+				practice["tirs_subis"] = practice.get("tirs_subis", 0) + 1
+			if target["shield"]:
+				practice["au_bouclier"] = practice.get("au_bouclier", 0) + 1
+			practice["coups_subis"] = practice.get("coups_subis", 0) + 1
+	if attacker["is_hero"] and not target["is_hero"] and amount >= 0 and attacker["weapon_skill"] != "":
+		var key: String = "arme:" + attacker["weapon_skill"]
+		attacker["practice"][key] = attacker["practice"].get(key, 0) + 1
+		if not attacker["bow"].is_empty():
+			attacker["dagger_hits"] += 1  # (dague de secours d'un archer)
+
+
 ## Retire des points de vie à la cible et renvoie les dégâts infligés (-1 si elle esquive).
 ## « kind » : "hit" (corps à corps), "arrow" (flèche) ou "spell" (sort).
 func _damage(attacker: Dictionary, target: Dictionary, power: float, critical := false, kind := "hit", surprise := false) -> int:
@@ -901,6 +952,12 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 		dodge -= GameData.skill_level(attacker["skills"], "Œil de faucon") * GameData.HAWK_EYE_PRECISION_PER_LEVEL
 	if not surprise and randf() < dodge:
 		return -1
+	# Parade des projectiles (étape D) : un combattant au contact pare une partie des flèches et des sorts qu'il voit venir
+	# (tirage seulement s'il a la compétence).
+	if kind != "hit" and not surprise and not target["ranged"]:
+		var parry := minf(GameData.PARRY_MAX, GameData.skill_level(target["skills"], "Parade des projectiles") * GameData.PARRY_PER_LEVEL)
+		if parry > 0.0 and randf() < parry:
+			return -3
 	# Couvert : derrière un muret ou un rocher, un tir peut s'y arrêter (voir _covered).
 	if kind != "hit" and _covered(target, attacker) and randf() < GameData.COVER_CHANCE:
 		return -2
@@ -933,10 +990,16 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Formations (trois portées, mur de boucliers) : voir _formation_attack et _formation_defense.
 	var raw: float = attacker["atk"] * _mind(attacker) * _bond(attacker) * _formation_attack(attacker) * power \
 		* randf_range(0.9, 1.1) - target["def"] * _mind(target) * _bond(target) * _formation_defense(target) * 0.5
-	# Sort de feu : Résistance aux flammes de la cible (80 % au plus).
-	if kind == "spell" and attacker["element"] == "Feu":
-		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], "Résistance aux flammes") * GameData.FIRE_RESIST_PER_LEVEL)
-		target["took_fire"] = true
+	# Sort élémentaire : la résistance de la cible à cet élément (80 % au plus). Étape D : feu, vent et froid (avant :
+	# le feu seulement).
+	if kind == "spell" and GameData.ELEMENT_RESISTANCES.has(attacker["element"]):
+		var element: String = attacker["element"]
+		raw *= 1.0 - minf(0.8, GameData.skill_level(target["skills"], GameData.ELEMENT_RESISTANCES[element]) * GameData.FIRE_RESIST_PER_LEVEL)
+		target["took_elements"][element] = true
+		if target["is_hero"]:
+			target["practice"]["element:" + element] = target["practice"].get("element:" + element, 0) + 1
+		if element == "Feu":
+			target["took_fire"] = true
 	if above < 0:
 		raw *= 1.0 + above * GameData.HEIGHT_DEFENSE_PER_LEVEL
 	# Peau de pierre (compétence de promotion) : la cible encaisse mieux.
@@ -1010,8 +1073,10 @@ func _after_fight() -> void:
 				and GameData.fusion_ready(fighter["skills"], "Épée et bouclier"):
 			_announce_fusion(fighter, GameData.fuse_skills(fighter["skills"], "Épée et bouclier"))
 		# Résistance aux flammes : un héros qui a subi du feu et tient debout peut l'apprendre (ou la monter).
-		if standing and fighter["took_fire"] and randf() < GameData.FIRE_RESIST_CHANCE:
-			_improve_skill(fighter, "Résistance aux flammes", "a appris du feu")
+		# Étape D : de même pour le vent et le froid (même chance), dans cet ordre.
+		for element in GameData.ELEMENT_RESISTANCES:
+			if standing and fighter["took_elements"].has(element) and randf() < GameData.FIRE_RESIST_CHANCE:
+				_improve_skill(fighter, GameData.ELEMENT_RESISTANCES[element], "a appris %s" % ELEMENT_WORDS[element])
 		# Compétences exclusives (P2g) : un événement vécu peut les éveiller (ou les monter), chez un héros qui
 		# a l'accès du pôle et tient debout. Pas de tirage pour les autres (combats identiques à graine égale).
 		if standing and not quest.get("duel", false):

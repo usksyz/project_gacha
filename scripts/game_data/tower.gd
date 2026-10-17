@@ -747,6 +747,46 @@ func _plain(text: String) -> String:
 	return regex.sub(text, "", true).strip_edges()
 
 
+## Étape D (le porteur du projet : « la répétition d'une action avec un sens permet de débloquer et améliorer des
+## compétences ») : ce que le héros a vécu pendant le combat (Battle._note_practice) s'ajoute à ses besoins
+## (hero["practice_needs"] : {compétence: poids}), les anciens s'estompant (PRACTICE_DECAY par combat). C'est ce
+## qu'il voudra travailler au terrain (training_wish, lobby.gd). Poids : projet, provisoires.
+const PRACTICE_DECAY := 0.7
+const PRACTICE_WEIGHTS := {"pris_au_contact": 1.0, "tirs_subis": 1.0, "mage": 1.5, "element": 0.7, "au_bouclier": 0.3,
+	"esquives": 0.3, "arme": 0.15, "mage_allie": 1.0}
+
+
+func merge_practice(hero: Dictionary, fighter: Dictionary, battle: Battle) -> void:
+	var needs: Dictionary = hero.get("practice_needs", {})
+	for skill_name in needs.keys():
+		needs[skill_name] *= PRACTICE_DECAY
+	var practice: Dictionary = fighter["practice"]
+	var shooter: bool = hero["class"] == "Archer" or fighter["weapon"] == "Arc"
+	var add := func(skill_name: String, amount: float):
+		if amount > 0.0:
+			needs[skill_name] = needs.get(skill_name, 0.0) + amount
+	add.call("Maîtrise de la dague" if shooter else "Mouvement souple",
+		practice.get("pris_au_contact", 0) * PRACTICE_WEIGHTS["pris_au_contact"])
+	add.call("Parade des projectiles", practice.get("tirs_subis", 0) * PRACTICE_WEIGHTS["tirs_subis"])
+	add.call("Utilisation du bouclier", practice.get("au_bouclier", 0) * PRACTICE_WEIGHTS["au_bouclier"])
+	add.call("Mouvement souple", practice.get("esquives", 0) * PRACTICE_WEIGHTS["esquives"])
+	for key in practice:
+		var parts: PackedStringArray = key.split(":")
+		if parts.size() != 2:
+			continue
+		match parts[0]:
+			"arme":
+				add.call(parts[1], practice[key] * PRACTICE_WEIGHTS["arme"])
+			"mage", "element":
+				add.call(ELEMENT_RESISTANCES.get(parts[1], ""), practice[key] * PRACTICE_WEIGHTS[parts[0]])
+	# Un mage élémentaire dans l'équipe : on veut pouvoir se battre à côté de lui sans en souffrir.
+	for ally in battle.heroes:
+		if ally["id"] != fighter["id"] and ally["class"] == "Mage" and ELEMENT_RESISTANCES.has(ally["element"]):
+			add.call(ELEMENT_RESISTANCES[ally["element"]], PRACTICE_WEIGHTS["mage_allie"])
+	needs.erase("")
+	hero["practice_needs"] = needs
+
+
 ## Combats gardés dans hero["recent_battles"] (le mémorial en relit jusqu'à trois).
 const RECENT_BATTLES_KEPT := 3
 
@@ -877,7 +917,12 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			if fighter["shots"] > 0:
 				report["skills"].append_array(add_skill_progress(hero, "Maîtrise de l'arc",
 					fighter["shots"], skill_progress_needed("Maîtrise de l'arc")))
+			# Étape D : la dague de secours d'un archer progresse coup par coup (comme l'arc tir par tir).
+			if fighter["dagger_hits"] > 0:
+				report["skills"].append_array(add_skill_progress(hero, "Maîtrise de la dague",
+					fighter["dagger_hits"], skill_progress_needed("Maîtrise de la dague")))
 			report["skills"].append_array(_combat_feats(hero, fighter, battle))
+			merge_practice(hero, fighter, battle)  # (étape D) ce qu'il a vécu : ce qu'il voudra travailler
 			report["skills"].append_array(check_evolutions(hero))
 			# Ce qu'il a fait pendant le combat oriente la croissance de ses stats (voir heroes.gd).
 			add_activity(hero, fighter["acts"])
