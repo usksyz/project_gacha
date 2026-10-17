@@ -18,11 +18,12 @@ extends GameItems
 ## « rates » : probabilité de chaque rareté, de la plus haute à la plus basse (le total fait 1.0,
 ## soit 100 %). Une rareté absente ne peut pas sortir. Taux provisoires.
 ## Invocation normale, demande du porteur du projet : des 1 étoile presque toujours, des 2 et 3 étoiles
-## très très rares (avant : 3 étoiles 10 %, 2 étoiles 30 %). Sa première x10 (tutoriel) est à part :
-## voir _first_summon_rarities.
+## très très rares (avant : 3 étoiles 10 %, 2 étoiles 30 % ; puis 0,5 % et 2 %). Aucune garantie. Sa première
+## x10 (tutoriel) est à part : voir _first_summon_rarities.
+## Prompt 1 (économie, sur le modèle des gachas existants) : 3 étoiles 0,7 %, 2 étoiles 2,3 %, 1 étoile 97 %.
 const SUMMON_TYPES := {
 	"normal": {"name": "Invocation normale", "cost": 5000, "currency": "gold", "mages": false,
-		"rates": {3: 0.005, 2: 0.02, 1: 0.975}},
+		"rates": {3: 0.007, 2: 0.023, 1: 0.97}},
 	"special": {"name": "Invocation spéciale", "cost": 100, "currency": "gems", "mages": true,
 		"rates": {5: 0.04, 4: 0.21, 3: 0.75}},
 }

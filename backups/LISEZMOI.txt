@@ -1,0 +1,2 @@
+Copies des fichiers avant chaque prompt (avant-promptN), demandées par le porteur du projet.
+Le fichier .gdignore empêche Godot de lire ces copies (sinon les class_name seraient en double).
