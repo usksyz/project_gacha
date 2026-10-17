@@ -325,6 +325,13 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   pendant le combat (ce qui peut changer le résultat) ou les laisse se débrouiller ; plus tard, les
   consignes de la salle d'opération seront apprises peu à peu par les héros qui participent au
   combat. Vue isométrique 3D depuis C2 (avec les nouveaux visuels), la vue du dessus reste disponible.
+- Prochain palier (prompt 5, point 1) : encart de l'écran Donjons (`DungeonsScreen._refresh_milestone`,
+  `GameData.next_milestone`, `tower.gd`) : le prochain étage de boss et sa quête ; l'avis du Système en mots (niveau
+  moyen des `TEAM_SIZE` meilleurs héros, niveau x étoiles, face aux monstres de l'étage, à `MILESTONE_READY_MARGIN` (2)
+  niveaux près : « Tes héros ne sont pas prêts. » ... « Tes héros semblent prêts. ») ; des conseils (équipe incomplète,
+  armes, potions pour une quête longue, défense de la cité) ; ce qu'il débloque (`MILESTONE_UNLOCKS` : le donjon
+  journalier à l'étage 5 ; toujours : récompenses triplées, pierres d'attribut, palier suivant). Jamais de niveau
+  chiffré. Banc : `tools/test_prompt5.gd`.
 - Tour : on peut refaire un étage déjà conquis (Donjons > « Refaire un étage ») pour entraîner une
   nouvelle équipe ou l'équipe principale : récompenses baissées à la demande du porteur du projet
   (`REPLAY_XP_RATE` = moitié de l'expérience, `REPLAY_GOLD_RATE` = 20 % de l'or), pas de gemmes,
