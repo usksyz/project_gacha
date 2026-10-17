@@ -30,6 +30,16 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   programme, le temps dans la Tour ne compte pas) et reprend l'entraînement après.
   À terme (pas encore fait) : le temps du lobby ira 3 fois plus vite que le temps réel, et les héros se
   baladeront et feront des choses d'eux-mêmes, comme aller au terrain d'entraînement.
+  Étape A (notes du porteur du projet : « en auto, suggestions, à plusieurs, plus que bouclier et épée ») : 7 programmes
+  (`TRAINING_SKILLS` : maîtrises de l'épée, du bouclier, de la lance, de la dague, du fouet, de l'arc, et Mouvement
+  souple, qui suit les affinités de la personnalité ; `TRAINING_STATS` : la stat exercée) ; `TRAINING_SLOTS` 5 (avant 3).
+  `lobby.gd`, section « Entraînement automatique » : `training_suggestion` / `training_order` (arme de prédilection, arme
+  portée, armes de sa classe, bouclier pour les classes à bouclier, esquive ; pas un programme au maximum, hors
+  affinités ou où il stagne) ; bouton « Auto » (`set_auto_training`, `hero["training_auto"]` : il passe tout seul au
+  programme suivant une fois le sien au maximum, `_auto_next_program`, déclarée vide dans `training.gd`) ; « Entraîner
+  automatiquement » (`auto_fill_training` : les héros sans travail ni repos, les plus rares d'abord, chacun en auto).
+  Points par séance mis à l'échelle de la compétence (l'arc, compté par flèche, garde le même nombre de séances par
+  niveau). Écran : suggestion du Système sur chaque carte, boutons en plusieurs lignes. Banc : `tools/test_etapeA.gd`.
 - Affectations (bouton du hub, `scripts/assignment_panel.gd`) : `POSTS_PER_BUILDING` = 2 postes
   d'assistant par bâtiment construit (`hero["post"]`) ; un poste et l'entraînement s'excluent.
   Un héros parti (Tour ou donjon journalier, `GameData.is_away`) ne s'entraîne pas et ne compte pas à son poste.

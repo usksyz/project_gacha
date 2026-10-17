@@ -251,6 +251,11 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Sinon, à la fin des 8 s, mort définitive (`_die` : stress des alliés, peur). Fin du combat (`_after_fight`) :
   sauvé si un allié debout peut le rejoindre avant la fin de son agonie, sinon il meurt. Mort de stress :
   sans agonie (`instant`). Immortel du mode dev : même agonie, puis « à terre » au lieu de mourir.
+  Étape A (notes du porteur du projet, remplace ce qui précède sur ces deux points) : un héros stabilisé (allié ou
+  potion) se relève avec `AGONY_STABILIZED_HP` de sa vie et REPREND le combat (`_stabilize` : il reste `present`, peut
+  retomber à l'agonie) ; il ne quitte l'étage qu'à la fin, avec les autres. Encore à l'agonie quand l'étage se termine :
+  soigné (`_heal_at_end`, arme plantée comprise, « soigné à la fin de l'étage ») s'il reste un héros debout ; toute
+  l'équipe à terre (défaite complète) : personne ne le ramène, il meurt. Mesures : `docs/mesures.md` (« Étape A »).
   Arme plantée (œuvre, ch. 11 : Jenna laisse la lame dans la plaie de Zid, qui se viderait de son sang) : le coup
   qui met à l'agonie peut laisser l'arme dans la plaie (`fighter["embedded"]`, `GameData.embed_chance`) :
   lance, monstre Guerrier armé ou boss `EMBED_HEAVY_CHANCE` (45 %), autre lame `EMBED_BLADE_CHANCE` (25 %),
