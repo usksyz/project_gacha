@@ -158,3 +158,24 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   sans 83,7 / 85,5 % et 85,3 / 80,7 %. Les effets de la personnalité ne font pas baisser l'équipe préparée (plutôt +1,5
   point). Avant P2 (prompt 2, 300 combats) : 89,7 / 87,3 % ; l'écart restant (environ 3 points) est proche du bruit des
   séries de 300 combats (±3,5) ; les « -7 / -8 points » du prompt 2 en étaient en partie. Pas de rééquilibrage.
+
+## Étape E, points 1 et 2 (vigilance des monstres, dispositions selon la mission, exploration des héros)
+- `sim_tower ... combats=300 graine=7` avant (eee5e49) → après, victoires % (morts par combat) :
+  brute étages 1 / 2 / 3 / 4 / 5 / 10 : 100 (0,09) / 54,3 (2,60) / 42,7 (3,23) / 35,3 (3,49) / 34,7 (3,54) / 20,7 (3,77) →
+  100 (0,21) / 54,3 (2,70) / 34,3 (3,61) / 37 (3,54) / 34,7 (3,54) / 20,7 (3,77) ;
+  préparée : 100 (0) / 90 (0,75) / 86 (1,02) / 84,7 (1,07) / 64 (2,20) / 40,7 (2,97) →
+  100 (0,03) / 90,3 (0,75) / 79,3 (1,41) / 81 (1,26) / 64 (2,20) / 40,7 (2,97).
+  Étages 5 (survie) et 10 (défense) : identiques au combat près (horde, rien ne change). Par disposition (après) :
+  étage 2 brute patrouilles 58,3 %, embuscade 50 % ; préparée 90,7 / 90 %. Étages 3 et 4 brute : patrouilles 43-48 %,
+  endormis 38-41 %, camp 31-38 % (alarme générale dans 46 % des combats), poste 21-24 % ; préparée : 75 à 84 % partout
+  (camp le plus dur). Durée moyenne : 19 à 37 s (avant : le combat commençait par l'attente des monstres).
+  Cause de la baisse de l'étage 3 : les héros attaquent maintenant des monstres groupés (camp, poste en hauteur),
+  alors qu'avant les monstres arrivaient en file sur leur ligne. Le ralliement (« se placer, puis attaquer ») a déjà
+  repris 3 à 4 points ; l'infiltration et l'assassinat (point 3) doivent rendre l'avantage à une équipe discrète.
+  Pas de rééquilibrage des monstres.
+- Défauts trouvés pendant les mesures et corrigés avant le commit : rondes à deux points trop proches (allers-retours sur
+  place : 80 « bloqués sans raison » à l'étage 1) ; compte à rebours forcé juste avant l'alarme (qui ne sonnait jamais) ;
+  ralliement qui restait en place quand les monstres repérés s'éloignaient ; but d'exploration sur un toit jamais « vu »
+  d'en bas (l'équipe l'attendait : 3 défaites au temps sur 80 à l'étage 1). Après : 0 défaite sur 150 (`trace_e`).
+- Tutoriel, étage 1 (`tools/sim_tutoriel.gd`, vrai déroulé, 200 parties) : 98,5 % de victoires (avant : 100 % sur 150),
+  0,33 mort par combat ; jamais 6 défaites de suite. `test_tutoriel` : victoire au premier essai.

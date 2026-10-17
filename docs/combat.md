@@ -306,24 +306,68 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   départ des ennemis déjà vus en rouge ; puis ces ennemis) ; la liste des ennemis du choix de l'équipe ne montre que
   ceux déjà vus (« Et des ennemis que tes héros n'ont jamais vus. »). Première visite : seulement la quête (avant, la
   liste de tous les ennemis s'affichait toujours).
-  2. Placement : après « Formation de groupe », `BattleView.play(..., placement = true)` (`DungeonsScreen._start_fight`) :
-  le combat est démarré (`start()`) mais n'avance pas ; zone de départ (`Battle.start_zone()` : les lignes `hero_rows`
-  et celles entre elles) encadrée en vert dans les deux vues ; on glisse un pion (vue de dessus : `_placement_input` ;
-  vue 3D : appuyer sur un héros le prend au lieu de bouger la caméra, `BattleView3D._gui_input`) ou on touche un héros
-  puis une case ; sur un autre héros, ils échangent (`Battle.place_hero`). Boutons « Placement automatique »
-  (`auto_place` : les places habituelles) et « Commencer » (`_start_battle`, à la place de « Pause »). Un héros placé
-  par le Maître (`fighter["placed"]`) tient ce poste (`held`, comme arrivé là sur son ordre) et le Meneur ne le déplace
-  pas (`_organize_defense`). Les places sont notées dans le combat en cours (`pending_battle["placement"]`, par numéro de
-  héros) : un combat repris au lancement les garde (`_resolve_pending_battle`). Rien n'est tiré au hasard : vérifié avec
-  `capture_c2 mode=identique combats=10` avec et sans `placement=oui` (écran de placement puis « Commencer » sans rien
-  bouger) : identiques. Les duels n'ont pas de placement.
+  2. Placement par le Maître : retiré à l'étape E (demande du porteur du projet : « on ne place pas les personnages,
+  ils explorent ») ; voir « Étape E ». Le combat démarre dès « Formation de groupe ». Un combat en cours d'une ancienne
+  sauvegarde (`pending_battle["placement"]`) est repris sans ces places.
   3. Bilan : après une défaite ou une mort, `GameData.battle_debrief(battle)` (`report["debrief"]`) : `DEBRIEF_MIN` à
   `DEBRIEF_MAX` (3 à 5) moments clés des journaux de combat (le premier contact, puis par importance `DEBRIEF_WEIGHTS` :
   morts, agonie, secours, boss abattu, blessures graves, formations), remis dans l'ordre, racontés par le survivant qui
   a le plus vécu (« je » quand c'est lui), sans chiffres (`_plain` enlève les niveaux des causes). Aucun survivant :
   « Personne n'est revenu pour raconter ce qui s'est passé. » Fenêtre « Bilan » après les fenêtres des héros tombés.
-  Banc : `tools/test_prompt3.gd` (copie du projet, avec une fenêtre ; `-- captures=<dossier>` : aperçu, placement vue
-  de dessus et 3D, bilan) ; `test_tutoriel` touche « Commencer » avant le combat de l'étage 1.
+  Trop peu de moments (étape E) : une phrase sur l'exploration au début (« Nous avancions à tâtons... »), la fin
+  (retraite ou victoire), puis « Je n'en dirai pas plus. », jusqu'à 3 phrases.
+  Banc : `tools/test_prompt3.gd` (copie du projet, avec une fenêtre ; `-- captures=<dossier>` : aperçu, début d'un
+  combat dans les deux vues (il avance tout de suite), bilan).
+- Étape E (demande du porteur du projet, après l'étape D : « les héros sont invoqués, découvrent la mission, explorent,
+  se placent en position d'attaque ; les monstres n'attaquent que s'ils voient ou entendent l'ennemi, font des rondes ;
+  pas que des rondes : ennemis stationnés dans leur camp avec des guetteurs, infiltration et assassinat » ; ajout du
+  projet, chiffres provisoires dans `tower.gd`, section « Vigilance des monstres et exploration »). Points 1 et 2 :
+  1. Vigilance des monstres (`scripts/battle_alert.gd`, `BattleAlert`, `Battle.alert`). Disposition des ennemis selon la
+  mission (`ENEMY_DISPOSITIONS`, tirée de la graine de la carte : un étage figé garde la sienne, `disposition_for`) :
+  extermination (étage 1, village envahi) « pillage » (dispersés, chacun rôde autour de sa place, les bêtes plus loin) ;
+  subjugation « embuscade » (cachés dans les herbes hautes ou derrière un rocher, un muret, un bloc ; vus seulement à
+  moins de `HIDDEN_SIGHT` cases, + `HIDDEN_ACUITY` par palier d'Acuité ; ils bondissent quand un héros passe à moins de
+  `AMBUSH_TRIGGER`, fenêtre « Embuscade ! ») ou « patrouilles » (groupes de 2 ou 3 en ronde) ; annihilation « camp »
+  (autour d'un feu en haut de la carte, au repos, `GUARDS_PER_CAMP` guetteurs tournés vers les héros, les tireurs
+  d'abord, sur la case la plus haute près d'eux, qui balaient du regard ; une patrouille fait le tour), « endormis » (le
+  camp dort), « poste » (fortifié sur la hauteur la plus haute de la moitié ennemie : tireurs en haut, les autres au
+  pied) ou « patrouilles » ; survie, défense, duel : « horde » (comme avant l'étape E, rien ne change : vérifié, étages
+  5 et 10 identiques au combat près). États d'un monstre (`fighter["state"]`) : sommeil (aucun bâtonnet, ouïe x
+  `SLEEP_HEARING_FACTOR`), repos (vue x0,6), guet (x1,35), ronde (au pas `PATROL_PACE`), poste, embusque, fouille (il va
+  voir un bruit au pas `SEARCH_PACE`, regarde `SEARCH_SECONDS`, puis reprend sa place ; un dormeur réveillé passe au
+  repos), alerte (il chasse, comme avant). Un monstre qui repère un héros réagit après `REACTION_SECONDS` (selon son
+  état : dormeur 2,5 s, repos 1,2 s...), puis crie (`raise`) : les monstres à moins de `SHOUT_RANGE` passent en alerte ;
+  un guetteur donne l'alarme générale (`general_alarm` : tout le camp, fenêtre « Alarme ! », les renforts arrivent en
+  courant) ; un embusqué fait bondir l'embuscade. Chaque coup s'entend à `NOISE_FIGHT` cases (`noise`) : les curieux
+  viennent voir, un guetteur qui l'entend donne l'alarme ; un monstre frappé passe en alerte (`on_hit`). Sans contact au
+  bout de `ALARM_SECONDS`, les monstres flairent l'équipe (alarme générale). Renforts sans alarme : ils sortent du camp
+  ou du poste dans l'état de leurs compagnons, ou font une ronde (`on_spawn`). Compte à rebours : hors horde, au premier
+  coup échangé (ou à l'alarme du temps), comme la survie ; « 1:30 au premier contact » à l'écran. Journal : seulement
+  ce que les héros voient (« X a repéré Y et pousse un cri ! », « X se réveille en sursaut ! »), sinon « Des cris
+  retentissent plus loin ». Écran : au-dessus d'un monstre vu, « Zzz », « au repos », « guetteur », « embusqué », « ? »
+  (fouille), « ! » (2 s après son cri) (`state_tag`, deux vues). Aucun tirage au hasard pendant le combat (la disposition
+  vient d'un générateur à part) : `capture_c2 mode=identique` reste identique.
+  2. Exploration des héros (`scripts/battle_explore.gd`, `BattleExplore`, `Battle.explore`) : le placement par le Maître
+  est retiré (`BattleView.play` n'a plus de mode placement ; `Battle.place_hero`, `auto_place`, `start_zone` supprimés).
+  Sans ennemi connu (`_unaware`), un héros explore : les cases parcourues par les bâtonnets des héros sont explorées
+  (`mark`, pendant `EXPLORE_FORGET` s : ensuite on y repasse ; on explore aussi les cases autour de soi) ; l'équipe suit un
+  meneur (un Meneur, sinon le plus audacieux, `_replan`) vers la case inexplorée la plus proche, côté ennemi d'abord
+  (`EXPLORE_FORWARD`), au pas `EXPLORE_PACE` ; un but atteint, ou tenu plus de `EXPLORE_GOAL_MAX` s (un toit qu'on ne voit
+  pas d'en bas), est laissé. Rôles selon le caractère (`_role_of`) : éclaireur (Curiosité >= `SCOUT_CUR`, ou Assassin ;
+  jamais à plus de `SCOUT_AHEAD` cases du meneur), solitaire (Loyauté <= -`LONER_LOY`, ou Audace >= `LONER_AUD` et
+  Empathie <= 0 : il explore de son côté), prudent (Audace <= -`PRUDENT_AUD` : il ferme la marche), suit. Journal :
+  « L'équipe part explorer le terrain, menée par X. », « Y part en éclaireur. », « Z s'éloigne pour explorer de son
+  côté. ». Ralliement (`stalk`, « se placer en position, puis attaquer ») : un héros qui connaît des monstres qui ne l'ont
+  pas repéré (aucun en alerte ni au contact) ne charge pas seul ; le point de ralliement est là où il les a vus ; chacun
+  le rejoint et attend sans avancer, jusqu'à ce que l'équipe soit à moins de `GATHER_RADIUS` cases ou au plus
+  `GATHER_MAX` s : « L'équipe est en position : elle passe à l'attaque ! » (puis l'IA tactique de C3). Un solitaire
+  n'attend personne. Repéré, ou un monstre en alerte : l'assaut part tout de suite. Plus personne ne connaît d'ennemi :
+  l'équipe repart explorer (et se ralliera au groupe suivant) ; un ralliement sans suite est abandonné. Posté par le
+  Maître (ordre « aller ») : il garde son poste. Mode dev : en touchant un héros, son rôle et la disposition des ennemis.
+  Conseil du Système « exploration » (premier combat hors horde, hors tutoriel ; « placement » n'est plus montré).
+  Simulateur : `sim_tower ... dispo=horde|camp|...` (sans : celle de l'étage), victoires et durée par disposition.
+  Mesures : voir `docs/mesures.md`, « Étape E ». Restent (points suivants) : infiltration et assassinat, pièges
+  (point 3) ; comportements liés aux liens et au caractère (protéger, appât, couvrir une retraite ; point 4).
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

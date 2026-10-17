@@ -51,6 +51,10 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   des captures ; il recommence la partie (voir « Tests et sauvegarde locale »).
 - Étape B (demande du porteur du projet) : pas d'écran de placement pendant le tutoriel (le premier combat reste simple ;
   `DungeonsScreen._start_fight`) ; ensuite, au premier placement, conseil du Système « placement » (`TIP_IDS`, `SystemTips`).
+  Étape E : plus de placement du tout (les héros explorent, `docs/combat.md`) ; l'étage 1 du tutoriel est un village
+  « pillage » (monstres dispersés qui rôdent). Le conseil « exploration » vient au premier combat hors horde, hors
+  tutoriel ; « placement » n'est plus montré (gardé dans `TIP_IDS` pour les anciennes sauvegardes).
+  `test_tutoriel` vérifie que le combat démarre tout de suite (victoire à l'étage 1 au premier essai).
   L'étage 1 du tutoriel n'a pas été adouci : `tools/sim_tutoriel.gd` (vrai déroulé, 150 parties) donne 100 % de victoires ;
   les défaites répétées vues venaient du banc `test_tutoriel` (il attendait 20 s la fenêtre de l'étape 5 ; maintenant
   jusqu'à 60 s).
