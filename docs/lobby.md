@@ -91,3 +91,13 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   n'apparaissent plus par-dessus un combat de la Tour (`_in_battle` : `pending_battle` non vide, placement compris) ;
   elles attendent, puis `_check_held_windows` (toutes les 3 s) les montre une à une, et montre aussi le rapport d'un
   nouveau jour si le jeu reste ouvert.
+- Étape D (le porteur du projet : « on ne choisit pas l'entraînement, les héros s'entraînent à ce qu'ils veulent ; la
+  répétition d'une action avec un sens débloque et améliore des compétences ») : REMPLACE la suggestion et « Auto » de
+  l'étape A. `lobby.gd`, section « Entraînement » : `training_wish(héros)` = le plus fort de ses besoins vécus
+  (`hero["practice_needs"]`, voir `docs/combat.md`), sinon son arme (`training_order`) ; Curieux : préfère ce qu'il ne sait
+  pas (+5 % par palier), Persévérant : tient à son programme (+5 % par palier) ; seulement ce qu'il peut encore apprendre
+  (`_can_train` : affinités, incompatibilités, maximum). Raison en mots, sans chiffres (`_wish_reason` ; mode dev : les
+  besoins chiffrés). Revu à chaque séance (`_wished_program`, déclarée vide dans `training.gd`) : son envie change après un
+  combat, il change de programme (annoncé). Le Maître : « Envoyer au terrain » (`send_to_training`), « Repos »,
+  « Envoyer au terrain les héros qui ne font rien » (`auto_fill_training` : ceux qui ont le plus envie d'abord).
+  11 programmes : les maîtrises, l'esquive, Parade des projectiles, les trois résistances. Banc `tools/test_etapeD.gd`.

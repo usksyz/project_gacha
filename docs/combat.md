@@ -392,3 +392,14 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   autres types de quêtes (escorte, invasion...).
 - Étape C : les chiffres de combat d'une même cible s'empilent (`BattleView.float_ranks`, `FLOAT_LINE`) au lieu de se
   chevaucher, dans les deux vues.
+- Étape D, ce que les héros vivent (`Battle._note_practice`, sans tirage ; `fighter["practice"]`) : pris au contact en se
+  battant de loin (tireur, mage, soigneur), touché par des tirs en se battant au contact, coups au bouclier, esquives, coups
+  portés avec chaque arme, éléments subis. Fin de combat (`merge_practice`, `tower.gd`) : ajouté aux besoins du héros
+  (`PRACTICE_WEIGHTS`), les anciens x`PRACTICE_DECAY` (0,7) par combat ; un mage élémentaire dans l'équipe donne envie de
+  sa résistance. Pris au contact → Maîtrise de la dague (tireur) ou esquive (mage, soigneur) ; tirs subis → Parade des
+  projectiles ; éclaboussures d'un mage allié ou sorts ennemis → résistance à l'élément.
+  Nouveau en combat : Parade des projectiles (`PARRY_PER_LEVEL` 4 %, 40 % au plus, au contact, pas une surprise : « paré ! ») ;
+  résistances au vent et au froid (`ELEMENT_RESISTANCES` ; apprises en subissant l'élément, comme le feu) ; le sort de
+  zone d'un mage HÉROS éclabousse les alliés près de sa cible (`_splash` : `FRIENDLY_SPLASH` 25 % de son attaque, moins
+  la résistance, jamais mis à terre ; ajout du projet) ; la dague de secours d'un archer profite de Maîtrise de la dague,
+  qui progresse coup par coup (`dagger_hits`, 50 par niveau). Sans mage héros, combats identiques (sim_tower, 8 séries).
