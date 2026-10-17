@@ -79,6 +79,9 @@ func update_training() -> void:
 	for hero in trainees():
 		if is_away(hero):
 			continue  # dans la Tour ou au donjon journalier : pas d'entraînement pendant ce temps
+		if is_resting(hero):
+			hero["training_since"] = now  # (prompt 4) jour de repos : pas de séance ; elle repartira de zéro après
+			continue
 		var since: float = hero.get("training_since", now)
 		if since > now:
 			since = now  # l'horloge de l'appareil a reculé

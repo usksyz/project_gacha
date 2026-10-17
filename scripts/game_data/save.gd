@@ -33,7 +33,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ## 9 : économie (prompt 1) : garantie de l'invocation spéciale à la Genshin (« pity » = tirages sans 5 étoiles,
 ##     borné à PITY5_LIMIT - 1 ; « pity4 » = sans 4 étoiles ou mieux, 0 si absent), invocation gratuite du jour
 ##     (« invocation_gratuite », absente = pas encore prise).
-const SAVE_VERSION := 9
+## 10 : vie de la cité (prompt 4) : demandes des héros (« demandes », « demandes_maj »), jour du rapport de la fée
+##     (« rapport_du_jour »), jour de repos (hero["rest_until"]) ; absents = rien en attente, rien vu.
+const SAVE_VERSION := 10
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -67,6 +69,9 @@ func save_game() -> void:
 	file.set_value("partie", "querelles_maj", quarrels_checked_at)
 	file.set_value("partie", "nouvelles_relations", relation_news)
 	file.set_value("partie", "defis", pending_challenges)
+	file.set_value("partie", "demandes", pending_requests)
+	file.set_value("partie", "demandes_maj", requests_checked_at)
+	file.set_value("partie", "rapport_du_jour", daily_report_day)
 	file.set_value("partie", "conseils_vus", seen_tips)
 	file.set_value("partie", "tutoriel", tutorial_step)
 	file.set_value("partie", "bibliotheque", library)
@@ -110,6 +115,10 @@ func load_game() -> bool:
 	quarrels_checked_at = file.get_value("partie", "querelles_maj", 0.0)
 	relation_news = file.get_value("partie", "nouvelles_relations", [])
 	pending_challenges = file.get_value("partie", "defis", [])
+	# Vie de la cité (version 10) : absente d'une ancienne sauvegarde = rien en attente.
+	pending_requests = file.get_value("partie", "demandes", [])
+	requests_checked_at = file.get_value("partie", "demandes_maj", 0.0)
+	daily_report_day = file.get_value("partie", "rapport_du_jour", "")
 	# Conseils du Système : une partie d'avant les conseils n'est pas celle d'un nouveau joueur, on les
 	# compte comme vus (Paramètres > « Réafficher les conseils » pour les revoir).
 	seen_tips = file.get_value("partie", "conseils_vus", TIP_IDS.duplicate())
@@ -194,6 +203,9 @@ func _new_game() -> void:
 	quarrels_checked_at = 0.0
 	relation_news = []
 	pending_challenges = []
+	pending_requests = []
+	requests_checked_at = 0.0
+	daily_report_day = ""
 	seen_tips = []  # partie neuve : le Système accueille le Maître (voir show_tip)
 	library = Library.new_library()
 	memorial = Memorial.new_memorial()

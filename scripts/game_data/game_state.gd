@@ -20,6 +20,8 @@ signal relations_changed
 signal tip_requested(tip_id: String)
 ## Le tutoriel a changé d'étape (ou s'est terminé) : main.gd met à jour le bandeau et les onglets permis.
 signal tutorial_changed
+## (prompt 4) Une demande d'un héros attend dans pending_requests : main.gd l'affiche en carte Oui / Non.
+signal requests_changed
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +118,11 @@ var quarrels_checked_at := 0.0
 var relation_news: Array = []
 ## Défis lancés par les héros, en attente de la réponse du Maître : [{"challenger": numéro, "rival": numéro}].
 var pending_challenges: Array = []
+## (prompt 4) Demandes des héros en attente : [{"kind": "join" | "rest", "hero": numéro, "team", "reason"}] ;
+## dernière heure comptée pour elles ; jour (date de l'appareil) du dernier rapport de la fée.
+var pending_requests: Array = []
+var requests_checked_at := 0.0
+var daily_report_day := ""
 ## Conseils du Système déjà montrés (identifiants de TIP_IDS) : chacun ne s'affiche qu'une fois.
 var seen_tips: Array = []
 ## Étape du tutoriel obligatoire d'une partie neuve (voir TUTORIAL_STEPS) ; "" = terminé (ou ancienne partie).

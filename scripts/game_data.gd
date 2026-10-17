@@ -41,11 +41,13 @@ func _ready() -> void:
 	var timer := Timer.new()
 	timer.wait_time = 5.0
 	update_quarrels()
+	update_requests()
 	timer.timeout.connect(func():
 		update_expedition()
 		update_training()
 		update_mental()
-		update_quarrels())
+		update_quarrels()
+		update_requests())  # (prompt 4) demandes des héros
 	add_child(timer)
 	timer.start()
 
@@ -67,6 +69,24 @@ func dev_create_hero(rarity: int, hero_class := "") -> Dictionary:
 	roster.append(hero)
 	save_game()
 	return hero
+
+
+## (prompt 4) Une demande d'un héros tout de suite (si quelqu'un a quelque chose à demander). Renvoie le texte.
+func dev_force_request() -> String:
+	var request := roll_request()
+	if request.is_empty():
+		return "Personne n'a rien à demander (il faut un héros sans équipe ambitieux, loyal ou ami d'un membre, ou un héros fatigué au travail)."
+	pending_requests.append(request)
+	save_game()
+	requests_changed.emit()
+	return "Demande ajoutée (%s)." % request["reason"]
+
+
+## (prompt 4) Le rapport du jour de la fée sera de nouveau montré.
+func dev_reset_daily_report() -> void:
+	daily_report_day = ""
+	save_game()
+	requests_changed.emit()  # (main.gd regarde alors s'il doit montrer le rapport)
 
 
 ## Rend l'invocation gratuite du jour (comme si elle n'avait pas encore été prise).

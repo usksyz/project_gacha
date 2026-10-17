@@ -530,7 +530,7 @@ func forge_built() -> bool:
 func forge_assistants() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for hero in posted_heroes("forge"):
-		if not is_away(hero):
+		if not is_away(hero) and not is_resting(hero):  # (prompt 4 : un jour de repos, il ne vient pas)
 			result.append(hero)
 	return result
 

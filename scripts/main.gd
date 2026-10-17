@@ -34,7 +34,7 @@ var settings_panel: SettingsPanel
 ## fenêtre de main.gd n'est ouverte.
 var tip_queue: Array[String] = []
 ## Noms des fenêtres de main.gd : un conseil attend qu'elles soient fermées.
-const WINDOW_NAMES := ["Tip", "RelationNews", "Challenge", "Facility", "Absence"]
+const WINDOW_NAMES := ["Tip", "RelationNews", "Challenge", "Facility", "Absence", "Request", "DailyReport"]
 ## Tutoriel (voir GameData, game_state.gd) : l'écran de chaque étape. Son onglet est le seul permis.
 ## Armes : le hub, où une flèche montre l'armurerie. Synthèse : le hub, où la chambre se construit sous les
 ## yeux du Maître, qui la touche pour y entrer.
@@ -122,6 +122,9 @@ func _ready() -> void:
 	GameData.show_tip("bienvenue")  # partie neuve : le Système accueille le Maître (une seule fois)
 	if GameData.tutorial_step != "":
 		GameData.show_tutorial_tip()  # la fenêtre de l'étape en cours, si elle n'a pas encore été lue
+	# (prompt 4) le rapport du jour de la fée, puis les demandes des héros, quand aucune autre fenêtre n'est ouverte
+	GameData.requests_changed.connect(func(): _show_city_life.call_deferred())
+	_show_city_life.call_deferred()
 
 
 ## Tutoriel : le bandeau dit quoi faire, et seul l'onglet de l'étape est permis (aucun pendant la
@@ -170,7 +173,11 @@ func _window_open() -> bool:
 
 ## Affiche le prochain conseil en attente : fenêtre système « Conseil », bouton « Compris ».
 ## Il n'est noté comme vu (dans la sauvegarde) qu'une fois la fenêtre fermée.
+## Sans conseil en attente : la vie de la cité (rapport du jour, demandes), voir _show_city_life.
 func _show_next_tip() -> void:
+	if tip_queue.is_empty() and not _window_open():
+		_show_city_life()
+		return
 	if tip_queue.is_empty() or _window_open():
 		return
 	var tip_id: String = tip_queue.pop_front()
@@ -207,6 +214,81 @@ func _show_next_tip() -> void:
 		_show_next_tip(), 24)
 	ok.custom_minimum_size.y = 80
 	box.add_child(ok)
+
+
+## Vie de la cité (prompt 4) : quand aucune fenêtre n'est ouverte, d'abord le rapport du jour de la fée (une fois
+## par jour), puis la prochaine demande d'un héros (carte Oui / Non). Une fenêtre à la fois.
+func _show_city_life() -> void:
+	if _window_open() or not tip_queue.is_empty() or GameData.tutorial_step != "":
+		return
+	if GameData.daily_report_due():
+		_show_daily_report()
+		return
+	var request := GameData.next_request()
+	if not request.is_empty():
+		_show_request(request)
+
+
+## Le rapport du jour : ce que la fée a vu (des effets, jamais des causes).
+func _show_daily_report() -> void:
+	var lines: Array = GameData.take_daily_report()
+	if lines.is_empty():
+		return
+	var box := _city_life_window("DailyReport")
+	lines.push_front("Bonjour, Maître ! Voici ce que j'ai vu depuis hier :")
+	box.add_child(UI.make_system_window("Rapport de la fée", lines))
+	var ok := UI.make_button("Merci", func():
+		_close_window(box.get_meta("overlay"))
+		_show_next_tip.call_deferred(), 24)
+	ok.custom_minimum_size.y = 80
+	box.add_child(ok)
+
+
+## Une demande d'un héros : une carte, « Oui » ou « Non », puis ce que l'on voit de sa réaction.
+func _show_request(request: Dictionary) -> void:
+	Settings.vibrate(80)
+	var box := _city_life_window("Request")
+	var lines: Array = [request["text"]]
+	if Settings.dev_mode:
+		lines.append("(mode dev) %s ; confiance envers le Maître %+.0f" % [request["reason"],
+			PersonalityEngine.trust(request["hero"])])
+	var card := UI.make_system_window("Demande", lines)
+	box.add_child(card)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 16)
+	box.add_child(buttons)
+	for answer in [false, true]:
+		var button := UI.make_button("Oui" if answer else "Non", func():
+			var result := GameData.answer_request(request, answer)
+			card.queue_free()
+			buttons.queue_free()
+			box.add_child(UI.make_system_window("Demande", result))
+			var ok := UI.make_button("Compris", func():
+				_close_window(box.get_meta("overlay"))
+				_show_next_tip.call_deferred(), 24)
+			ok.custom_minimum_size.y = 80
+			box.add_child(ok), 26)
+		button.custom_minimum_size.y = 90
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buttons.add_child(button)
+
+
+## Fond sombre et boîte centrée d'une fenêtre de la vie de la cité (« window_name » : voir WINDOW_NAMES).
+func _city_life_window(window_name: String) -> VBoxContainer:
+	var overlay := ColorRect.new()
+	overlay.name = window_name
+	overlay.color = Color(0, 0, 0, 0.75)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = 600
+	box.add_theme_constant_override("separation", 14)
+	box.set_meta("overlay", overlay)
+	center.add_child(box)
+	return box
 
 
 ## Des héros se sont brouillés à la cité (Querelleur) : une fenêtre système l'annonce. Ensuite, les défis

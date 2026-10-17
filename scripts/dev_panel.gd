@@ -81,6 +81,13 @@ func _ready() -> void:
 			return "L'invocation gratuite du jour est rendue (elle n'apparaît qu'après le tutoriel)."
 		return "L'invocation gratuite du jour est rendue (écran Invocation)."]])
 
+	_add_section(content, "Vie de la cité")
+	_add_row(content, [["Une demande maintenant", func(): return GameData.dev_force_request()],
+		["Rapport du jour à revoir", func():
+			GameData.dev_reset_daily_report()
+			return "Le rapport de la fée s'affichera (fenêtre à la fermeture des outils)."]])
+	_add_note(content, "Les bulles de la cité et les demandes montrent leur raison en mode dev.")
+
 	_add_section(content, "Tour")
 	floor_label = UI.make_label("", 22)
 	content.add_child(floor_label)
