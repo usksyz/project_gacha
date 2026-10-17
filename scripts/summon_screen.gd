@@ -19,6 +19,9 @@ const VORTEX_COLORS := {
 
 var pity_label: Label
 var roster_label: Label
+## « Invocation gratuite » : une invocation normale x1 offerte par jour (GameData.free_summon), visible tant
+## qu'elle n'est pas prise.
+var free_button: Button
 var results_grid: GridContainer
 var group_box: VBoxContainer
 ## Boutons d'invocation : [sorte, nombre, bouton], pour les griser quand on ne peut pas payer.
@@ -51,7 +54,16 @@ func on_shown() -> void:
 
 
 func _on_summon(summon_type: String, count: int) -> void:
-	var heroes := GameData.summon(summon_type, count)
+	_reveal(GameData.summon(summon_type, count))
+
+
+## L'invocation gratuite du jour.
+func _on_free_summon() -> void:
+	_reveal(GameData.free_summon())
+
+
+## Montre les héros obtenus (rien si la liste est vide : invocation impossible).
+func _reveal(heroes: Array[Dictionary]) -> void:
 	if heroes.is_empty():
 		return
 	_show_results(heroes)
@@ -103,6 +115,8 @@ func _refresh_labels() -> void:
 	roster_label.text = "Héros : %d / %d" % [alive, GameData.HERO_LIMIT]
 	if GameData.free_hero_slots() == 0:
 		roster_label.text += " — résidences pleines"
+	free_button.visible = GameData.free_summon_available()
+	free_button.disabled = GameData.free_hero_slots() < 1
 	for entry in summon_buttons:
 		# On ne peut invoquer que si l'on peut payer ET s'il reste assez de place dans les résidences.
 		# Pendant le tutoriel, seule l'invocation qu'il demande est permise (GameData.summon_allowed).
@@ -165,6 +179,10 @@ func _build_ui() -> void:
 	roster_label = UI.make_label("", 24)
 	roster_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(roster_label)
+
+	free_button = UI.make_button("Invocation gratuite (une par jour)", _on_free_summon, 24)
+	free_button.custom_minimum_size.y = 72
+	layout.add_child(free_button)
 
 	if Settings.new_visuals:
 		_add_illustrated_summons(layout)

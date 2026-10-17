@@ -145,6 +145,32 @@ func summon(summon_type: String, count: int) -> Array[Dictionary]:
 	return results
 
 
+## Invocation gratuite quotidienne (prompt 1, économie) : une invocation normale x1 offerte par jour réel (jour
+## de l'appareil, comme le donjon journalier). Pas pendant le tutoriel ; elle respecte la limite de héros.
+## free_summon_day : date (« 2026-10-17 ») de la dernière prise, sauvegardée.
+func today_date() -> String:
+	return Time.get_date_string_from_system()
+
+
+func free_summon_available() -> bool:
+	return tutorial_step == "" and free_summon_day != today_date()
+
+
+## Fait l'invocation gratuite du jour. Renvoie le héros obtenu (une liste d'un héros), ou une liste vide si elle
+## est déjà prise ou s'il n'y a plus de place dans les résidences.
+func free_summon() -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if not free_summon_available() or free_hero_slots() < 1:
+		return results
+	free_summon_day = today_date()
+	var hero := _create_hero(_roll_rarity("normal"), SUMMON_TYPES["normal"]["mages"])
+	roster.append(hero)
+	results.append(hero)
+	roll_linked_group(results)  # (un seul héros : jamais de groupe, mais l'annonce précédente est effacée)
+	save_game()
+	return results
+
+
 ## Combien de tirages spéciaux il reste avant le 5 étoiles sûr (1 = le prochain).
 func summons_before_pity() -> int:
 	return PITY5_LIMIT - pity_counter

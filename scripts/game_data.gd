@@ -60,13 +60,19 @@ func _ready() -> void:
 ## Crée un héros de la rareté voulue ; « hero_class » vide = classe tirée au hasard (mages possibles).
 func dev_create_hero(rarity: int, hero_class := "") -> Dictionary:
 	if hero_class == "":
-		hero_class = _roll_class(rarity, true)
+		hero_class = _roll_class(rarity, rarity >= 3)  # (mages : 3 étoiles et plus, comme à l'invocation spéciale)
 	var hero := _new_hero(HERO_NAMES.pick_random(), rarity, hero_class, GROWTH[rarity], [])
 	if hero_class == "Mage":
 		hero["element"] = MAGIC_ELEMENTS.pick_random()
 	roster.append(hero)
 	save_game()
 	return hero
+
+
+## Rend l'invocation gratuite du jour (comme si elle n'avait pas encore été prise).
+func dev_reset_free_summon() -> void:
+	free_summon_day = ""
+	save_game()
 
 
 ## Fait gagner « count » niveaux à un héros (sans dépasser son niveau maximum).

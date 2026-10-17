@@ -52,6 +52,8 @@ var gold: int:
 ## dernier 4 étoiles ou mieux.
 var pity_counter := 0
 var pity4_counter := 0
+## Date (jour de l'appareil, « 2026-10-17 ») de la dernière invocation gratuite quotidienne ("" = jamais prise).
+var free_summon_day := ""
 
 ## Prochain étage de la Tour à conquérir.
 var tower_floor := 1
