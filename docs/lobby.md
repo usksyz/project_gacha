@@ -83,3 +83,11 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   fenêtre d'entrée). Reste : niveaux de bâtiment, recettes avec les nouveaux matériaux (bois, peau de bête...),
   fonctions des bâtiments de magie, cafétéria, etc. Sauvegarde de la partie : faite
   (reste l'équilibrage de la phase 6).
+- Étape C : « Affecter automatiquement » (fenêtre des affectations, `auto_fill_posts`, `post_score`) : chaque poste libre
+  reçoit un héros sans travail (ni poste, ni entraînement, ni repos, pas parti), le plus doué pour le bâtiment (forge :
+  talent pour les métiers et compétence « Forge » ; bâtiments de magie : Intelligence ; sinon le niveau) ; les bâtiments à
+  talent sont servis d'abord ; un refus (Paresseux) passe au suivant. Banc : `tools/test_etapeC.gd`.
+- Étape C, fenêtres de la cité (`main.gd`) : demandes, rapport du jour, hostilités, défis et « Construction terminée »
+  n'apparaissent plus par-dessus un combat de la Tour (`_in_battle` : `pending_battle` non vide, placement compris) ;
+  elles attendent, puis `_check_held_windows` (toutes les 3 s) les montre une à une, et montre aussi le rapport d'un
+  nouveau jour si le jeu reste ouvert.

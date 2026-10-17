@@ -49,3 +49,8 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   normal à travers les écrans (invocation, flèche et armurerie touchées dans la cité 3D, tirage, équipe, étage 1
   jusqu'à la victoire avec les héros armés, synthèse), la reprise au lancement et les anciennes sauvegardes, avec
   des captures ; il recommence la partie (voir « Tests et sauvegarde locale »).
+- Étape B (demande du porteur du projet) : pas d'écran de placement pendant le tutoriel (le premier combat reste simple ;
+  `DungeonsScreen._start_fight`) ; ensuite, au premier placement, conseil du Système « placement » (`TIP_IDS`, `SystemTips`).
+  L'étage 1 du tutoriel n'a pas été adouci : `tools/sim_tutoriel.gd` (vrai déroulé, 150 parties) donne 100 % de victoires ;
+  les défaites répétées vues venaient du banc `test_tutoriel` (il attendait 20 s la fenêtre de l'étape 5 ; maintenant
+  jusqu'à 60 s).

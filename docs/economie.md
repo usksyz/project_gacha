@@ -72,3 +72,6 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Vérification en mode normal : `tools/test_economie.gd` (copie du projet ; il recommence la partie ; avec une
   fenêtre, `-- captures=<dossier>` : détail des taux, armurerie, forge). `tools/check_scripts.gd` : compile tous les
   scripts avec les autoloads (`--check-only` ne les connaît pas).
+- Étape B, forge à 500 gemmes avec 500 gemmes au départ : gardé (prix du cahier, et 500 gemmes de départ demandées au
+  prompt 1). Les étages 1 à 4 rapportent 600 gemmes : la forge vient après quelques étages, ou une invocation spéciale
+  avant ; c'est un choix du Maître (à revoir avec le porteur du projet s'il le trouve frustrant).

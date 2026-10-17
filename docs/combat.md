@@ -390,3 +390,5 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   (`UI.make_reward_items`), armes perdues avec les morts (`report["lost_weapons"]`), niveaux, MVP : fait.
   Glisser-déposer des héros dans le groupe : fait. Reste : équipes de 3 et quêtes à deux équipes,
   autres types de quêtes (escorte, invasion...).
+- Étape C : les chiffres de combat d'une même cible s'empilent (`BattleView.float_ranks`, `FLOAT_LINE`) au lieu de se
+  chevaucher, dans les deux vues.
