@@ -32,6 +32,7 @@ func _run() -> void:
 	_check_coordination()
 	_check_formation()
 	_check_camp()
+	_check_replay()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -450,6 +451,33 @@ func _check_camp() -> void:
 	_check(not camp.is_night() and results["endormis"].is_night() and not results["patrouilles"].is_night(),
 		"le camp endormi se passe la nuit, les autres de jour")
 	_check(results["patrouilles"].alert.tents.is_empty(), "des patrouilles : pas de camp")
+
+
+func _check_replay() -> void:
+	print("Revoir un combat")
+	var team := _team(game.floor_enemy_level(3) + 2)
+	var layout: Dictionary = load("res://scripts/map_generator.gd").generate(3, game.floor_quest(3), 21)
+	game.record_fight(team, layout["enemies"], game.floor_quest(3), layout["map"], 3)
+	var live = load("res://scripts/battle.gd").new(team, layout["enemies"].duplicate(true), game.floor_quest(3))
+	game.record_fight_battle(live)
+	live.map_data = layout["map"]
+	live.start()
+	var noise := 0.0
+	while not live.finished:
+		live.step()
+		noise += randf()  # (autre chose tire au hasard entre deux pas : ça ne doit rien changer)
+		if live.step_count == 30 and live.heroes[0]["hp"] > 0:
+			live.order_move(live.heroes[0], Vector2(12.5, 14.5))
+	var replay = game.dev_replay_battle()
+	while not replay.finished:
+		replay.step()
+	var same: bool = live.victory == replay.victory and is_equal_approx(live.time, replay.time) \
+		and live.events.size() == replay.events.size()
+	for i in live.units.size():
+		same = same and live.units[i]["hp"] == replay.units[i]["hp"]
+	_check(same and live.order_log.size() == 1, "le combat revu est identique (%.1f s, %d lignes de journal, 1 ordre)" \
+		% [replay.time, replay.events.size()])
+	_check(team[0]["level"] == game.last_fight["team"][0]["level"], "revoir ne change rien à l'équipe")
 
 
 func _check(ok: bool, text: String) -> void:
