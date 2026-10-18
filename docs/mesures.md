@@ -227,3 +227,10 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   100 (0,04) / 92,7 (0,63) / 84,7 (1,09) / 83,7 (1,08). Dans le bruit. Pièges posés 0,06 à 0,15 par combat, déclenchés
   0,00 à 0,05 (avant : 0,08 à 0,14 et 0,01 à 0,04). Étage 3, graine 21 : 3 goulets, 18 points hauts, 44 cachettes.
   Tutoriel (`sim_tutoriel`, 200 parties) : 99 %.
+- Point 5 (recherche intelligente, carte de fuite), après le point 4 → après le point 5 (étages 5 et 10 : avant = d73cf63,
+  le point 5 est le premier à les toucher, par la carte de fuite) :
+  brute 99,7 / 56 / 38 / 45,3 / 31,3 / 14,7 → 99,3 (0,18) / 51,7 (2,70) / 40,3 (3,24) / 47,7 (2,99) / 39,3 (3,34) / 20,7 (3,69) ;
+  préparée 100 / 92,7 / 84,7 / 83,7 / 67,7 / 39 → 100 (0,04) / 91,7 (0,68) / 86,7 (0,97) / 84,7 (1,09) / 73 (1,84) / 39,7 (2,99).
+  Étages 1 à 4 dans le bruit. Étage 5 : +8 (brute) et +5,3 (préparée), « bloqués sans raison » 32 → 0 (brute) : les
+  héros en fuite ne s'entassent plus au bas de la carte, ils s'éloignent des monstres. Par combat : la carte se resserre
+  sur un héros vu 20 à 46 fois, 0,1 à 4,7 cases fouillées. Tutoriel (`sim_tutoriel`, 200 parties) : 99,5 %.

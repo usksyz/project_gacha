@@ -17,8 +17,8 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   ne pas l'appeler sur un combat déjà démarré).
   `scripts/battle_view.gd` : classe `BattleView`, affiche le combat en direct (pions, coups,
   chiffres) ; on touche un héros puis un endroit ou un ennemi pour lui donner un ordre ; pause
-  (aucun ordre pendant la pause, choix du porteur du projet). La carte : vue de dessus (`arena`) ou vue
-  isométrique 3D (`arena3d`, voir « Combat v2, étape C2 ») ; le reste de l'écran est commun aux deux.
+  (aucun ordre pendant la pause, choix du porteur du projet). La carte : la vue
+  isométrique 3D (`arena3d`, voir « Combat v2, étape C2 ») ; la vue de dessus (`arena`) a été retirée (cartes, étape 1).
   Le combat continue si on change d'onglet. Il est noté dans la sauvegarde dès le début
   (`GameData.pending_battle`) : si le jeu est fermé en plein combat, il est terminé sans ordres au
   lancement suivant, et `main.gd` annonce le résultat (« Pendant ton absence »).
@@ -69,7 +69,7 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   évitement local (`_sidestep` : contourner qui se tient immobile) ; bloqué plus de `REPATH_BLOCKED` (1 s) : nouveau
   chemin qui évite le passage, un monstre quitte le flux `DETOUR_SECONDS` (3 s) et essaie une autre ruelle
   (`_blocked`). Défense : un monstre au corps à corps à qui un héros barre la route l'attaque (avant, il hésitait).
-  5. Vue de dessus (`battle_view.gd`, `_draw_cells`) : chaque case dans la couleur de son type, plus claire en
+  5. Vue de dessus (retirée depuis, voir « Cartes, étape 1 ») : chaque case dans la couleur de son type, plus claire en
   hauteur, avec sa hauteur écrite dans le coin ; échelles, escaliers, toits, clocher, rempart, murets, rochers,
   herbes ; trait sombre sur chaque bord qui tombe ; pastille de hauteur sur un combattant en hauteur.
   6. Meneur en survie : voir « Meneur en survie » (P5 gardée, et les tireurs sur les toits).
@@ -112,16 +112,15 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   coups, tirs, sorts et soins ; chiffres ; bulles « Non ! » (`BattleView.draw_bubble_on`) ; ordres en cours. Le reste de
   l'écran (chrono et vagues, barre du boss, encart de l'équipe, journal, fenêtres système, boutons) est celui de
   `BattleView`, inchangé.
-  5. Choix de la vue : `BattleView.use_3d` = `Settings.new_visuals` au début du combat (duels compris) ; mode dev : bouton
-  « Vue de dessus » / « Vue 3D » en haut, en plein combat.
+  5. Choix de la vue : retiré (cartes, étape 1) : la vue 3D pour tous, anciens visuels compris ; plus de bouton
+  « Vue de dessus ».
   6. Performance : rendu Compatibility ; réglages en constantes de `battle_view_3d.gd` (`SHADOWS`, `MSAA`,
-  `RENDER_SHRINK` : écran 3D rendu plus petit) ; mode dev : compteur d'images par seconde en haut à gauche de la vue.
+  `RENDER_SHRINK` : écran 3D rendu plus petit) ; mode dev : compteur d'images par seconde en haut à gauche de la vue (caché si l'option « Performances » est activée).
   Performance mesurée : voir `docs/mesures.md` (« Combat v2 »).
   7. Vérifications : `tools/capture_c2.tscn` (dans une copie du projet, avec une fenêtre ; voir son en-tête) :
   « mode=capture » (images, « rot », « choisi », « archer_toit », « cache » : héros posé derrière un bâtiment),
   « mode=ordres » (héros, toit, rue, montée par l'échelle : étages 1 et 5), « mode=identique » (le même combat sans
   écran et à travers l'écran 3D : 10 combats des étages 1, 2, 3, 5 et 10, identiques au caractère près).
-  Depuis C3 : « vue=dessus » (la capture dans la vue de dessus).
 - Combat v2, étape C3 (cahier, onglet « Combat v2 », section 4 « La perception en bâtonnets », section « L'IA
   tactique des héros » ; chiffres provisoires) : perception et IA tactique des héros. Aucun rééquilibrage.
   Partie A, perception (`scripts/battle_perception.gd`, `BattlePerception`, `Battle.perception` ; chiffres dans
@@ -191,7 +190,7 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Meneur garde son placement de départ (P5 + toits) : un tireur posté sur un toit le tient ; les autres gardent leur
   place (`leader_post`) jusqu'à ce qu'un ennemi connu soit à moins de 7 cases, puis l'IA.
   9. Mode dev : en touchant un héros, le bandeau dit son attitude, sa cible et ses 3 raisons (`BattleView.tactic_text`,
-  aussi en pause), et sa case choisie est encadrée en rose (carré dans la vue de dessus, losange en 3D).
+  aussi en pause), et sa case choisie est encadrée en rose (losange en 3D).
   `Battle.tactical_ai` faux : l'ancien comportement (tous foncent) ; `Battle.perception_on` faux : tout le monde sait
   tout (avant C3). Simulateur `sim_tower` : options `ia=fonce|tactique`, `perception=non`, `diag=oui` (part du temps
   de chaque attitude), `cobaye=malin|fonceur` (le 1 étoile de la place 2 : Intelligence 22, Audace -60, Maîtrise +60,
@@ -457,6 +456,32 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   l'ennemi (`_rally_spot`). Les guetteurs prenaient déjà la case la plus haute (`_best_lookout`) ; l'IA tactique n'en
   tient pas encore compte (à faire avec le point 5 du document). Mode dev : le compte des goulets, points hauts et
   cachettes dans le texte d'un héros qui explore.
+  5. Recherche intelligente et carte de fuite (`scripts/battle_search.gd`, `BattleSearch`, `Battle.search` ; chiffres
+  après `RALLY_HIDE_RADIUS`). Avant, un monstre en alerte qui ne voyait personne allait droit sur le héros le plus proche
+  (il savait où il était). Hors horde, il fouille maintenant selon une carte de probabilité partagée (`heat`, technique
+  de Dishonored 2) : un monstre en alerte voit un héros, elle se resserre sur chaque héros repéré ; sinon, toutes les
+  `SEARCH_SPREAD_INTERVAL` s, `SEARCH_SPREAD_SHARE` de chaque case passe à ses voisines (le long des passages), et les cases
+  que regardent les monstres en alerte (le long de leurs bâtonnets, et autour d'eux) sont effacées. Chaque chercheur
+  (`think`, appelé par `Battle._unaware`) vise la case la plus probable divisée par 1 + distance x
+  `SEARCH_DISTANCE_WEIGHT`, à plus de `SEARCH_CLAIM_RADIUS` cases de celles des autres (fouille partagée, `claims`), et en
+  change au plus toutes les `SEARCH_REPICK` s. Carte vide (l'alarme du temps : ils ont seulement flairé l'équipe) : comme
+  avant. Horde : comme avant. Carte de fuite (`flee_target`, `Battle._flee_cell`) : un héros qui s'enfuit (peur ou
+  rupture) court vers la case la plus loin, à pied, des monstres qu'il connaît, à au plus `FLEE_RADIUS` pas (chaque pas
+  coûte `FLEE_EFFORT`), revue toutes les `FLEE_REPLAN` s ; sans monstre connu, le bas de la carte comme avant. Vaut aussi
+  en horde. Simulateur : « recherche_vus », « recherche_fouilles » par combat.
+- Cartes (demande du porteur du projet après le point 5 du recensement « Techniques » : « améliorer les map, plus
+  grandes, du relief au sol, des constructions, si village on voit un village, une forêt avec des arbres, suppression
+  de la vue de dessus moins performante, affichage des perf du matériel hors mode dev, options dans les réglages, map
+  ronde, brouillard de guerre de ce que les héros n'ont jamais vu puis sombre si plus dans le champ de vision, bruit de
+  Perlin et autres superposés pour des cartes belles, fonctionnelles, variées et cohérentes »). Copies d'avant :
+  `backups/avant-cartesN/`.
+  1. Vue de dessus retirée (`BattleView` : plus d'`arena`, de `use_3d` ni de bouton « Vue de dessus » ; la vue 3D
+  pour tous, anciens visuels compris : écart avec la règle « les anciens visuels restent disponibles », sur demande
+  du porteur du projet). Les couleurs et outils que la vue 3D reprend restent dans `BattleView` (`TRAP_COLOR`,
+  `detect_color`, `float_ranks`, `draw_bubble_on`, `unseen`...). Performances (`scripts/perf_overlay.gd`,
+  `PerfOverlay`, ajouté par `main.gd` ; réglage `Settings.show_perf`, Paramètres > Jeu > « Performances », signal
+  `perf_changed`, enregistré dans `parametres.cfg`) : en haut à gauche de tous les écrans, hors mode dev aussi, images
+  par seconde, temps d'une image, appels de dessin, mémoire, carte graphique, processeur (cœurs), système.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

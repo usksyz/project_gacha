@@ -88,7 +88,9 @@ ou plusieurs, puis « Invoquer ». Les codes individuels (HAN, JENNA...) marchen
   fichiers puissent l'appeler) et remplacée par la vraie dans `save.gd`. Une nouvelle variable enregistrée
   va dans `game_state.gd`, et dans `save_game()` / `load_game()` / `_new_game()` (`save.gd`).
 - `scripts/settings.gd` : autoload `Settings`, paramètres du joueur (volumes, vibrations, plein écran),
-  enregistrés dans `user://parametres.cfg`.
+  enregistrés dans `user://parametres.cfg`. Option « Performances » (`show_perf`) : `scripts/perf_overlay.gd` (`PerfOverlay`)
+  affiche images par seconde, appels de dessin et matériel sur tous les écrans, hors mode dev aussi. Le combat n'a plus
+  que la vue 3D (`battle_view_3d.gd`) : la vue de dessus a été retirée (demande du porteur du projet).
 - `scripts/settings_panel.gd` : fenêtre des paramètres (roue dentée en haut à droite), avec les codes
   secrets et « Recommencer la partie » ; `scripts/code_pad.gd` : saisie des codes secrets (aussi sur la
   Place publique du hub).
