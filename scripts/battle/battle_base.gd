@@ -269,6 +269,8 @@ var traps: Array[Dictionary] = []
 var ties: BattleTies
 ## Recensement « Techniques », point 4 : l'annotation tactique de la carte (goulets, points hauts, cachettes).
 var terrain: BattleTerrain
+## Point 5 : la recherche intelligente des monstres (carte de probabilité partagée) et la carte de fuite des héros.
+var search: BattleSearch
 var assassinations := 0
 var traps_placed := 0
 var traps_sprung := 0

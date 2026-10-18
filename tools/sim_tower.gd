@@ -132,6 +132,9 @@ func _ready() -> void:
 			if battle.get("alert") != null and battle.alert.get("counts") != null:
 				for kind in battle.alert.counts:
 					watch[kind] = watch.get(kind, 0) + battle.alert.counts[kind]
+			if battle.get("search") != null:  # (point 5) carte de probabilité : héros revus, fouilles
+				for kind in battle.search.counts:
+					watch["recherche_" + kind] = watch.get("recherche_" + kind, 0) + battle.search.counts[kind]
 			if battle.get("ties") != null:
 				for kind in ties:
 					ties[kind] += battle.ties.counts[kind]

@@ -403,6 +403,22 @@ const SNEAK_EXPOSURE_MAX := 4.0
 const HIGH_MIN_LOWER := 3
 const TRAP_CHOKE_RADIUS := 2.0
 const RALLY_HIDE_RADIUS := 2.0
+# Recherche intelligente (recensement « Techniques », point 5 ; ajout du projet ; voir BattleSearch). Hors horde, un
+# monstre en alerte qui ne voit aucun héros fouille selon une carte de probabilité partagée : resserrée sur les héros
+# repérés, elle se répand toutes les SEARCH_SPREAD_INTERVAL secondes (SEARCH_SPREAD_SHARE de chaque case passe à ses
+# voisines) ; les cases que regardent les monstres sont effacées. Chaque chercheur vise la case la plus probable
+# (divisée par 1 + distance x SEARCH_DISTANCE_WEIGHT), à plus de SEARCH_CLAIM_RADIUS cases de celles des autres, et en
+# change au plus toutes les SEARCH_REPICK secondes. Carte de fuite : un héros qui s'enfuit court vers la case la plus
+# loin (à pied) des monstres qu'il connaît, à au plus FLEE_RADIUS pas, chaque pas de plus coûtant FLEE_EFFORT ; il revoit
+# son but toutes les FLEE_REPLAN secondes. Chiffres provisoires.
+const SEARCH_SPREAD_INTERVAL := 0.5
+const SEARCH_SPREAD_SHARE := 0.5
+const SEARCH_DISTANCE_WEIGHT := 0.15
+const SEARCH_CLAIM_RADIUS := 2.5
+const SEARCH_REPICK := 2.0
+const FLEE_RADIUS := 10.0
+const FLEE_EFFORT := 0.3
+const FLEE_REPLAN := 1.0
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

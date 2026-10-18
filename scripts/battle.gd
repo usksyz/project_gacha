@@ -43,6 +43,7 @@ func start() -> void:
 	# rebours attend le premier contact (ou l'alarme).
 	alert = BattleAlert.new(self)
 	alert.setup()
+	search = BattleSearch.new(self)  # (recensement « Techniques », point 5)
 	explore = BattleExplore.new(self)
 	explore.setup()
 	ties = BattleTies.new(self)
@@ -456,6 +457,7 @@ func _step() -> void:
 	if perception_on:
 		perception.tick()
 	alert.tick()
+	search.tick()
 	_refresh_costs()
 	_update_formations()
 	if not _defense_organized and not alley_exits.is_empty():
@@ -746,7 +748,8 @@ func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
 
 ## Perception (C3) : il ne connaît aucun ennemi. Un héros explore le terrain (étape E, voir BattleExplore ; en horde,
 ## ou posté par le Maître : il tient son poste, il attend de voir venir) ; un monstre en alerte avance vers le camp
-## des héros (la horde sait où ils sont, pas qui viser : il ne frappe pas avant de voir).
+## des héros (la horde sait où ils sont, pas qui viser : il ne frappe pas avant de voir). Hors horde (recensement
+## « Techniques », point 5), il fouille selon la carte de probabilité partagée (BattleSearch).
 func _unaware(unit: Dictionary, foes: Array) -> void:
 	unit["target_id"] = -1
 	if unit["is_hero"]:
@@ -754,6 +757,8 @@ func _unaware(unit: Dictionary, foes: Array) -> void:
 			return
 		if unit["pos"].distance_to(unit["post"]) > 0.3:
 			_move_towards(unit, unit["post"])
+		return
+	if search != null and search.think(unit):
 		return
 	var nearest := _nearest(unit, foes)
 	if not nearest.is_empty():

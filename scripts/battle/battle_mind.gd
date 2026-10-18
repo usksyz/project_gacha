@@ -132,8 +132,9 @@ func _rupture(fighter: Dictionary) -> void:
 	fighter["panic_target"] = -1
 	fighter["order"] = {}
 	fighter["path"] = PackedVector2Array()
-	# Il court vers le bas de la carte, loin des ennemis qui arrivent par le haut.
-	fighter["flee_to"] = _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
+	# Il court loin des ennemis qu'il connaît (carte de fuite, recensement « Techniques », point 5 ; sans ennemi connu :
+	# vers le bas de la carte, loin des ennemis qui arrivent par le haut).
+	fighter["flee_to"] = _flee_cell(fighter)
 	var what := "Il s'enfuit, terrifié." if flee else "Il frappe au hasard, amis comme ennemis !"
 	_log("Rupture ! %s s'effondre. %s" % [who, what], "berserk")
 	_effect("refuse", fighter, fighter, "!!!", false)
@@ -228,7 +229,7 @@ func _frighten(fighter: Dictionary, what: String) -> void:
 		fighter["panic_until"] = time + GameData.FEAR_SECONDS
 		fighter["order"] = {}
 		fighter["path"] = PackedVector2Array()
-		fighter["flee_to"] = _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
+		fighter["flee_to"] = _flee_cell(fighter)
 
 
 ## Chaque pas, pour un héros qui peut avoir peur : la vue du premier ennemi à portée peut l'effrayer ;
@@ -273,6 +274,9 @@ func _fear_tick(unit: Dictionary) -> void:
 ## Ce que fait un héros en panique : il fuit, ou il frappe n'importe qui à sa portée (même un allié).
 func _panic_think(unit: Dictionary, foes: Array) -> void:
 	if unit["panic"] == "flee":
+		if time >= unit.get("flee_due", 0.0):
+			unit["flee_due"] = time + GameData.FLEE_REPLAN
+			unit["flee_to"] = _flee_cell(unit)
 		_move_towards(unit, unit["flee_to"])
 		return
 	if unit["panic_target"] < 0 or time >= unit["panic_retarget"] or units[unit["panic_target"]]["hp"] <= 0:
@@ -288,3 +292,10 @@ func _panic_think(unit: Dictionary, foes: Array) -> void:
 		_try_attack(unit, target, foes)
 	else:
 		_move_towards(unit, target["pos"])
+
+
+## Où court un héros qui s'enfuit : loin des ennemis qu'il connaît (carte de fuite, voir BattleSearch.flee_target).
+func _flee_cell(fighter: Dictionary) -> Vector2:
+	if search != null:
+		return search.flee_target(fighter)
+	return _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
