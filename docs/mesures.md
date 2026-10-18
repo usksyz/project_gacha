@@ -191,3 +191,17 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   Étage 1 brute : 4 défaites sur 300 (équipes balayées, pas de blocage : `trace_e pertes=200`, 0 défaite).
 - Essai de pièges en survie (retiré) : étage 5, 300 combats, brute 34,7 → 27,7 %, préparée 64 → 62,3 %, 0 piège posé.
 - Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 98 % (points 1 et 2 : 98,5 %).
+
+## Étape E, point 4 (liens et caractère en combat)
+- `sim_tower ... combats=300 graine=7`, après le point 3 → après le point 4, victoires % (morts par combat) :
+  brute étages 1 / 2 / 3 / 4 / 5 / 10 : 98,7 (0,29) / 53,7 (2,69) / 37,3 (3,49) / 37,3 (3,49) / 34,7 (3,54) / 20,7 (3,77) →
+  99,7 (0,21) / 59 (2,47) / 42,3 (3,22) / 42,3 (3,25) / 31,3 (3,67) / 14,7 (3,86) ;
+  préparée : 100 (0,05) / 90 (0,85) / 83 (1,15) / 83,7 (1,16) / 64 (2,20) / 40,7 (2,97) →
+  99,7 (0,03) / 90,3 (0,75) / 84,7 (1,11) / 77,7 (1,43) / 67,7 (2,10) / 39 (3,12).
+  Par combat : coups à revers 2,4 à 7,8 ; appât (un opportuniste, une fois par paire) 0,6 à 1,1 ; ami couvert 0,01 à
+  0,22 ; abandon 0,01 à 0,16 (plus aux étages 5 et 10, où l'on est souvent en danger). Les écarts restent près du bruit
+  des séries de 300 combats (environ ±4 points) ; le plus grand : étage 10 brute -6, préparée étage 4 -6 (les
+  abandons et les opportunistes qui quittent leur place coûtent, les coups à revers rapportent). Pas de rééquilibrage.
+- Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 97,5 % (point 3 : 98 %) ; `test_tutoriel` : victoire au premier essai.
+- Bilan de l'étape E, préparée, étages 1 à 5 et 10 : avant (eee5e49) 100 / 90 / 86 / 84,7 / 64 / 40,7 → après
+  99,7 / 90,3 / 84,7 / 77,7 / 67,7 / 39 ; brute 100 / 54,3 / 42,7 / 35,3 / 34,7 / 20,7 → 99,7 / 59 / 42,3 / 42,3 / 31,3 / 14,7.

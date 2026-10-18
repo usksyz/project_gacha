@@ -388,8 +388,21 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   brute 34,7 → 27,7 %) ; retiré. Mode dev : « s'infiltre vers X », « pose un piège ». Simulateur : assassinats et pièges
   par combat. Banc : `tools/test_etapeE.gd` (dispositions, embusqué vu de près seulement, assassinat d'un dormeur sans
   réveiller les autres, coup d'épée surprise, piège, discrétion face à un guetteur, 12 combats complets).
-  Reste (point 4) : comportements liés aux liens et au caractère (protéger, appât, abandonner un allié, couvrir une
-  retraite).
+  4. Liens et caractère en combat (`scripts/battle_ties.gd`, `BattleTies`, `Battle.ties` ; chiffres dans `tower.gd`,
+  après `TRAP_HOLD` ; caractère lu une fois par combat, `setup`). Protéger un ami (`ward_of`, `guards`) : sans le trait
+  Protecteur, un héros d'Empathie >= `FRIEND_GUARD_EMP` va couvrir un ami ou un frère d'armes en danger (sous
+  `PROTECT_HP`, à moins de `PROTECT_RANGE`) et prend `PROTECT_SHARE` de ses coups (`Battle._guardian_for`, `_cover`) ;
+  un Martyr (accès) `MARTYR_SHARE` (« X couvre Y de son corps, quoi qu'il lui en coûte ! »). À revers (`rear_factor`,
+  dans `_hit`, coups au contact) : frapper un monstre occupé par un autre héros, de l'autre côté, force
+  x`REAR_ATTACK_BONUS`, pour tout le monde. L'appât (`flank`) : un opportuniste (accès Prédateur, ou Honnêteté <=
+  -`OPPORTUNIST_HON` et Empathie <= -`OPPORTUNIST_EMP`) contourne le monstre qui s'acharne sur un allié pour le
+  frapper dans le dos (« X se sert de Y comme appât et prend Z à revers. »). Abandonner (`abandon`) : un égoïste lâche
+  (accès Prédateur, ou Empathie <= -`ABANDON_EMP` et Courage <= -`ABANDON_COURAGE`), sous `ABANDON_HP` de sa vie, un
+  monstre au contact et un allié tout près, pousse l'allié vers le monstre (qui le prend pour cible) et se replie
+  `ABANDON_SECONDS` (une fois par combat ; fenêtre « Abandon ») ; l'allié perd `ABANDON_MENTAL` de santé mentale.
+  Après le combat (`GameData.ties_after_battle`, `tower.gd`, fenêtre « Liens ») : couvert par un ami, +`BOND_POINTS_COVERED`
+  points de lien ; servi d'appât, opinion `OPINION_BAIT` ; abandonné, les deux deviennent hostiles (`make_hostile`) ;
+  seulement entre héros encore vivants. Rien en duel. Simulateur : par combat, ami couvert, appât, abandon, coups à revers.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
