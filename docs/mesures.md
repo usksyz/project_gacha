@@ -222,3 +222,8 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
 - Unités « bloquées sans raison » : 0 à 4 par série avant, jusqu'à 7 (étage 2 brute) au point 1, 0 à 2 au point 3 (des
   loups qui hésitent entre deux cases, pas de blocage durable).
 - Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 99 % (avant : 97,5 %). `capture_c2 mode=identique` : identique.
+- Point 4 (annotation tactique : pièges dans un goulet, ralliement à couvert), après le point 3 → après le point 4 :
+  brute 99,7 / 56,7 / 40,3 / 42,7 → 99,7 (0,17) / 56 (2,51) / 38 (3,40) / 45,3 (3,04) ; préparée 100 / 93 / 82,7 / 84,3 →
+  100 (0,04) / 92,7 (0,63) / 84,7 (1,09) / 83,7 (1,08). Dans le bruit. Pièges posés 0,06 à 0,15 par combat, déclenchés
+  0,00 à 0,05 (avant : 0,08 à 0,14 et 0,01 à 0,04). Étage 3, graine 21 : 3 goulets, 18 points hauts, 44 cachettes.
+  Tutoriel (`sim_tutoriel`, 200 parties) : 99 %.

@@ -447,6 +447,16 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Un héros qui se faufile (discrétion sous 1 : il explore, attend au ralliement ou s'infiltre) avant l'alarme l'utilise
   (`Battle._side`) : il contourne ce que regardent les monstres. Écart avec le document : il visait les infiltrateurs
   et les éclaireurs ; ici, tous les héros qui se faufilent (l'équipe qui explore aussi). Vide après l'alarme et en horde.
+  4. Annotation tactique des cartes (`scripts/battle_terrain.gd`, `BattleTerrain`, `Battle.terrain`, faite une fois par
+  combat après `build_graph` ; chiffres après `SNEAK_EXPOSURE_MAX`). Goulet : un passage d'une case de large, ouvert
+  d'un côté à l'autre et fermé sur les deux flancs (aucun passage d'un pas). Point haut : en hauteur, au moins
+  `HIGH_MIN_LOWER` voisines plus basses. Cachette : herbes hautes, ou une case au sol collée à un obstacle plus haut que
+  la tête. `nearest(type, autour, rayon, condition)`. Usages : un poseur de pièges prend un goulet à moins de
+  `TRAP_CHOKE_RADIUS` cases de la case prévue, entre le ralliement et l'ennemi (`BattleExplore._trap_cell`) ; le point
+  de ralliement se met dans une cachette à moins de `RALLY_HIDE_RADIUS` cases, à la même hauteur, pas plus près de
+  l'ennemi (`_rally_spot`). Les guetteurs prenaient déjà la case la plus haute (`_best_lookout`) ; l'IA tactique n'en
+  tient pas encore compte (à faire avec le point 5 du document). Mode dev : le compte des goulets, points hauts et
+  cachettes dans le texte d'un héros qui explore.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
