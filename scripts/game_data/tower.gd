@@ -390,6 +390,12 @@ const CORPSE_NEAR := 1.5
 const CORPSE_SEARCH_SPREAD := 1.5
 const MISSING_SECONDS := 8.0
 const SOUND_WALL_FACTOR := 2.0
+# Chemins discrets (recensement « Techniques », point 3 ; ajout du projet). Un héros qui se faufile avant l'alarme
+# (il explore, attend au ralliement ou s'infiltre) cherche son chemin en évitant ce que regardent les monstres connus
+# de l'équipe (carte de visibilité, BattleAlert.exposure) : une case vue coûte SNEAK_EXPOSURE_COST de plus par monstre
+# qui la regarde (moitié dans les herbes hautes), SNEAK_EXPOSURE_MAX au plus. Chiffres provisoires.
+const SNEAK_EXPOSURE_COST := 2.0
+const SNEAK_EXPOSURE_MAX := 4.0
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

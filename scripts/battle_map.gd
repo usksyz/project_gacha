@@ -47,9 +47,12 @@ var size := Vector2i.ZERO
 var heights := PackedInt32Array()
 var kinds := PackedInt32Array()
 
-## Les deux camps (graphes et coûts des chemins : voir build_graph, set_cost).
+## Les camps (graphes et coûts des chemins : voir build_graph, set_cost).
 const SIDE_HEROES := 0
 const SIDE_ENEMIES := 1
+## (recensement « Techniques », point 3) Les héros qui se faufilent avant l'alarme : les coûts des héros, plus la carte
+## de visibilité des monstres connus (voir Battle._refresh_costs, BattleAlert.exposure).
+const SIDE_SNEAK := 2
 ## Coût de base d'une case pour la recherche de chemin (cahier : « coût selon la pente, les échelles ») : on
 ## monte sur un muret ou un rocher en escaladant (4 fois plus lent que marcher) : on le contourne plutôt ;
 ## les autres : 1. La foule et le danger s'y ajoutent pendant le combat (voir Battle._refresh_costs).
@@ -58,7 +61,7 @@ const TERRAIN_COSTS := {Kind.STAIRS: 1.15, Kind.LADDER: 2.0, Kind.GRASS: 1.05, K
 const FLOW_BUCKETS := 4.0
 
 ## Graphes des chemins, un par camp (cases où l'on se tient, passages permis ; voir build_graph).
-var _graphs: Array[AStar3D] = [AStar3D.new(), AStar3D.new()]
+var _graphs: Array[AStar3D] = [AStar3D.new(), AStar3D.new(), AStar3D.new()]
 ## Coût de chaque case : de base (terrain), puis pour chaque camp (base + foule + danger).
 var base_costs := PackedFloat32Array()
 var costs: Array[PackedFloat32Array] = []
@@ -174,7 +177,7 @@ func build_graph() -> void:
 		in_lengths.append(PackedFloat32Array())
 		base_costs[i] = TERRAIN_COSTS.get(kinds[i], 1.0)
 	costs.clear()
-	for side in 2:
+	for side in _graphs.size():
 		var graph := _graphs[side]
 		graph.clear()
 		costs.append(base_costs.duplicate())

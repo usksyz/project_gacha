@@ -29,10 +29,11 @@ var home := Vector2(-1, -1)
 var _rng := RandomNumberGenerator.new()
 ## Jauge de détection (point 1 du recensement « Techniques ») : les héros qui n'ont pas bougé au dernier pas
 ## ({numéro: vrai}) et leur place à ce pas-là. Compteurs pour les mesures (sim_tower) : monstres devenus méfiants,
-## revenus au calme sans avoir repéré personne (« presque vu »), héros qui se sont figés à temps.
+## revenus au calme sans avoir repéré personne (« fausse_alerte », après méfiance ou fouille), héros qui se sont
+## figés à temps, corps découverts, compagnons disparus remarqués.
 var _still := {}
 var _last_pos := {}
-var counts := {"mefiant": 0, "presque_vu": 0, "fige": 0, "cadavres": 0, "disparus": 0}
+var counts := {"mefiant": 0, "fausse_alerte": 0, "fige": 0, "cadavres": 0, "disparus": 0}
 ## Point 2 : les corps des monstres tombés avant l'alarme ({"pos", "name", "squad", "t", "found", "missed"} ; voir
 ## on_death, _look_for_corpses, _notice_missing).
 var corpses: Array[Dictionary] = []
@@ -288,7 +289,6 @@ func think(unit: Dictionary, known: Array) -> bool:
 				unit["facing"] = toward.normalized()
 			if unit["detect"] <= 0.0:
 				_calm_down(unit)
-				counts["presque_vu"] += 1
 				if _seen(unit):
 					battle._log("%s reprend sa place, mais reste sur ses gardes." % unit["name"], "reinforce")
 		"ronde":
@@ -382,6 +382,7 @@ func _note_suspicion(unit: Dictionary, going: bool) -> void:
 ## Fausse alerte (ou fouille sans rien trouver) : il reprend sa place et son état, mais garde une vigilance accrue
 ## jusqu'à la fin du combat (un dormeur réveillé ne se rendort pas).
 func _calm_down(unit: Dictionary) -> void:
+	counts["fausse_alerte"] += 1
 	unit["state"] = "repos" if unit["home_state"] == "sommeil" else unit["home_state"]
 	unit["search_until"] = -1.0
 	unit["wary"] = true
@@ -673,6 +674,48 @@ func state_tag(unit: Dictionary) -> Array:
 	if unit["wary"]:
 		return ["sur ses gardes", Color("e0c890")]
 	return ["", Color.WHITE]
+
+
+## La carte de visibilité (recensement « Techniques », point 3) : pour chaque case (indice BattleMap.index), combien
+## de monstres la regardent, parmi ceux que les héros connaissent (on ne fuit pas le regard d'un monstre dont on ignore
+## tout) et qui ne chassent ni ne dorment : dans leur regard (un guetteur balaie plus large), à portée de leur vue,
+## sans obstacle ; dans les herbes hautes, moitié moins. Vide après l'alarme (ou en horde). Sert aux chemins discrets
+## des héros (BattleMap.SIDE_SNEAK, voir Battle._refresh_costs).
+func exposure() -> PackedFloat32Array:
+	var seen := PackedFloat32Array()
+	if alarm:
+		return seen
+	var map: BattleMap = battle.map
+	seen.resize(map.heights.size())
+	seen.fill(0.0)
+	for unit in battle._alive(battle.enemies):
+		if unit["state"] in ["alerte", "sommeil"]:
+			continue
+		if not battle.heroes.any(func(h): return h["hp"] > 0 and h["knows"].has(unit["id"])):
+			continue
+		var sight: float = (GameData.SIGHT_LENGTH * GameData.SIGHT_MONSTER_FACTOR + battle.height_of(unit) * GameData.SIGHT_HEIGHT_BONUS) \
+			* sight_factor(unit)
+		if sight <= 0.0:
+			continue
+		var guard: bool = unit["state"] == "guet"
+		var facing: Vector2 = unit["home_facing"] if guard else unit["facing"]
+		var half := deg_to_rad(GameData.SIGHT_ANGLE / 2.0) + (0.9 * (GameData.WARY_SWEEP if unit["wary"] else 1.0) if guard else 0.0)
+		var z: int = battle.height_of(unit)
+		var here: Vector2i = map.cell_of(unit["pos"])
+		var r := ceili(sight)
+		for y in range(maxi(0, here.y - r), mini(battle.GRID_H, here.y + r + 1)):
+			for x in range(maxi(0, here.x - r), mini(battle.GRID_W, here.x + r + 1)):
+				var cell := Vector2i(x, y)
+				if not map.walkable(cell):
+					continue
+				var rel: Vector2 = BattleMap.center(cell) - unit["pos"]
+				var distance := rel.length()
+				if distance > sight or (distance > 1.0 and absf(facing.angle_to(rel)) > half):
+					continue
+				if not map.line_of_sight(unit["pos"], z, BattleMap.center(cell), map.height_at(cell)):
+					continue
+				seen[map.index(cell)] += 0.5 if map.kind_at(cell) == BattleMap.Kind.GRASS else 1.0
+	return seen
 
 
 ## La jauge de détection à afficher au-dessus d'un monstre (0 à 1 ; 0 : rien), tant qu'il ne chasse pas.

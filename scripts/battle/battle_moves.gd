@@ -92,9 +92,15 @@ func _move_towards(unit: Dictionary, goal: Vector2) -> void:
 	_walk_path(unit)
 
 
-## Le camp d'un combattant pour la recherche de chemin (voir BattleMap.SIDE_HEROES).
+## Le camp d'un combattant pour la recherche de chemin (voir BattleMap.SIDE_HEROES). (Recensement « Techniques »,
+## point 3) Un héros qui se faufile (discrétion sous 1 : il explore, attend au ralliement ou s'infiltre) avant l'alarme
+## prend les chemins discrets (BattleMap.SIDE_SNEAK : il évite ce que regardent les monstres qu'on connaît).
 func _side(unit: Dictionary) -> int:
-	return BattleMap.SIDE_HEROES if unit["is_hero"] else BattleMap.SIDE_ENEMIES
+	if not unit["is_hero"]:
+		return BattleMap.SIDE_ENEMIES
+	if unit["stealth"] < 1.0 and alert != null and not alert.alarm:
+		return BattleMap.SIDE_SNEAK
+	return BattleMap.SIDE_HEROES
 
 
 ## Avance le long de unit["path"] pendant ce pas. Chaque passage d'une case à l'autre se fait à la vitesse
@@ -346,11 +352,15 @@ func _refresh_costs() -> void:
 				if BattleMap.center(Vector2i(x, y)).distance_to(shooter["pos"]) <= reach:
 					var i := map.index(Vector2i(x, y))
 					danger[i] = minf(DANGER_MAX_COST, danger[i] + DANGER_COST)
+	# (recensement « Techniques », point 3) La carte de visibilité : vide après l'alarme ou en horde.
+	var seen: PackedFloat32Array = alert.exposure() if alert != null else PackedFloat32Array()
 	for i in map.heights.size():
 		var cell := map.cell_at(i)
 		var base: float = map.base_costs[i]
 		map.set_cost(cell, base + crowd[i] + danger[i], BattleMap.SIDE_HEROES)
 		map.set_cost(cell, base + crowd[i], BattleMap.SIDE_ENEMIES)
+		var sneak: float = minf(GameData.SNEAK_EXPOSURE_MAX, seen[i] * GameData.SNEAK_EXPOSURE_COST) if not seen.is_empty() else 0.0
+		map.set_cost(cell, base + crowd[i] + danger[i] + sneak, BattleMap.SIDE_SNEAK)
 
 
 ## Vitesse d'un passage d'une case à l'autre (part de sa vitesse de marche ; voir GameData, tower.gd,
