@@ -28,6 +28,7 @@ func _run() -> void:
 	_check_sound()
 	_check_sneak()
 	_check_terrain()
+	_check_search()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -272,6 +273,55 @@ func _check_terrain() -> void:
 	var counts: Dictionary = scene["battle"].terrain.summary()
 	print("    étage 3, graine 21 : %s" % counts)
 	_check(counts["cachettes"] > 0, "une carte générée a des cachettes")
+
+
+func _check_search() -> void:
+	print("Recherche intelligente et carte de fuite")
+	var scene := _scene(3.0, "alerte")
+	var battle = scene["battle"]
+	var monster: Dictionary = scene["monster"]
+	var hero: Dictionary = scene["hero"]
+	var map = battle.map
+	monster["state"] = "alerte"
+	battle.alert.alarm = false
+	# Le monstre voit le héros : la carte se resserre sur lui.
+	battle.perception.update()
+	battle.search._due = 0.0
+	battle.search.tick()
+	var at: int = map.index(map.cell_of(hero["pos"]))
+	_check(is_equal_approx(battle.search.heat[at], 1.0), "un héros vu : toute la chaleur sur sa case")
+	# Le héros disparaît (loin, dans un coin) et le monstre regarde ailleurs : la chaleur se répand ; ce qu'il regarde est
+	# effacé.
+	hero["pos"] = Vector2(16.5, 18.5)
+	monster["facing"] = Vector2(0, -1)
+	monster["knows"].clear()
+	battle.perception.update()
+	for i in 6:
+		battle.time += 0.5
+		battle.search._due = 0.0
+		battle.search.tick()
+	var spread := 0
+	for value in battle.search.heat:
+		spread += 1 if value > 0.0 else 0
+	_check(spread > 4 and battle.search.heat[map.index(Vector2i(6, 2))] == 0.0, "la chaleur s'est répandue (%d cases) et le monstre a effacé ce qu'il voit" % spread)
+	_check(battle.search.think(monster) and battle.search.claims.has(monster["id"]), "il part fouiller la case la plus probable")
+	# Deux chercheurs ne visent pas la même case.
+	var other: Dictionary = battle.enemies[1]
+	other["present"] = true
+	other["hp"] = maxi(1, other["hp"])
+	other["state"] = "alerte"
+	other["pos"] = monster["pos"] + Vector2(1, 0)
+	battle.search.think(other)
+	var a: Vector2 = BattleMap.center(map.cell_at(battle.search.claims[monster["id"]]))
+	var b: Vector2 = BattleMap.center(map.cell_at(battle.search.claims[other["id"]]))
+	_check(a.distance_to(b) >= game.SEARCH_CLAIM_RADIUS or battle.search.heat.count(0.0) > battle.search.heat.size() - 3,
+		"deux chercheurs fouillent deux endroits (%.1f cases d'écart)" % a.distance_to(b))
+	# Carte de fuite : loin du monstre connu.
+	hero["pos"] = monster["pos"] + Vector2(0, 2)
+	hero["knows"][monster["id"]] = {"pos": monster["pos"], "t": battle.time}
+	var flee: Vector2 = battle.search.flee_target(hero)
+	_check(flee.distance_to(monster["pos"]) > hero["pos"].distance_to(monster["pos"]) + 2.0,
+		"un héros qui s'enfuit court loin du monstre (%.1f cases de lui)" % flee.distance_to(monster["pos"]))
 
 
 func _check(ok: bool, text: String) -> void:
