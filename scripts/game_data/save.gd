@@ -35,7 +35,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     (« invocation_gratuite », absente = pas encore prise).
 ## 10 : vie de la cité (prompt 4) : demandes des héros (« demandes », « demandes_maj »), jour du rapport de la fée
 ##     (« rapport_du_jour »), jour de repos (hero["rest_until"]) ; absents = rien en attente, rien vu.
-const SAVE_VERSION := 10
+## 11 : cartes, étape 2 : cartes rondes de 24 x 26 (MapGenerator.MAP_VERSION 2) : les étages figés et la carte du combat
+##      en cours d'une version d'avant sont refaits.
+const SAVE_VERSION := 11
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
@@ -128,6 +130,15 @@ func load_game() -> bool:
 	memorial = Memorial.migrate(file.get_value("partie", "memorial", Memorial.new_memorial()))
 	# Étages figés (version 6) : absents d'une ancienne sauvegarde = générés au prochain passage.
 	floors = file.get_value("partie", "etages", {})
+	# Cartes, étape 2 (version 11) : les étages figés sur une carte d'avant (format 1, 18 x 20) sont refaits sur la
+	# nouvelle carte (ronde, 24 x 26) ; un combat en cours sur l'ancienne carte reprend sur une carte neuve.
+	for floor_number in floors.keys():
+		if floors[floor_number].get("version", 1) < MapGenerator.MAP_VERSION:
+			floors.erase(floor_number)
+	if not pending_battle.get("map", {}).is_empty() and pending_battle["map"].get("version", 1) < MapGenerator.MAP_VERSION:
+		pending_battle.erase("map")
+		for enemy in pending_battle.get("enemies", []):
+			enemy.erase("start")  # (des places de l'ancienne carte)
 	# Anciennes sauvegardes (une seule expédition à la fois, et un seul retour) : on les reprend.
 	var old_expedition: Dictionary = file.get_value("partie", "expedition", {})
 	if not old_expedition.is_empty() and not file.has_section_key("partie", "expeditions"):

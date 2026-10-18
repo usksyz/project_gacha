@@ -88,7 +88,7 @@ func setup() -> void:
 ## Un camp autour d'un feu (haut de la carte) : guetteurs tournés vers les héros (les tireurs d'abord), une patrouille
 ## qui en fait le tour, les autres au repos autour du feu. Endormi : tout le monde dort, sans guetteur ni patrouille.
 func _arrange_camp(units: Array, sleeping: bool) -> void:
-	var center := _pick_cell(Vector2i(5, 2), Vector2i(battle.GRID_W - 6, 3))
+	var center := _pick_cell(Vector2i(5, _y(2)), Vector2i(battle.GRID_W - 6, _y(3)))
 	home = BattleMap.center(center)
 	var rest := units.duplicate()
 	if not sleeping:
@@ -117,7 +117,7 @@ func _arrange_camp(units: Array, sleeping: bool) -> void:
 func _arrange_post(units: Array) -> void:
 	var top := Vector2i(battle.GRID_W / 2, 4)
 	var best := -1
-	for y in range(2, 9):
+	for y in range(_y(2), _y(9)):
 		for x in range(1, battle.GRID_W - 1):
 			var cell := Vector2i(x, y)
 			if not _standable(cell):
@@ -150,12 +150,12 @@ func _arrange_patrols(units: Array) -> void:
 	if not group.is_empty():
 		groups.append(group)
 	var band := float(battle.GRID_W - 2) / maxf(1.0, groups.size())
-	home = Vector2(battle.GRID_W / 2.0, 3.5)
+	home = Vector2(battle.GRID_W / 2.0, _y(3) + 0.5)
 	for g in groups.size():
 		var x0 := 1 + roundi(band * g)
 		var x1 := 1 + roundi(band * (g + 1)) - 1
 		var route := []
-		for corner in [Vector2i(x0, 2), Vector2i(x1, 3), Vector2i(x1, 8), Vector2i(x0, 7)]:
+		for corner in [Vector2i(x0, _y(2)), Vector2i(x1, _y(3)), Vector2i(x1, _y(8)), Vector2i(x0, _y(7))]:
 			route.append(BattleMap.center(_pick_cell(corner - Vector2i(1, 1), corner + Vector2i(1, 1))))
 		for i in groups[g].size():
 			var unit: Dictionary = groups[g][i]
@@ -168,7 +168,7 @@ func _arrange_patrols(units: Array) -> void:
 ## Une embuscade : cachés dans les herbes hautes, ou juste derrière un rocher, un muret ou un bloc (vu des héros).
 func _arrange_ambush(units: Array) -> void:
 	var spots := []
-	for y in range(4, 11):
+	for y in range(_y(4), _y(11)):
 		for x in range(1, battle.GRID_W - 1):
 			var cell := Vector2i(x, y)
 			if not _standable(cell) or battle.map.height_at(cell) > 0:
@@ -178,9 +178,9 @@ func _arrange_ambush(units: Array) -> void:
 			var cover: bool = battle.map.in_bounds(below) and battle.map.kind_at(below) in [BattleMap.Kind.ROCK, BattleMap.Kind.LOW_WALL, BattleMap.Kind.BLOCK]
 			if kind == BattleMap.Kind.GRASS or cover:
 				spots.append(cell)
-	home = Vector2(battle.GRID_W / 2.0, 7.5)
+	home = Vector2(battle.GRID_W / 2.0, _y(7) + 0.5)
 	for unit in units:
-		var cell := _pick_cell(Vector2i(2, 5), Vector2i(battle.GRID_W - 3, 9))
+		var cell := _pick_cell(Vector2i(2, _y(5)), Vector2i(battle.GRID_W - 3, _y(9)))
 		if not spots.is_empty():
 			cell = spots.pop_at(_rng.randi_range(0, spots.size() - 1))
 			spots = spots.filter(func(c): return c.distance_to(cell) >= 2.0)  # (pas tous dans le même buisson)
@@ -190,13 +190,13 @@ func _arrange_ambush(units: Array) -> void:
 ## Le village envahi : les monstres sont dispersés et rôdent chacun autour de sa place (les bêtes plus loin).
 func _arrange_pillage(units: Array) -> void:
 	var taken := []
-	home = Vector2(battle.GRID_W / 2.0, 4.5)
+	home = Vector2(battle.GRID_W / 2.0, _y(4) + 0.5)
 	for unit in units:
-		var cell := _pick_cell(Vector2i(2, 1), Vector2i(battle.GRID_W - 3, 7))
+		var cell := _pick_cell(Vector2i(2, _y(1)), Vector2i(battle.GRID_W - 3, _y(7)))
 		for attempt in 12:
 			if taken.all(func(c): return c.distance_to(cell) >= 3.0):
 				break
-			cell = _pick_cell(Vector2i(2, 1), Vector2i(battle.GRID_W - 3, 7))
+			cell = _pick_cell(Vector2i(2, _y(1)), Vector2i(battle.GRID_W - 3, _y(7)))
 		taken.append(cell)
 		var radius := 5.0 if unit["base_name"] in GameData.EMBED_BEASTS else 3.0
 		var route := [BattleMap.center(cell)]
@@ -242,7 +242,7 @@ func on_spawn(enemy: Dictionary) -> void:
 		_:
 			var route := [enemy["pos"]]
 			for i in 2:
-				route.append(BattleMap.center(_pick_cell(Vector2i(2, 3), Vector2i(battle.GRID_W - 3, 9))))
+				route.append(BattleMap.center(_pick_cell(Vector2i(2, _y(3)), Vector2i(battle.GRID_W - 3, _y(9)))))
 			_put(enemy, _cell_of(enemy["pos"]), "ronde", Vector2(0, 1))
 			enemy["route"] = route
 			enemy["route_i"] = 1
@@ -790,3 +790,9 @@ func _loop_around(center: Vector2i, radius: float) -> Array:
 		var angle := TAU * i / 4.0 + PI / 4.0
 		route.append(BattleMap.center(_nearest_standable(center + Vector2i(roundi(cos(angle) * radius), roundi(sin(angle) * radius)))))
 	return route
+
+
+## Une ligne de la carte, donnée pour l'ancienne carte de 20 lignes (avant les cartes de l'étape 2) : la même place,
+## à l'échelle de la carte du combat.
+func _y(old_row: int) -> int:
+	return roundi(old_row * battle.GRID_H / 20.0)

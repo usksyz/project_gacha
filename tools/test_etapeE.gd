@@ -135,6 +135,8 @@ func _check_trap() -> void:
 func _check_stealth() -> void:
 	print("Discrétion")
 	var battle = _battle(3, "camp", 25)
+	battle.map.setup(battle.GRID_W, battle.GRID_H)  # (terrain plat : la case devant le guetteur peut être un arbre)
+	battle.map.build_graph()
 	var guard: Dictionary = battle.enemies.filter(func(e): return e["present"] and e["state"] == "guet")[0]
 	var hero: Dictionary = battle.heroes[0]
 	guard["facing"] = Vector2(0, 1)

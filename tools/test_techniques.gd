@@ -237,6 +237,7 @@ func _check_sneak() -> void:
 	_check(unknown[map.index(Vector2i(6, 7))] == 0.0, "un monstre que les héros ne connaissent pas : rien à éviter")
 	_check(front >= 1.0 and back == 0.0, "la case devant lui est vue, celle derrière lui non (%.1f, %.1f)" % [front, back])
 	# Un héros qui se faufile contourne son regard ; à découvert, il va tout droit.
+	monster["ranged"] = false  # (un tireur ajoute un coût de danger : on ne mesure ici que son regard)
 	battle._costs_due = 0.0
 	battle._refresh_costs()
 	var straight: PackedVector2Array = map.find_path(Vector2i(1, 6), Vector2i(12, 6), BattleMap.SIDE_HEROES)
