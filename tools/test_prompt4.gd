@@ -81,7 +81,7 @@ func _check_requests(heroes: Array) -> void:
 	_check(request.get("kind", "") == "join" and request["hero"] == hero["id"], "un ambitieux sans équipe veut rejoindre une équipe")
 	game.pending_requests = [request]
 	var shown: Dictionary = game.next_request()
-	_check(shown["text"].contains("souhaite rejoindre l'équipe") and digits.search(shown["text"].replace("équipe %d" % (request["team"] + 1), "")) == null, "« %s »" % shown["text"])
+	_check(shown["text"].contains("souhaite rejoindre l'équipe") and digits.search(shown["text"].replace(game.team_name(request["team"]), "")) == null, "« %s »" % shown["text"])
 	var trust_before: float = PersonalityEngine.trust(hero)
 	var result: Array = game.answer_request(shown, true)
 	_check(hero["id"] in game.teams[request["team"]], "Oui : il rejoint l'équipe")

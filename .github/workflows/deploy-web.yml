@@ -1,4 +1,5 @@
-# Exporte le jeu en version web et le publie sur GitHub Pages à chaque push sur main.
+# Exporte le jeu en version web et le publie sur GitHub Pages à chaque push sur main, si les bancs de test passent
+# (job « tests », ajouté en octobre 2026 : tools/lancer_tests.sh).
 name: Publier la version web
 
 on:
@@ -19,7 +20,24 @@ env:
   GODOT_VERSION: 4.7.2
 
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer Godot
+        working-directory: ${{ runner.temp }}
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+
+      - name: Lancer les bancs
+        run: tools/lancer_tests.sh ${{ runner.temp }}/godot
+
   build:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

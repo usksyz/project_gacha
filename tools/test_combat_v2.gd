@@ -24,7 +24,7 @@ func _ready() -> void:
 	_check_generator()
 	_check_frozen_floors()
 	print("BILAN : %s" % ("tout est bon" if problems == 0 else "%d problème(s)" % problems))
-	get_tree().quit()
+	get_tree().quit(1 if problems > 0 else 0)  # (octobre 2026) code de sortie pour les tests automatiques
 
 
 func _ok(cond: bool, text: String) -> void:
