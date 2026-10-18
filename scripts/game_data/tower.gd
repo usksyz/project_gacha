@@ -110,7 +110,10 @@ const TIER_BONUS_LEVELS := 2
 ## {étage: [monstres au moins, sortes de monstres au moins]}. Étage 1 : gobelins et loups noirs ; dès
 ## l'étage 2, les archers squelettes. Avant : 2 gobelins à l'étage 1. À partir de l'étage 5, la formule
 ## normale (déjà assez dure). Chiffres réglés par simulation (voir CLAUDE.md, « Tour »).
-const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [6, 3], 3: [6, 3], 4: [6, 3]}
+## (octobre 2026, analyse du projet : une équipe réaliste perdait 1 combat sur 3 dès l'étage 2) étages 2 à 4 : 5
+## monstres au lieu de 6 (équipe réaliste 71 / 62 / 68 % → 90 / 74 / 74 % ; sans archers à l'étage 2 : 100 %,
+## trop facile). Voir docs/mesures.md, « Octobre 2026 ».
+const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [5, 3], 3: [5, 3], 4: [5, 3]}
 
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
