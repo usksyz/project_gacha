@@ -26,6 +26,7 @@ func _run() -> void:
 	_check_freeze()
 	_check_corpses()
 	_check_sound()
+	_check_sneak()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -216,6 +217,39 @@ func _check_sound() -> void:
 	battle.map.build_graph()
 	battle.alert.noise(Vector2(6.5, 8.5), game.NOISE_FIGHT)
 	_check(walled["monster"]["state"] == "poste", "le même coup derrière un long mur : pas entendu (%s)" % walled["monster"]["state"])
+
+
+func _check_sneak() -> void:
+	print("Chemins discrets")
+	var scene := _scene(4.0)
+	var battle = scene["battle"]
+	var monster: Dictionary = scene["monster"]
+	var hero: Dictionary = scene["hero"]
+	var alert = battle.alert
+	var map = battle.map
+	var unknown: PackedFloat32Array = alert.exposure()
+	hero["knows"][monster["id"]] = {"pos": monster["pos"], "t": battle.time}
+	var seen: PackedFloat32Array = alert.exposure()
+	var front: float = seen[map.index(Vector2i(6, 7))]
+	var back: float = seen[map.index(Vector2i(6, 2))]
+	_check(unknown[map.index(Vector2i(6, 7))] == 0.0, "un monstre que les héros ne connaissent pas : rien à éviter")
+	_check(front >= 1.0 and back == 0.0, "la case devant lui est vue, celle derrière lui non (%.1f, %.1f)" % [front, back])
+	# Un héros qui se faufile contourne son regard ; à découvert, il va tout droit.
+	battle._costs_due = 0.0
+	battle._refresh_costs()
+	var straight: PackedVector2Array = map.find_path(Vector2i(1, 6), Vector2i(12, 6), BattleMap.SIDE_HEROES)
+	var sneaky: PackedVector2Array = map.find_path(Vector2i(1, 6), Vector2i(12, 6), BattleMap.SIDE_SNEAK)
+	var exposed := func(path: PackedVector2Array) -> float:
+		var total := 0.0
+		for point in path:
+			total += seen[map.index(map.cell_of(point))]
+		return total
+	_check(exposed.call(sneaky) < exposed.call(straight), "le chemin discret passe moins sous son regard (%.1f contre %.1f)" \
+		% [exposed.call(sneaky), exposed.call(straight)])
+	hero["stealth"] = 0.5
+	_check(battle._side(hero) == BattleMap.SIDE_SNEAK, "un héros qui se faufile prend les chemins discrets")
+	hero["stealth"] = 1.0
+	_check(battle._side(hero) == BattleMap.SIDE_HEROES, "à découvert : les chemins de toujours")
 
 
 func _check(ok: bool, text: String) -> void:
