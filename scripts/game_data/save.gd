@@ -40,6 +40,9 @@ const SAVE_VERSION := 10
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
 func save_game() -> void:
+	if _saves_held > 0:
+		_save_wanted = true  # (octobre 2026) sauvegarde groupée : une seule à release_saves()
+		return
 	check_auto_buildings()  # un changement peut remplir la condition d'un bâtiment (nouveau mage...)
 	update_mental()  # la santé mentale regagnée au lobby depuis la dernière fois
 	var file := ConfigFile.new()

@@ -157,6 +157,19 @@ func save_game() -> void:
 	pass
 
 
+## Retient les sauvegardes (voir _saves_held) jusqu'au release_saves() correspondant (ils peuvent s'imbriquer).
+func hold_saves() -> void:
+	_saves_held += 1
+
+
+## Fin d'un groupe : une seule sauvegarde si quelque chose l'a demandée pendant le groupe.
+func release_saves() -> void:
+	_saves_held = maxi(0, _saves_held - 1)
+	if _saves_held == 0 and _save_wanted:
+		_save_wanted = false
+		save_game()
+
+
 # ---------------------------------------------------------------------------
 # Monnaies
 # ---------------------------------------------------------------------------

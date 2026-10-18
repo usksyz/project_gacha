@@ -44,12 +44,14 @@ func _ready() -> void:
 	update_requests()
 	update_arrivals()  # (octobre 2026) arrivée déboussolée
 	timer.timeout.connect(func():
+		hold_saves()  # (octobre 2026) une seule sauvegarde pour tout le tour des 5 s
 		update_expedition()
 		update_training()
 		update_mental()
 		update_quarrels()
 		update_requests()  # (prompt 4) demandes des héros
-		update_arrivals())  # (octobre 2026) arrivée déboussolée
+		update_arrivals()  # (octobre 2026) arrivée déboussolée
+		release_saves())
 	add_child(timer)
 	timer.start()
 

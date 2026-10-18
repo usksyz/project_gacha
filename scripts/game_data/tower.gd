@@ -1009,6 +1009,14 @@ func learn_from_battle(hero: Dictionary, fighter: Dictionary, battle: Battle) ->
 ## - un étage déjà conquis (rejoué pour entraîner une équipe) donne moins d'expérience et d'or,
 ##   pas de gemmes, et ne fait pas monter dans la Tour.
 func finish_tower_battle(battle: Battle) -> Dictionary:
+	# (octobre 2026) sauvegarde plus légère : les sauvegardes de la fin du combat (4 environ) n'en font plus qu'une.
+	hold_saves()
+	var report := _finish_tower_battle(battle)
+	release_saves()
+	return report
+
+
+func _finish_tower_battle(battle: Battle) -> Dictionary:
 	var floor_number: int = pending_battle.get("floor", tower_floor)
 	var replay := floor_number < tower_floor
 	pending_battle = {}  # le combat est terminé (la sauvegarde est réécrite plus bas)
