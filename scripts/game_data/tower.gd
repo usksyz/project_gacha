@@ -419,6 +419,16 @@ const SEARCH_REPICK := 2.0
 const FLEE_RADIUS := 10.0
 const FLEE_EFFORT := 0.3
 const FLEE_REPLAN := 1.0
+# Coordination (recensement « Techniques », point 6 ; ajout du projet). Monstres, hors horde : pour choisir sa place
+# autour d'une cible, une place à l'opposé de celles de ses compagnons compte comme FLANK_WEIGHT cases de moins
+# (contournement : ils la prennent à revers). Héros : un héros lié à un infiltrateur (au moins ami, BOND_FRIEND) et
+# assez audacieux (Audace >= -PRUDENT_AUD) devient son équipier : pendant le ralliement, il s'infiltre avec lui, choisit
+# un autre monstre à moins de SYNC_RANGE cases de la proie de l'infiltrateur (répartition des cibles), et chacun, à
+# portée, attend l'autre au plus SYNC_WAIT secondes pour frapper en même temps (assassinat synchronisé : la seconde
+# proie ne voit pas tomber la première). Choix du porteur du projet : sans ordre du Maître. Chiffres provisoires.
+const FLANK_WEIGHT := 2.5
+const SYNC_RANGE := 4.0
+const SYNC_WAIT := 4.0
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

@@ -228,6 +228,14 @@ func _attack_slot(unit: Dictionary, target: Dictionary) -> int:
 		_slots.erase(current)
 	var best := -1
 	var best_distance := INF
+	# (recensement « Techniques », point 6) Contournement : hors horde, un monstre préfère la place à l'opposé de celles
+	# que ses compagnons ont déjà prises autour de la même cible (il la prend à revers).
+	var mates := []
+	if not unit["is_hero"] and alert != null and alert.disposition != "horde":
+		for d in BattleMap.DIRECTIONS:
+			var other: int = _slots.get(map.index(center + d), -1) if map.in_bounds(center + d) else -1
+			if other >= 0 and other != unit["id"] and not units[other]["is_hero"]:
+				mates.append(Vector2(d).normalized())
 	for d in BattleMap.DIRECTIONS:
 		var cell: Vector2i = center + d
 		if not map.in_bounds(cell):
@@ -236,6 +244,8 @@ func _attack_slot(unit: Dictionary, target: Dictionary) -> int:
 		if not _slot_free(i, unit, target, center):
 			continue
 		var distance: float = unit["pos"].distance_to(BattleMap.center(cell)) + (0.3 if d.x != 0 and d.y != 0 else 0.0)
+		for mate in mates:
+			distance -= GameData.FLANK_WEIGHT * (1.0 - Vector2(d).normalized().dot(mate)) / 2.0 / mates.size()
 		if distance < best_distance:
 			best = i
 			best_distance = distance

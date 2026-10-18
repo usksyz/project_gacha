@@ -44,6 +44,14 @@ var _infiltrating := {}
 var _trap_work := {}
 ## Le monstre méfiant devant lequel chaque héros s'est figé ({héros: monstre} ; voir _hide).
 var _frozen := {}
+## Recensement « Techniques », point 6 : l'équipier de chaque infiltrateur ({équipier: infiltrateur}, et l'inverse dans
+## « mates »), lus une fois par combat ; depuis quand chacun est à portée de sa proie et l'attend ({héros: {"since",
+## "seen"}}) ; les assassinats synchronisés (mesures).
+var partners := {}
+var mates := {}
+var _ready := {}
+var _synced := {}
+var counts := {"synchronises": 0}
 
 
 func _init(owner) -> void:
@@ -59,6 +67,30 @@ func setup() -> void:
 			infiltrators[hero["id"]] = true
 		if hero["person"] and _is_trapper(hero):
 			trappers[hero["id"]] = GameData.TRAPS_PER_HERO
+	setup_partners()
+
+
+## (point 6) Un héros lié à un infiltrateur (au moins ami) et assez audacieux s'infiltre avec lui (un équipier par
+## infiltrateur, le plus lié).
+func setup_partners() -> void:
+	var ids: Array = infiltrators.keys()
+	ids.sort()
+	for infiltrator_id in ids:
+		var infiltrator: Dictionary = battle.units[infiltrator_id]
+		var best := -1
+		var best_level := 0
+		for hero in battle.heroes:
+			var level: int = infiltrator["bonds"].get(hero["id"], 0)
+			if infiltrators.has(hero["id"]) or partners.has(hero["id"]) or not hero["person"] or level < GameData.BOND_FRIEND:
+				continue
+			if hero["class"] in ["Mage", "Soigneur"] or PersonalityEngine.axis(hero["source"], "AUD") < -GameData.PRUDENT_AUD:
+				continue
+			if level > best_level:
+				best = hero["id"]
+				best_level = level
+		if best >= 0:
+			partners[best] = infiltrator_id
+			mates[infiltrator_id] = best
 
 
 ## Une case vue par un héros (appelé par BattlePerception._cast).
@@ -138,7 +170,8 @@ func stalk(hero: Dictionary, known: Array) -> bool:
 		_infiltrating.erase(hero["id"])
 		_trap_work.erase(hero["id"])  # (un piège pas fini est abandonné)
 		return false
-	var infiltrator: bool = infiltrators.has(hero["id"])
+	# (point 6) L'équipier d'un infiltrateur encore à l'œuvre s'infiltre avec lui.
+	var infiltrator: bool = infiltrators.has(hero["id"]) or _partnering(hero)
 	if roles.get(hero["id"], "") == "solitaire" and not infiltrator:
 		return false
 	for foe in known:
@@ -147,7 +180,7 @@ func stalk(hero: Dictionary, known: Array) -> bool:
 			_launch("")
 			return false
 	var standing: Array = battle._alive(battle.heroes).filter(func(h): return not battle.panicking(h) \
-		and roles.get(h["id"], "") != "solitaire" and not infiltrators.has(h["id"]))
+		and roles.get(h["id"], "") != "solitaire" and not infiltrators.has(h["id"]) and not _partnering(h))
 	if rally.x < 0.0:
 		rally = _rally_spot(hero, known)
 		rally_t = battle.time
@@ -195,8 +228,22 @@ func _rally_spot(hero: Dictionary, known: Array) -> Vector2:
 ## bat alors comme les autres).
 func _infiltrate(hero: Dictionary, known: Array) -> bool:
 	var prey: Array = known.filter(func(f): return f["state"] != "alerte")
+	# (point 6) L'équipier d'un infiltrateur prend un autre monstre, tout près de la proie de l'infiltrateur
+	# (répartition des cibles) ; tant que l'infiltrateur n'a pas choisi, il attend au point de ralliement.
+	var partner_of: int = partners.get(hero["id"], -1)
+	if partner_of >= 0:
+		var lead_prey: int = _infiltrating.get(partner_of, -1)
+		if lead_prey < 0:
+			hero["stealth"] = stealth_of(hero)
+			if hero["pos"].distance_to(rally) > GameData.GATHER_RADIUS * 0.6:
+				hero["pace"] = GameData.EXPLORE_PACE
+				battle._move_towards(hero, rally)
+			return true
+		var lead: Dictionary = battle.units[lead_prey]
+		prey = prey.filter(func(f): return f["id"] != lead_prey and f["pos"].distance_to(lead["pos"]) <= GameData.SYNC_RANGE)
 	if prey.is_empty():
 		_infiltrating.erase(hero["id"])
+		_ready.erase(hero["id"])
 		return false
 	var target: Dictionary = {}
 	var current: int = _infiltrating.get(hero["id"], -1)
@@ -211,20 +258,70 @@ func _infiltrate(hero: Dictionary, known: Array) -> bool:
 				if other["id"] != foe["id"] and other["pos"].distance_to(foe["pos"]) <= 3.0:
 					crowd += 1
 			var score: float = hero["pos"].distance_to(foe["pos"]) + crowd * 2.0 - (6.0 if foe["home_state"] == "guet" else 0.0)
+			if partner_of >= 0:
+				score = foe["pos"].distance_to(battle.units[_infiltrating[partner_of]]["pos"])  # (au plus près de l'autre proie)
 			if score < best:
 				best = score
 				target = foe
 		_infiltrating[hero["id"]] = target["id"]
-		battle._log("%s se glisse vers %s." % [hero["name"], target["name"]])
+		if partner_of >= 0:
+			battle._log("%s se glisse avec %s vers %s." % [hero["name"], battle.units[partner_of]["name"], target["name"]])
+		else:
+			battle._log("%s se glisse vers %s." % [hero["name"], target["name"]])
 	hero["target_id"] = target["id"]
 	hero["post"] = hero["pos"]
 	hero["stealth"] = stealth_of(hero)
 	if battle._in_reach(hero, target, hero["reach"]):
+		if not _strike_now(hero):
+			return true  # (à portée : il attend son équipier, immobile)
 		battle._try_attack(hero, target, battle._alive(battle.enemies))
-	elif not _hide(hero):
-		hero["pace"] = GameData.EXPLORE_PACE
-		battle._approach(hero, target)
+	else:
+		_ready.erase(hero["id"])
+		if not _hide(hero):
+			hero["pace"] = GameData.EXPLORE_PACE
+			battle._approach(hero, target)
 	return true
+
+
+## (point 6) L'équipier de cet infiltrateur, ou l'infiltrateur de cet équipier, s'il est encore à l'œuvre (-1 : aucun).
+func _mate_of(hero: Dictionary) -> int:
+	var other: int = partners.get(hero["id"], mates.get(hero["id"], -1))
+	if other < 0:
+		return -1
+	var unit: Dictionary = battle.units[other]
+	if unit["hp"] <= 0 or not unit["present"] or battle.panicking(unit) or not _infiltrating.has(other):
+		return -1
+	return other
+
+
+## Un équipier d'infiltrateur, quand l'infiltrateur est encore debout et à l'œuvre (pas en alerte, pas d'assaut).
+func _partnering(hero: Dictionary) -> bool:
+	if not partners.has(hero["id"]):
+		return false
+	var lead: Dictionary = battle.units[partners[hero["id"]]]
+	return lead["hp"] > 0 and lead["present"] and not battle.panicking(lead)
+
+
+## (point 6) Assassinat synchronisé : à portée de sa proie, il attend que son équipier soit aussi à portée de la sienne
+## (au plus SYNC_WAIT secondes), puis ils frappent au même pas. Sans équipier : tout de suite.
+func _strike_now(hero: Dictionary) -> bool:
+	var mate := _mate_of(hero)
+	if mate < 0:
+		return true
+	var mine: Dictionary = _ready.get(hero["id"], {})
+	if mine.is_empty():
+		mine = {"since": battle.time}
+		_ready[hero["id"]] = mine
+	mine["seen"] = battle.time
+	var theirs: Dictionary = _ready.get(mate, {})
+	var both: bool = not theirs.is_empty() and battle.time - theirs["seen"] <= battle.TICK * 1.5
+	if both:
+		if not _synced.has(mini(hero["id"], mate)):
+			_synced[mini(hero["id"], mate)] = true
+			counts["synchronises"] += 1
+			battle._log("%s et %s frappent ensemble, d'un même geste." % [hero["name"], battle.units[mate]["name"]], "awaken")
+		return true
+	return battle.time - mine["since"] >= GameData.SYNC_WAIT
 
 
 ## Jauge de détection (recensement « Techniques », point 1) : un monstre méfiant regarde vers lui (voir
