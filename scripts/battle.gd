@@ -35,6 +35,7 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 func start() -> void:
 	_build_map()
 	map.build_graph()
+	terrain = BattleTerrain.new(map)  # (recensement « Techniques », point 4) goulets, points hauts, cachettes
 	_place_units()
 	perception = BattlePerception.new(self)
 	tactics = BattleTactics.new(self)

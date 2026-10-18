@@ -149,7 +149,7 @@ func stalk(hero: Dictionary, known: Array) -> bool:
 	var standing: Array = battle._alive(battle.heroes).filter(func(h): return not battle.panicking(h) \
 		and roles.get(h["id"], "") != "solitaire" and not infiltrators.has(h["id"]))
 	if rally.x < 0.0:
-		rally = hero["pos"]
+		rally = _rally_spot(hero, known)
 		rally_t = battle.time
 		if standing.size() > 1:
 			battle._log("%s a repéré des ennemis qui ne l'ont pas vu : l'équipe se rassemble." % hero["name"])
@@ -176,6 +176,18 @@ func stalk(hero: Dictionary, known: Array) -> bool:
 		hero["pace"] = GameData.EXPLORE_PACE
 		battle._move_towards(hero, rally)
 	return true
+
+
+## Le point de ralliement : là où il a repéré l'ennemi, ou (recensement « Techniques », point 4) une cachette toute
+## proche (herbes hautes, contre un mur) qui n'est pas plus près de l'ennemi.
+func _rally_spot(hero: Dictionary, known: Array) -> Vector2:
+	var nearest: Dictionary = battle._nearest(hero, known)
+	if battle.terrain == null or nearest.is_empty():
+		return hero["pos"]
+	var away: float = hero["pos"].distance_to(nearest["pos"])
+	var hide: Vector2i = battle.terrain.nearest("hide", hero["pos"], GameData.RALLY_HIDE_RADIUS,
+		func(c): return BattleMap.center(c).distance_to(nearest["pos"]) >= away and battle.map.height_at(c) == battle.height_of(hero))
+	return BattleMap.center(hide) if hide.x >= 0 else hero["pos"]
 
 
 ## L'infiltrateur se glisse vers un monstre qui ne se doute de rien (un guetteur d'abord, puis le plus isolé, puis le
@@ -245,9 +257,20 @@ func _trap_cell(hero: Dictionary, known: Array) -> Vector2i:
 	var order: Array = trappers.keys()
 	order.sort()
 	var toward: Vector2 = (nearest["pos"] - rally).normalized().rotated([0.0, 0.7, -0.7][order.find(hero["id"]) % 3])
-	var cell: Vector2i = battle.map.cell_of(rally + toward * GameData.TRAP_DISTANCE)
-	if not battle.map.walkable(cell) or battle.map.kind_at(cell) == BattleMap.Kind.LADDER \
-			or battle.traps.any(func(trap): return trap["cell"] == cell):
+	var spot: Vector2 = rally + toward * GameData.TRAP_DISTANCE
+	var free := func(c: Vector2i) -> bool:
+		return battle.map.walkable(c) and battle.map.kind_at(c) != BattleMap.Kind.LADDER \
+			and not battle.traps.any(func(trap): return trap["cell"] == c)
+	# (recensement « Techniques », point 4) Un goulet tout près, entre le ralliement et l'ennemi : imparable.
+	if battle.terrain != null:
+		var to_foe: float = rally.distance_to(nearest["pos"])
+		var choke: Vector2i = battle.terrain.nearest("choke", spot, GameData.TRAP_CHOKE_RADIUS,
+			func(c): return free.call(c) and BattleMap.center(c).distance_to(nearest["pos"]) < to_foe \
+				and BattleMap.center(c).distance_to(rally) >= 1.5)
+		if choke.x >= 0:
+			return choke
+	var cell: Vector2i = battle.map.cell_of(spot)
+	if not free.call(cell):
 		return Vector2i(-1, -1)
 	return cell
 

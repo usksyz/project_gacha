@@ -396,6 +396,13 @@ const SOUND_WALL_FACTOR := 2.0
 # qui la regarde (moitié dans les herbes hautes), SNEAK_EXPOSURE_MAX au plus. Chiffres provisoires.
 const SNEAK_EXPOSURE_COST := 2.0
 const SNEAK_EXPOSURE_MAX := 4.0
+# Annotation tactique des cartes (recensement « Techniques », point 4 ; ajout du projet ; voir BattleTerrain) :
+# goulets, points hauts (au moins HIGH_MIN_LOWER voisines plus basses), cachettes. Un poseur de pièges choisit un goulet
+# à moins de TRAP_CHOKE_RADIUS cases de la case prévue (sur le chemin des monstres) ; le point de ralliement se met à
+# couvert, dans une cachette à moins de RALLY_HIDE_RADIUS cases, pas plus près de l'ennemi. Chiffres provisoires.
+const HIGH_MIN_LOWER := 3
+const TRAP_CHOKE_RADIUS := 2.0
+const RALLY_HIDE_RADIUS := 2.0
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

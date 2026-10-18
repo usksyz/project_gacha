@@ -537,8 +537,12 @@ func tactic_text(hero: Dictionary) -> String:
 	# (étape E) Sans ennemi connu, il explore : son rôle, et la disposition des ennemis (ce que le Maître ne sait pas).
 	if hero["knows"].is_empty() and battle.explore != null and battle.alert.disposition != "horde" \
 			and hero["order"].is_empty() and not hero["held"]:
-		return "%s : aucun ennemi connu, il explore (%s). Disposition : %s%s." % [hero["name"], battle.explore.role_text(hero),
-			GameData.DISPOSITION_NAMES.get(battle.alert.disposition, ""), " (alarme donnée)" if battle.alert.alarm else ""]
+		var marks := ""
+		if battle.terrain != null:  # (recensement « Techniques », point 4) l'annotation de la carte
+			var counts: Dictionary = battle.terrain.summary()
+			marks = " Carte : %d goulets, %d points hauts, %d cachettes." % [counts["goulets"], counts["points hauts"], counts["cachettes"]]
+		return "%s : aucun ennemi connu, il explore (%s). Disposition : %s%s.%s" % [hero["name"], battle.explore.role_text(hero),
+			GameData.DISPOSITION_NAMES.get(battle.alert.disposition, ""), " (alarme donnée)" if battle.alert.alarm else "", marks]
 	if plan.is_empty():
 		return "%s : aucun ennemi connu, il attend à son poste." % hero["name"]
 	var text: String = "%s %s" % [hero["name"], ATTITUDE_NAMES.get(plan["attitude"], plan["attitude"])]

@@ -267,6 +267,8 @@ var forced_disposition := ""
 var traps: Array[Dictionary] = []
 ## Étape E, point 4 : les liens et le caractère en combat (protéger un ami, l'appât, abandonner ; voir BattleTies).
 var ties: BattleTies
+## Recensement « Techniques », point 4 : l'annotation tactique de la carte (goulets, points hauts, cachettes).
+var terrain: BattleTerrain
 var assassinations := 0
 var traps_placed := 0
 var traps_sprung := 0
