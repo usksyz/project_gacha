@@ -50,6 +50,7 @@ func start() -> void:
 	alert = BattleAlert.new(self)
 	alert.setup()
 	search = BattleSearch.new(self)  # (recensement « Techniques », point 5)
+	director = BattleDirector.new(self)  # (point 10 : la tension, mesurée seulement)
 	explore = BattleExplore.new(self)
 	explore.setup()
 	ties = BattleTies.new(self)
@@ -472,6 +473,7 @@ func _step() -> void:
 		perception.tick()
 	alert.tick()
 	search.tick()
+	director.tick()
 	_refresh_costs()
 	_update_formations()
 	if not _defense_organized and not alley_exits.is_empty():

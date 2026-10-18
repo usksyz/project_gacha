@@ -271,6 +271,8 @@ var ties: BattleTies
 var terrain: BattleTerrain
 ## Point 5 : la recherche intelligente des monstres (carte de probabilité partagée) et la carte de fuite des héros.
 var search: BattleSearch
+## Point 10 : la mesure de la tension (première brique d'un directeur d'IA ; ne change rien au combat).
+var director: BattleDirector
 ## Point 9 (outils) : la graine du combat, le numéro du pas, les ordres du Maître donnés pendant le combat ({"t", "step",
 ## "kind", "hero", "args"}), et ceux à rejouer (un combat que l'on revoit, voir _apply_replay).
 var battle_seed := 0

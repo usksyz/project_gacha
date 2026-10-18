@@ -446,6 +446,16 @@ const BOUND_PAUSE := 0.6
 # où presque chaque case touche un arbre et compte comme abri).
 const BOUND_ON := false
 const COVER_SNAP := false
+# Directeur d'IA, première brique (recensement « Techniques », point 10 ; voir BattleDirector ; rien ne change au combat) :
+# tension = vie perdue par les héros dans la seconde (part de leur vie totale) x DIRECTOR_DAMAGE_WEIGHT + part des monstres
+# qui chassent x DIRECTOR_HUNT_WEIGHT + héros à terre x DIRECTOR_DOWN_WEIGHT (bornée à 1), lissée (DIRECTOR_SMOOTHING par
+# seconde). Phases : calme, tension (DIRECTOR_TENSE), pic (DIRECTOR_PEAK).
+const DIRECTOR_DAMAGE_WEIGHT := 12.0
+const DIRECTOR_HUNT_WEIGHT := 0.4
+const DIRECTOR_DOWN_WEIGHT := 0.2
+const DIRECTOR_SMOOTHING := 0.35
+const DIRECTOR_TENSE := 0.3
+const DIRECTOR_PEAK := 0.6
 # Camps et nuit (recensement « Techniques », point 8 ; ajout du projet). Un camp (gardé ou endormi) a un feu au centre et
 # TENTS_PER_CAMP tentes (obstacles bas) à TENT_RADIUS cases. Le camp endormi se passe la nuit (choix du projet : un camp
 # dort la nuit) : la vue des non-nocturnes x SIGHT_NIGHT_FACTOR (C3), et l'écran est sombre, éclairé par le feu.

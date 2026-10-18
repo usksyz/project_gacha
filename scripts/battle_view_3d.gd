@@ -1050,6 +1050,8 @@ func _process(delta: float) -> void:
 	fps_label.visible = Settings.dev_mode and not Settings.show_perf
 	if fps_label.visible:
 		fps_label.text = "%d images/s" % Engine.get_frames_per_second()
+		if battle.director != null:  # (point 10) la tension mesurée par le directeur d'IA
+			fps_label.text += " · tension %.2f (%s)" % [battle.director.tension, battle.director.phase()]
 	overlay.queue_redraw()
 
 

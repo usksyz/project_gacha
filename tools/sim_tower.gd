@@ -78,6 +78,7 @@ func _ready() -> void:
 		var stealth := [0, 0, 0]  # (étape E, point 3) assassinats, pièges posés, pièges déclenchés
 		var ties := {"couvert": 0, "appat": 0, "abandon": 0, "revers": 0}  # (étape E, point 4)
 		var watch := {}  # (recensement « Techniques ») compteurs de BattleAlert.counts : méfiants, presque vus, figés...
+		var rhythm := [0, 0, 0, 0, 0.0]  # (point 10) pics, secondes calmes, tendues, de pic ; tension moyenne (somme)
 		for i in count:
 			GameData.arsenal = []
 			GameData.warehouse = {}
@@ -135,6 +136,16 @@ func _ready() -> void:
 			if battle.get("explore") != null and battle.explore.get("counts") != null:  # (point 6) assassinats synchronisés
 				for kind in battle.explore.counts:
 					watch[kind] = watch.get(kind, 0) + battle.explore.counts[kind]
+			if battle.get("director") != null:
+				var d = battle.director
+				rhythm[0] += d.peaks
+				rhythm[1] += d.seconds["calme"]
+				rhythm[2] += d.seconds["tension"]
+				rhythm[3] += d.seconds["pic"]
+				var total := 0.0
+				for value in d.history:
+					total += value
+				rhythm[4] += total / maxf(1.0, d.history.size())
 			if battle.get("search") != null:  # (point 5) carte de probabilité : héros revus, fouilles
 				for kind in battle.search.counts:
 					watch["recherche_" + kind] = watch.get("recherche_" + kind, 0) + battle.search.counts[kind]
@@ -177,6 +188,9 @@ func _ready() -> void:
 			stealth[2] / float(count)])
 		print("  liens par combat : ami couvert %.2f, appât %.2f, abandon %.2f, coups à revers %.2f" % [ties["couvert"] / float(count),
 			ties["appat"] / float(count), ties["abandon"] / float(count), ties["revers"] / float(count)])
+		var spent: float = maxf(1.0, rhythm[1] + rhythm[2] + rhythm[3])
+		print("  rythme par combat : pics %.2f, calme %.0f %%, tension %.0f %%, pic %.0f %%, tension moyenne %.2f" % [rhythm[0] / float(count),
+			100.0 * rhythm[1] / spent, 100.0 * rhythm[2] / spent, 100.0 * rhythm[3] / spent, rhythm[4] / float(count)])
 		if not watch.is_empty():
 			var watch_parts := []
 			for kind in watch:
