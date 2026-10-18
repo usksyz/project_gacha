@@ -137,7 +137,8 @@ func think(hero: Dictionary) -> bool:
 		"ralliement":
 			target = rally
 		"meneur":
-			target = _bound(hero)  # (point 7) d'abri en abri vers le but
+			# (point 7) d'abri en abri vers le but (essai coupé par défaut, voir GameData.BOUND_ON)
+			target = _bound(hero) if GameData.BOUND_ON else goal
 			# Arrivé près du but (ou trop longtemps dessus) : il est exploré, on en choisit un autre.
 			if hero["pos"].distance_to(goal) <= 1.5 or battle.time - _goal_t > GameData.EXPLORE_GOAL_MAX:
 				_mark_around(battle.map.cell_of(goal), 1)
@@ -179,7 +180,7 @@ func _formation_slot(hero: Dictionary, leader: Dictionary, role: String) -> Vect
 	if not battle.map.walkable(cell):
 		return leader["pos"]
 	# Un abri (herbes hautes, pied d'un mur) tout près de sa place : il s'y met.
-	if battle.terrain != null:
+	if GameData.COVER_SNAP and battle.terrain != null:  # (essai coupé par défaut, voir GameData.COVER_SNAP)
 		var cover: Vector2i = battle.terrain.nearest("hide", BattleMap.center(cell), 1.0)
 		if cover.x >= 0:
 			cell = cover

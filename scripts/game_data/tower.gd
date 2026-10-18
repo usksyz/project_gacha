@@ -439,6 +439,13 @@ const COLUMN_SPACING := 1.2
 const FORMATION_LOG := 8.0
 const BOUND_STEP := 3.0
 const BOUND_PAUSE := 0.6
+# Essais mesurés et coupés (étages 1 et 3, 150 combats, après le point 6 : 100 / 39,3 % brute, 100 / 83 % préparée) : le
+# bond d'abri en abri et la place contre un abri ralentissent trop l'exploration (combats de 40 à 60 s) : avec les deux,
+# 86,3 / 29,3 % brute, 90,7 / 72,7 % préparée, tutoriel 83 % ; sans le bond, 98,7 / 30,7 % et 100 / 78 % ; sans les deux,
+# 98,7 / 42 % et 99,3 / 80,7 %. Les formations restent. Interrupteurs pour d'autres essais (par exemple en forêt dense,
+# où presque chaque case touche un arbre et compte comme abri).
+const BOUND_ON := false
+const COVER_SNAP := false
 # Camps et nuit (recensement « Techniques », point 8 ; ajout du projet). Un camp (gardé ou endormi) a un feu au centre et
 # TENTS_PER_CAMP tentes (obstacles bas) à TENT_RADIUS cases. Le camp endormi se passe la nuit (choix du projet : un camp
 # dort la nuit) : la vue des non-nocturnes x SIGHT_NIGHT_FACTOR (C3), et l'écran est sombre, éclairé par le feu.
