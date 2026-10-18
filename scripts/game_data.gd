@@ -383,3 +383,45 @@ func dev_memorial_relive(hero: Dictionary, hero_id: int) -> String:
 		return "Rien à revivre."
 	return "%s revit le souvenir : %d sujet(s) appris ; stress %.1f, réaction : %s (appliqués en P4)." % [hero["name"],
 		result["subjects"].size(), result["stress"], result["reaction"]]
+
+
+# ---------------------------------------------------------------------------
+# Revoir le dernier combat (recensement « Techniques », point 9 : outils ; mode dev)
+# ---------------------------------------------------------------------------
+
+## Le dernier combat de la Tour joué dans cette séance (pas enregistré dans la sauvegarde) : des copies de l'équipe et
+## des ennemis tels qu'au départ, la quête, la carte, la graine, les potions et les ordres du Maître (Battle.order_log,
+## remplis pendant le combat). Revu, il se rejoue à l'identique (voir Battle.battle_seed) sans rien changer à la partie.
+var last_fight := {}
+
+
+## Au départ d'un combat de la Tour, juste avant de le créer : note de quoi le revoir et sème le hasard.
+func record_fight(team: Array, enemies: Array, quest: Dictionary, map: Dictionary, floor_number: int) -> void:
+	var pre := randi()
+	last_fight = {"team": team.map(func(hero): return hero.duplicate(true)), "enemies": enemies.duplicate(true),
+		"quest": quest.duplicate(true), "map": map.duplicate(true), "floor": floor_number, "seed": pre, "orders": [],
+		"potions": -1}
+	seed(pre)
+
+
+## Juste après la création du combat noté : ses potions et (le même tableau, rempli pendant le combat) ses ordres.
+func record_fight_battle(battle: Battle) -> void:
+	if last_fight.is_empty():
+		return
+	last_fight["potions"] = battle.potions
+	last_fight["orders"] = battle.order_log
+
+
+## Le dernier combat, prêt à être revu (null s'il n'y en a pas) : les copies du départ, la même graine, les mêmes ordres.
+func dev_replay_battle() -> Battle:
+	if last_fight.is_empty():
+		return null
+	seed(last_fight["seed"])
+	var team: Array = last_fight["team"].map(func(hero): return hero.duplicate(true))
+	var battle := Battle.new(team, last_fight["enemies"].duplicate(true), last_fight["quest"].duplicate(true))
+	if last_fight["potions"] >= 0:
+		battle.potions = last_fight["potions"]
+	battle.map_data = last_fight["map"].duplicate(true)
+	battle.replay_orders = last_fight["orders"].duplicate(true)
+	battle.start()
+	return battle

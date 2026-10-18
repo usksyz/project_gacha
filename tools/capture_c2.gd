@@ -20,7 +20,7 @@ var _args := {}
 
 func _ready() -> void:
 	_args = {"mode": "capture", "etage": "1", "graine": "7", "avance": "5", "rot": "0", "choisi": "-1",
-		"archer_toit": "non", "zoom": "", "out": "user://capture_c2.png", "combats": "3", "dispo": ""}
+		"archer_toit": "non", "zoom": "", "out": "user://capture_c2.png", "combats": "3", "dispo": "", "calque": ""}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
 		if parts.size() == 2:
@@ -125,6 +125,9 @@ func _capture() -> void:
 		view._update_hint()
 	view3d.fade_timer = 0.0
 	view3d.fog_timer = 0.0  # (cartes, étape 4 : le brouillard recalculé pour l'image)
+	if _args.get("calque", "") != "":  # (point 9 : « calque=regards|recherche|terrain », en mode dev)
+		Settings.dev_mode = true
+		view3d.debug_layer = _args["calque"]
 	# « cache=oui » : le héros choisi est posé d'office là où un bâtiment le cache à la caméra (pour voir les murs
 	# et toits devenir transparents).
 	await _frames(5)  # (l'écran 3D doit avoir pris sa taille avant de projeter quoi que ce soit)

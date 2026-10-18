@@ -3,6 +3,11 @@ extends BattleCare
 
 
 func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) -> void:
+	# (Recensement « Techniques », point 9.) Le combat a sa propre graine (tirée du hasard commun) : chaque pas, chaque ordre
+	# du Maître re-sème le hasard à partir d'elle. Même graine et mêmes ordres : le même combat, même si autre chose a
+	# tiré au hasard entre deux pas (de quoi le revoir, voir GameData.last_fight).
+	battle_seed = randi()
+	seed(hash([battle_seed, "creation"]))
 	quest = floor_quest
 	walls = quest["walls"]
 	if not quest.get("duel", false):
@@ -33,6 +38,7 @@ func _init(team: Array, foes: Array, floor_quest: Dictionary = DEFAULT_QUEST) ->
 
 ## Prépare le champ de bataille et place tout le monde. À appeler une fois, avant step().
 func start() -> void:
+	seed(hash([battle_seed, "debut"]))
 	_build_map()
 	map.build_graph()
 	terrain = BattleTerrain.new(map)  # (recensement « Techniques », point 4) goulets, points hauts, cachettes
@@ -80,6 +86,8 @@ func start() -> void:
 func step() -> void:
 	if finished:
 		return
+	_apply_replay()  # (point 9) les ordres du combat que l'on revoit, au même moment
+	seed(hash([battle_seed, step_count]))
 	for unit in units:
 		unit["prev_pos"] = unit["pos"]  # pour que l'écran glisse en douceur d'un pas à l'autre
 	_step()
@@ -101,6 +109,8 @@ func step() -> void:
 		else:
 			_log("Le temps est écoulé : ton équipe bat en retraite.")
 		_finish()
+	step_count += 1
+	seed(hash([battle_seed, step_count, "apres"]))  # (le hasard d'entre deux pas ne dépend que du combat)
 
 
 ## Joue tout le combat d'un coup, sans ordres du joueur.
@@ -138,6 +148,7 @@ func _finish() -> void:
 
 ## Envoie un héros à un endroit (en cases) : il y va sans s'arrêter, puis en fait son nouveau poste.
 func order_move(hero: Dictionary, pos: Vector2) -> void:
+	_order_begin("move", hero, {"pos": pos})
 	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
 	if _is_blocked(pos):
@@ -151,6 +162,7 @@ func order_move(hero: Dictionary, pos: Vector2) -> void:
 
 ## Demande à un héros d'attaquer un ennemi précis, jusqu'à ce qu'il tombe.
 func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
+	_order_begin("attack", hero, {"target": enemy["id"]})
 	if quest.get("duel", false) or not _obeys(hero):  # pas d'ordres pendant un duel
 		return
 	hero["resting"] = false
@@ -162,6 +174,7 @@ func order_attack(hero: Dictionary, enemy: Dictionary) -> void:
 ## Ordre « échanger de place » : le héros part se reposer à l'arrière, un allié frais prend son poste
 ## (voir _rotate). Comme tout ordre, il peut être refusé (_obeys).
 func order_swap(hero: Dictionary) -> void:
+	_order_begin("swap", hero, {})
 	if quest.get("duel", false) or not can_swap(hero) or not _obeys(hero):
 		return
 	_rotate(hero)
@@ -175,6 +188,7 @@ func can_swap(hero: Dictionary) -> bool:
 ## Œil de faucon (C3, compétence active) : ordre du Maître ; le héros voit deux fois plus loin pendant
 ## HAWK_EYE_SECONDS (voir BattlePerception). Il l'active aussi de lui-même quand il ne voit plus l'ennemi.
 func order_hawk_eye(hero: Dictionary) -> void:
+	_order_begin("hawk", hero, {})
 	if quest.get("duel", false) or not can_hawk_eye(hero) or not _obeys(hero):
 		return
 	perception.activate_hawk_eye(hero)
@@ -961,6 +975,7 @@ func _barrage_targets(hero: Dictionary) -> Array:
 ## Ordre « Tir de barrage » : toutes ses flèches d'un coup, au hasard sur les ennemis à sa portée (chacune à
 ## BARRAGE_POWER d'un tir). Il se retrouve sans flèches. Comme tout ordre, il peut être refusé (_obeys).
 func order_barrage(hero: Dictionary) -> void:
+	_order_begin("barrage", hero, {})
 	if quest.get("duel", false) or not can_barrage(hero) or not _obeys(hero):
 		return
 	var count: int = hero["arrows"]

@@ -96,6 +96,10 @@ func _ready() -> void:
 		["+1 étage", func(): return _move_floor(1)],
 		["+5 étages", func(): return _move_floor(5)],
 	])
+	# (Recensement « Techniques », point 9) Revoir le dernier combat de la Tour, à l'identique, avec les ordres donnés.
+	_add_row(content, [["Revoir le dernier combat", _replay_last_fight]])
+	_add_note(content, "Rejoué à l'identique (même graine, mêmes ordres), sans rien changer à la partie. Pendant un combat, " +
+		"le bouton « Calques » de la vue montre ce que les héros et les monstres « savent » (regards, recherche, terrain).")
 
 	_add_section(content, "Lieux")
 	_add_row(content, [["Ouvrir le terrain d'entraînement", func():
@@ -332,3 +336,27 @@ func _make_menu(items: Array) -> OptionButton:
 	for item in items:
 		menu.add_item(item)
 	return menu
+
+
+## (Point 9) Revoir le dernier combat de la Tour : un écran de combat par-dessus tout, qui se ferme à la fin.
+func _replay_last_fight() -> String:
+	var battle: Battle = GameData.dev_replay_battle()
+	if battle == null:
+		return "Aucun combat à revoir dans cette séance."
+	var view := BattleView.new()
+	view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var backdrop := ColorRect.new()
+	backdrop.color = Color("15121f")
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var layer := CanvasLayer.new()
+	layer.layer = 50
+	layer.add_child(backdrop)
+	layer.add_child(view)
+	get_tree().root.add_child(layer)
+	view.play(battle, "Revoir : étage %d" % GameData.last_fight["floor"], func(_fight):
+		var label := UI.make_label("Fin du combat revu : rien n'a changé dans la partie.", 24)
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		return [label])
+	view.closed.connect(func(): layer.queue_free())
+	visible = false
+	return "Le combat est rejoué."

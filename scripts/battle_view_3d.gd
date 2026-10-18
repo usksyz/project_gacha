@@ -119,6 +119,11 @@ var fps_label: Label
 ## (point 8) L'ambiance (assombrie la nuit) et la lumière du feu de camp.
 var environment: Environment
 var fire_light: OmniLight3D
+## (point 9) Le calque de débogage montré (« » : aucun), ses valeurs par case et leur prochain calcul.
+var layer_button: Button
+var debug_layer := ""
+var _layer_values := PackedFloat32Array()
+var _layer_timer := 0.0
 
 var cam_target := Vector3.ZERO
 var zoom := ZOOM_DEFAULT
@@ -211,6 +216,15 @@ func _init() -> void:
 	rotate_button.offset_top = 8
 	rotate_button.offset_bottom = 60
 	add_child(rotate_button)
+	# (Recensement « Techniques », point 9) Mode dev : les calques de débogage (regards, recherche, terrain).
+	layer_button = UI.make_button("Calques", _next_layer, 16)
+	layer_button.custom_minimum_size = Vector2(110, 44)
+	layer_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	layer_button.offset_left = -118
+	layer_button.offset_right = -8
+	layer_button.offset_top = 66
+	layer_button.offset_bottom = 110
+	add_child(layer_button)
 
 	# Mode dev : images par seconde.
 	fps_label = UI.make_label("", 16)
@@ -1032,6 +1046,7 @@ func _process(delta: float) -> void:
 	_update_fade(delta)
 	_update_fog(delta)
 	# (mode dev ; l'option « Performances » des paramètres montre tout cela, et plus, sur tous les écrans)
+	layer_button.visible = Settings.dev_mode
 	fps_label.visible = Settings.dev_mode and not Settings.show_perf
 	if fps_label.visible:
 		fps_label.text = "%d images/s" % Engine.get_frames_per_second()
@@ -1073,6 +1088,7 @@ func _draw_overlay() -> void:
 				continue  # (dans le brouillard : jamais vu)
 			overlay.draw_circle(project(Vector3(spot.x, _surface_at(spot) + 0.03, spot.y)), 5.0 * k,
 				BattleView.CORPSE_FOUND_COLOR if corpse["found"] else BattleView.CORPSE_COLOR)
+	_draw_layer()
 	_draw_orders(bodies, k)
 	_draw_rays()
 	for unit in battle.units:
@@ -1256,3 +1272,65 @@ func _draw_effects(heads: Dictionary, bodies: Dictionary, k: float) -> void:
 		overlay.draw_string(font, head + Vector2(-80, -18 * k - age * 30.0 - ranks.get(i, 0) * BattleView.FLOAT_LINE),
 			effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160,
 			font_size, color)
+
+
+# ---------------------------------------------------------------------------
+# Calques de débogage (recensement « Techniques », point 9 ; mode dev)
+# ---------------------------------------------------------------------------
+
+const LAYERS := ["", "regards", "recherche", "terrain"]
+const LAYER_NAMES := {"": "Calques", "regards": "Regards", "recherche": "Recherche", "terrain": "Terrain"}
+
+
+## Le calque suivant : aucun → les cases que regardent les monstres connus (BattleAlert.exposure) → la carte de
+## probabilité des monstres (BattleSearch.heat) → le terrain annoté (BattleTerrain : goulets, points hauts, cachettes).
+func _next_layer() -> void:
+	debug_layer = LAYERS[(LAYERS.find(debug_layer) + 1) % LAYERS.size()]
+	layer_button.text = LAYER_NAMES[debug_layer]
+	_layer_timer = 0.0
+
+
+## Les valeurs du calque (recalculées toutes les 0,3 s), dessinées en losanges colorés sur le dessus des cases.
+func _draw_layer() -> void:
+	if debug_layer == "" or not Settings.dev_mode:
+		return
+	_layer_timer -= get_process_delta_time()
+	var map: BattleMap = battle.map
+	if _layer_timer <= 0.0:
+		_layer_timer = 0.3
+		match debug_layer:
+			"regards":
+				_layer_values = battle.alert.exposure() if battle.alert != null else PackedFloat32Array()
+			"recherche":
+				_layer_values = battle.search.heat.duplicate() if battle.search != null else PackedFloat32Array()
+				var top := 0.0
+				for value in _layer_values:
+					top = maxf(top, value)
+				for i in _layer_values.size():
+					_layer_values[i] = _layer_values[i] / top if top > 0.0 else 0.0
+			"terrain":
+				_layer_values = PackedFloat32Array()
+				_layer_values.resize(map.kinds.size())
+				if battle.terrain != null:
+					for i in map.kinds.size():
+						_layer_values[i] = 3.0 if battle.terrain.choke[i] == 1 else (2.0 if battle.terrain.high[i] == 1 \
+							else (1.0 if battle.terrain.hide[i] == 1 else 0.0))
+	if _layer_values.size() != map.kinds.size():
+		return
+	for i in map.kinds.size():
+		var value: float = _layer_values[i]
+		if value <= 0.0:
+			continue
+		var color: Color
+		match debug_layer:
+			"regards":
+				color = Color(1.0, 0.25, 0.2, clampf(0.25 * value, 0.2, 0.6))
+			"recherche":
+				color = Color(1.0, 0.6, 0.1, 0.15 + 0.5 * value)
+			_:
+				color = [Color(0.3, 0.9, 0.4, 0.45), Color(0.4, 0.6, 1.0, 0.5), Color(1.0, 0.85, 0.2, 0.55)][int(value) - 1]
+		var cell := map.cell_at(i)
+		var y := tops[i] + 0.04
+		var points := PackedVector2Array([project(Vector3(cell.x + 0.15, y, cell.y + 0.15)), project(Vector3(cell.x + 0.85, y, cell.y + 0.15)),
+			project(Vector3(cell.x + 0.85, y, cell.y + 0.85)), project(Vector3(cell.x + 0.15, y, cell.y + 0.85))])
+		overlay.draw_colored_polygon(points, color)

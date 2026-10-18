@@ -271,6 +271,12 @@ var ties: BattleTies
 var terrain: BattleTerrain
 ## Point 5 : la recherche intelligente des monstres (carte de probabilité partagée) et la carte de fuite des héros.
 var search: BattleSearch
+## Point 9 (outils) : la graine du combat, le numéro du pas, les ordres du Maître donnés pendant le combat ({"t", "step",
+## "kind", "hero", "args"}), et ceux à rejouer (un combat que l'on revoit, voir _apply_replay).
+var battle_seed := 0
+var step_count := 0
+var order_log: Array[Dictionary] = []
+var replay_orders: Array = []
 var assassinations := 0
 var traps_placed := 0
 var traps_sprung := 0
@@ -595,3 +601,32 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 ## (vraie fonction : battle.gd)
 func _duel_yields(unit: Dictionary) -> bool:
 	return false
+
+
+## (Point 9) Un ordre du Maître : noté (pour revoir le combat), et le hasard re-semé à partir de la graine du combat (le
+## même ordre au même pas tire les mêmes dés, ce qui s'est passé ailleurs dans le jeu n'y change rien).
+func _order_begin(kind: String, hero: Dictionary, args: Dictionary) -> void:
+	order_log.append({"t": time, "step": step_count, "kind": kind, "hero": hero["id"], "args": args})
+	seed(hash([battle_seed, step_count, "ordre", order_log.size()]))
+
+
+## (Point 9) Un combat que l'on revoit : les ordres du Maître notés à ce pas, rejoués avant le pas, comme pendant le
+## combat (ils avaient été donnés entre deux pas).
+func _apply_replay() -> void:
+	while not replay_orders.is_empty() and replay_orders[0]["step"] <= step_count:
+		var entry: Dictionary = replay_orders.pop_front()
+		var hero: Dictionary = units[entry["hero"]]
+		var args: Dictionary = entry["args"]
+		match entry["kind"]:
+			"move":
+				call("order_move", hero, args["pos"])
+			"attack":
+				call("order_attack", hero, units[args["target"]])
+			"swap":
+				call("order_swap", hero)
+			"hawk":
+				call("order_hawk_eye", hero)
+			"barrage":
+				call("order_barrage", hero)
+			"berserk":
+				call("order_berserk", hero, args["on"])

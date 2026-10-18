@@ -7,6 +7,7 @@ extends BattleMind
 ## En rage sur ordre, il la garde jusqu'à l'ordre contraire ; coupée sur ordre, il ne la relance pas
 ## de lui-même pendant BERSERK_ORDER_HOLD secondes. Comme tout ordre, il peut être refusé (_obeys).
 func order_berserk(hero: Dictionary, on: bool) -> void:
+	_order_begin("berserk", hero, {"on": on})
 	if quest.get("duel", false) or not can_berserk(hero) or hero["berserk"] == on or not _obeys(hero):
 		return
 	if on:

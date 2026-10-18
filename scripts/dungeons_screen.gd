@@ -933,7 +933,9 @@ func _start_fight() -> void:
 	# les héros se débrouillent seuls et le résultat est appliqué au lancement suivant.
 	# C'est aussi là que les héros prennent leurs armes dans l'arsenal : avant de créer le combat.
 	GameData.start_tower_battle(team, floor_enemies, floor_quest, floor_number, floor_map)
+	GameData.record_fight(team, floor_enemies, floor_quest, floor_map, floor_number)  # (mode dev : revoir ce combat)
 	var battle := Battle.new(team, floor_enemies, floor_quest)
+	GameData.record_fight_battle(battle)
 	battle.map_data = floor_map
 	battle.start()
 
