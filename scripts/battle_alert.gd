@@ -32,7 +32,10 @@ var _rng := RandomNumberGenerator.new()
 ## revenus au calme sans avoir repéré personne (« presque vu »), héros qui se sont figés à temps.
 var _still := {}
 var _last_pos := {}
-var counts := {"mefiant": 0, "presque_vu": 0, "fige": 0}
+var counts := {"mefiant": 0, "presque_vu": 0, "fige": 0, "cadavres": 0, "disparus": 0}
+## Point 2 : les corps des monstres tombés avant l'alarme ({"pos", "name", "squad", "t", "found", "missed"} ; voir
+## on_death, _look_for_corpses, _notice_missing).
+var corpses: Array[Dictionary] = []
 
 
 func _init(owner) -> void:
@@ -105,6 +108,8 @@ func _arrange_camp(units: Array, sleeping: bool) -> void:
 		var cell := center + Vector2i(roundi(cos(angle) * 2.0), roundi(sin(angle) * 1.6))
 		var unit: Dictionary = rest[i]
 		_put(unit, cell, "sommeil" if sleeping else "repos", (home - BattleMap.center(cell)).normalized())
+	for unit in units:
+		unit["squad"] = 0  # (point 2 : un seul groupe, le camp)
 
 
 ## Un poste fortifié : la hauteur la plus haute de la moitié ennemie ; les tireurs en haut, les autres au pied.
@@ -128,6 +133,8 @@ func _arrange_post(units: Array) -> void:
 		_put(shooters[i], _best_lookout(top + Vector2i(i - shooters.size() / 2, 0), 1), "poste", Vector2(0, 1))
 	for i in others.size():
 		_put(others[i], top + foot[i % foot.size()], "poste", Vector2(0, 1))
+	for unit in units:
+		unit["squad"] = 0  # (point 2 : un seul groupe, le poste)
 
 
 ## Des groupes de 2 ou 3 qui font des rondes au milieu de la carte (chacun dans sa bande de colonnes).
@@ -154,6 +161,7 @@ func _arrange_patrols(units: Array) -> void:
 			_put(unit, _cell_of(route[0]) + Vector2i(i, 0), "ronde", Vector2(0, 1))
 			unit["route"] = route
 			unit["route_i"] = 1
+			unit["squad"] = g + 1  # (point 2 : chaque patrouille est un groupe)
 
 
 ## Une embuscade : cachés dans les herbes hautes, ou juste derrière un rocher, un muret ou un bloc (vu des héros).
@@ -229,6 +237,7 @@ func on_spawn(enemy: Dictionary) -> void:
 	match disposition:
 		"camp", "endormis", "poste":
 			_put(enemy, _cell_of(home), {"camp": "repos", "endormis": "sommeil", "poste": "poste"}[disposition], Vector2(0, 1))
+			enemy["squad"] = 0
 		_:
 			var route := [enemy["pos"]]
 			for i in 2:
@@ -462,12 +471,17 @@ func general_alarm(text: String) -> void:
 func noise(pos: Vector2, radius: float) -> void:
 	if alarm:
 		return
+	# (point 2 du recensement « Techniques ») Le bruit suit les passages : il contourne une maison ; à travers un mur, il
+	# ne porte qu'à 1 / SOUND_WALL_FACTOR de sa portée.
+	var field: PackedFloat32Array = battle.map.sound_field(battle.map.cell_of(pos), radius)
 	for unit in battle._alive(battle.enemies):
 		var state: String = unit["state"]
 		if state in ["alerte", "embusque"]:
 			continue
 		var reach := radius * (GameData.SLEEP_HEARING_FACTOR if state == "sommeil" else 1.0)
-		if unit["pos"].distance_to(pos) > reach:
+		var heard_at: float = minf(field[battle.map.index(battle.map.cell_of(unit["pos"]))],
+			unit["pos"].distance_to(pos) * GameData.SOUND_WALL_FACTOR)
+		if heard_at > reach:
 			continue
 		if unit["home_state"] == "guet" and state in ["guet", "mefiant"]:
 			general_alarm("%s, le guetteur, entend des bruits de combat : il donne l'alarme !" % unit["name"])
@@ -496,8 +510,113 @@ func tick() -> void:
 		var last = _last_pos.get(hero["id"])
 		_still[hero["id"]] = last != null and last.distance_to(hero["pos"]) < 0.005
 		_last_pos[hero["id"]] = hero["pos"]
+	if not alarm and not corpses.is_empty():
+		_look_for_corpses()
+		_notice_missing()
 	if not alarm and battle.clock_start < 0.0 and battle.time >= GameData.ALARM_SECONDS:
 		general_alarm("Les monstres ont flairé ton équipe : ils se lancent à sa recherche !")
+
+
+# ---------------------------------------------------------------------------
+# Indices dans le décor : corps et compagnons disparus (point 2 du recensement « Techniques »)
+# ---------------------------------------------------------------------------
+
+## Un monstre tombe avant l'alarme (voir Battle._announce_fall) : son corps reste là.
+func on_death(monster: Dictionary) -> void:
+	if alarm or monster["is_hero"]:
+		return
+	corpses.append({"pos": monster["pos"], "name": monster["name"], "squad": monster["squad"], "t": battle.time,
+		"found": false, "missed": false})
+
+
+## Les monstres calmes et éveillés regardent autour d'eux : un corps dans leur regard (ou tout près), à portée de vue
+## et sans obstacle, est découvert.
+func _look_for_corpses() -> void:
+	var half := deg_to_rad(GameData.SIGHT_ANGLE / 2.0)
+	for corpse in corpses:
+		if corpse["found"]:
+			continue
+		var cell: Vector2i = battle.map.cell_of(corpse["pos"])
+		for unit in battle._alive(battle.enemies):
+			if unit["state"] in ["alerte", "sommeil", "embusque"]:
+				continue
+			var rel: Vector2 = corpse["pos"] - unit["pos"]
+			var distance := rel.length()
+			if distance > GameData.SIGHT_LENGTH * GameData.SIGHT_MONSTER_FACTOR * sight_factor(unit):
+				continue
+			if distance > GameData.CORPSE_NEAR and absf(unit["facing"].angle_to(rel)) > half:
+				continue
+			if not battle.map.line_of_sight(unit["pos"], battle.height_of(unit), corpse["pos"], battle.map.height_at(cell)):
+				continue
+			_discover(unit, corpse)
+			if alarm:
+				return
+			break
+
+
+## Il découvre un corps : il crie. Un guetteur (ou un guetteur qui l'entend) donne l'alarme générale ; sinon, lui et
+## les monstres à portée de cri deviennent vigilants et viennent fouiller autour du corps.
+func _discover(unit: Dictionary, corpse: Dictionary) -> void:
+	corpse["found"] = true
+	counts["cadavres"] += 1
+	if unit["home_state"] == "guet":
+		general_alarm("%s, le guetteur, découvre le corps de %s : il donne l'alarme !" % [unit["name"], corpse["name"]])
+		return
+	if _seen(unit):
+		battle._log("%s découvre le corps de %s et pousse un cri !" % [unit["name"], corpse["name"]], "reinforce")
+	else:
+		battle._log("Un cri retentit plus loin : un corps a été découvert.", "reinforce")
+	_search_around(unit, corpse["pos"], 0)
+	var k := 1
+	for other in battle._alive(battle.enemies):
+		if other["id"] == unit["id"] or other["state"] in ["alerte", "embusque"]:
+			continue
+		if other["pos"].distance_to(unit["pos"]) > GameData.SHOUT_RANGE:
+			continue
+		if other["home_state"] == "guet":
+			general_alarm("%s, le guetteur, entend crier qu'un corps a été trouvé : il donne l'alarme !" % other["name"])
+			return
+		if other["state"] == "sommeil" and _seen(other):
+			battle._log("%s se réveille en sursaut !" % other["name"], "reinforce")
+		_search_around(other, corpse["pos"], k)
+		k += 1
+
+
+## Au bout de MISSING_SECONDS, un groupe s'aperçoit qu'un compagnon tombé sans bruit ne revient pas : tous deviennent
+## vigilants, le plus proche (pas un guetteur) part le chercher là où il était.
+func _notice_missing() -> void:
+	for corpse in corpses:
+		if corpse["missed"] or corpse["found"] or corpse["squad"] < 0 or battle.time - corpse["t"] < GameData.MISSING_SECONDS:
+			continue
+		corpse["missed"] = true
+		var seeker: Dictionary = {}
+		var noticed := false
+		for mate in battle._alive(battle.enemies):
+			if mate["squad"] != corpse["squad"] or mate["state"] in ["alerte", "embusque", "sommeil"]:
+				continue
+			noticed = true
+			mate["wary"] = true
+			if mate["home_state"] != "guet" and (seeker.is_empty() \
+					or mate["pos"].distance_to(corpse["pos"]) < seeker["pos"].distance_to(corpse["pos"])):
+				seeker = mate
+		if not noticed:
+			continue
+		counts["disparus"] += 1
+		if seeker.is_empty():
+			continue
+		_search_around(seeker, corpse["pos"], 0)
+		if _seen(seeker):
+			battle._log("%s ne voit pas revenir %s : il part à sa recherche." % [seeker["name"], corpse["name"]], "reinforce")
+
+
+## Il va fouiller près de « pos » (le k-ième un peu à côté : ils ne vont pas tous sur la même case), sur ses gardes.
+func _search_around(unit: Dictionary, pos: Vector2, k: int) -> void:
+	var offset := Vector2.ZERO if k == 0 else Vector2(GameData.CORPSE_SEARCH_SPREAD, 0).rotated(k * 2.1)
+	unit["state"] = "fouille"
+	unit["search"] = BattleMap.center(_nearest_standable(battle.map.cell_of(pos + offset)))
+	unit["search_until"] = -1.0
+	unit["wary"] = true
+	unit["detect"] = maxf(unit["detect"], GameData.DETECT_INVESTIGATE)
 
 
 # ---------------------------------------------------------------------------

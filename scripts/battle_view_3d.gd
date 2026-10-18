@@ -812,6 +812,12 @@ func _draw_overlay() -> void:
 		var e := project(Vector3(c.x - 0.25, top, c.y + 0.25))
 		overlay.draw_line(a, b, BattleView.TRAP_COLOR, 2.5 * k)
 		overlay.draw_line(d, e, BattleView.TRAP_COLOR, 2.5 * k)
+	# (recensement « Techniques », point 2) les corps des monstres tombés avant l'alarme (rouges une fois découverts)
+	if battle.alert != null:
+		for corpse in battle.alert.corpses:
+			var spot: Vector2 = corpse["pos"]
+			overlay.draw_circle(project(Vector3(spot.x, _surface_at(spot) + 0.03, spot.y)), 5.0 * k,
+				BattleView.CORPSE_FOUND_COLOR if corpse["found"] else BattleView.CORPSE_COLOR)
 	_draw_orders(bodies, k)
 	_draw_rays()
 	for unit in battle.units:

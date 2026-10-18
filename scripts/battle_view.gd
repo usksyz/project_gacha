@@ -720,6 +720,15 @@ func _draw_traps(origin: Vector2, cell: float) -> void:
 		arena.draw_line(center - Vector2(r, r), center + Vector2(r, r), TRAP_COLOR, 2.5)
 		arena.draw_line(center - Vector2(r, -r), center + Vector2(r, -r), TRAP_COLOR, 2.5)
 		arena.draw_arc(center, r * 1.3, 0, TAU, 16, TRAP_COLOR, 1.5)
+	# (recensement « Techniques », point 2) Les corps des monstres tombés avant l'alarme : gris, rouge une fois découverts.
+	if battle.alert != null:
+		for corpse in battle.alert.corpses:
+			var at: Vector2 = origin + corpse["pos"] * cell
+			arena.draw_circle(at, cell * 0.16, CORPSE_FOUND_COLOR if corpse["found"] else CORPSE_COLOR)
+
+
+const CORPSE_COLOR := Color(0.35, 0.33, 0.32, 0.8)
+const CORPSE_FOUND_COLOR := Color(0.6, 0.2, 0.2, 0.85)
 
 
 ## La carte « 3D sur grille » vue du dessus (Combat v2, C1) : chaque case dans la couleur de son type, plus

@@ -85,6 +85,8 @@ func _announce_fall(fighter: Dictionary, cause: String, instant := false, blow :
 	if not fighter["is_hero"]:
 		fighter["killer"] = cause
 		_log("%s est vaincu." % fighter["name"])
+		if alert != null:
+			alert.on_death(fighter)  # (recensement « Techniques », point 2) son corps reste là, on peut le découvrir
 	elif instant:
 		_die(fighter, cause)
 	else:

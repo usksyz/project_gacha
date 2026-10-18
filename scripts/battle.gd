@@ -434,6 +434,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"detect": 0.0,
 		"detect_pos": Vector2.ZERO,
 		"wary": false,
+		# (point 2) son groupe (le camp, le poste, une patrouille : -1, aucun), qui remarque qu'il a disparu.
+		"squad": -1,
 		# Étape E, point 3 : sa discrétion (1 : normal ; les monstres le remarquent à cette part de leur vue et de leur
 		# ouïe, voir BattleExplore.stealth_of), et pris dans un piège jusqu'à ce moment.
 		"stealth": 1.0,

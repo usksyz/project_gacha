@@ -377,6 +377,19 @@ const DETECT_INSTANT := 1.5
 const WARY_SIGHT := 1.2
 const WARY_RATE := 1.5
 const WARY_SWEEP := 1.4
+# Indices dans le décor et son qui suit les passages (recensement « Techniques », point 2 ; ajout du projet). Un
+# monstre tué avant l'alarme laisse un corps. Un monstre calme et éveillé qui le voit (dans son regard, à portée de sa
+# vue, sans obstacle ; à moins de CORPSE_NEAR cases, même de côté) le découvre : il crie ; les monstres à moins de
+# SHOUT_RANGE cases deviennent vigilants et viennent fouiller autour du corps (à CORPSE_SEARCH_SPREAD cases près) ; un
+# guetteur qui le découvre ou l'entend donne l'alarme générale. Un monstre d'un groupe (le camp, le poste, une
+# patrouille : « squad ») qui ne voit plus revenir un compagnon tombé sans bruit s'en aperçoit au bout de
+# MISSING_SECONDS : le plus proche (pas un guetteur, pas un dormeur) part le chercher là où il était, les autres
+# deviennent vigilants. Les bruits (coups, pièges) suivent les passages : la longueur du chemin à pied compte, pas la
+# ligne droite ; à travers un mur, ils portent à 1 / SOUND_WALL_FACTOR de leur portée. Chiffres provisoires.
+const CORPSE_NEAR := 1.5
+const CORPSE_SEARCH_SPREAD := 1.5
+const MISSING_SECONDS := 8.0
+const SOUND_WALL_FACTOR := 2.0
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

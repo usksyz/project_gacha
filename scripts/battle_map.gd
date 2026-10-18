@@ -294,6 +294,40 @@ func flow_step(dist: PackedFloat32Array, from: Vector2i, side: int, avoid := {})
 	return cell_at(best) if best >= 0 else Vector2i(-1, -1)
 
 
+## Le chemin d'un bruit (recensement « Techniques », point 2 ; ajout du projet) : pour chaque case, la longueur du
+## passage le plus court depuis « from » (dans les deux sens : un son monte sur un toit comme il en descend), sans les
+## coûts de foule ni de danger, jusqu'à « max_dist » (au-delà : INF). Le son contourne les maisons au lieu de passer à
+## travers. Parcours de Dijkstra simple (la carte est petite et un bruit est rare).
+func sound_field(from: Vector2i, max_dist: float) -> PackedFloat32Array:
+	var dist := PackedFloat32Array()
+	dist.resize(heights.size())
+	dist.fill(INF)
+	if out_links.is_empty():
+		return dist
+	from = nearest_walkable(from)
+	dist[index(from)] = 0.0
+	var open: Array[int] = [index(from)]
+	while not open.is_empty():
+		# (la case ouverte la plus proche)
+		var k_best := 0
+		for k in open.size():
+			if dist[open[k]] < dist[open[k_best]]:
+				k_best = k
+		var c: int = open[k_best]
+		open.remove_at(k_best)
+		for pair in [[out_links[c], out_lengths[c]], [in_links[c], in_lengths[c]]]:
+			var links: PackedInt32Array = pair[0]
+			var lengths: PackedFloat32Array = pair[1]
+			for n in links.size():
+				var m: int = links[n]
+				var nd: float = dist[c] + lengths[n]
+				if nd < dist[m] and nd <= max_dist:
+					if dist[m] == INF:
+						open.append(m)
+					dist[m] = nd
+	return dist
+
+
 ## La case où l'on peut se tenir la plus proche (elle-même si c'est possible).
 func nearest_walkable(cell: Vector2i) -> Vector2i:
 	cell = Vector2i(clampi(cell.x, 0, size.x - 1), clampi(cell.y, 0, size.y - 1))
