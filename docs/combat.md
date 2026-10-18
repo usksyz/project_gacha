@@ -482,6 +482,42 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   `PerfOverlay`, ajouté par `main.gd` ; réglage `Settings.show_perf`, Paramètres > Jeu > « Performances », signal
   `perf_changed`, enregistré dans `parametres.cfg`) : en haut à gauche de tous les écrans, hors mode dev aussi, images
   par seconde, temps d'une image, appels de dessin, mémoire, carte graphique, processeur (cœurs), système.
+  2. Nouveau générateur (`scripts/map_generator.gd`, `MAP_VERSION` 2 ; chiffres en tête du fichier, `TERRAIN`). Cartes de
+  24 x 26 cases (avant 18 x 20) en disque (`inside` : une ellipse qui remplit la grille) ; au-delà, une lisière
+  infranchissable (`BLOCK`, `edge_style` : arbres, rochers ou ruines). Méthodes superposées :
+  | Méthode | Ce qu'elle fait ici | Référence |
+  | --- | --- | --- |
+  | Bruit de Perlin fractal (fBm, 4 octaves, `FastNoiseLite`) | le relief, seuillé en niveaux 0, 1, 2 selon le lieu ; la route (bruit 1D) ; les bois et les clairières ; les herbes hautes | Red Blob Games, « Making maps with noise functions » ; doc Godot `FastNoiseLite` |
+  | Automate cellulaire (2 passes) | efface les petits îlots du relief : une case garde son niveau si `CA_KEEP` voisines sur 8 sont aussi hautes | grottes de RogueBasin (« Cellular Automata Method for Generating Random Cave-Like Levels ») |
+  | Lissage du relief | jamais plus d'un niveau d'écart entre voisines ; bords en pentes douces (`STAIRS`) ou petites falaises (`cliffs`, relief) | — |
+  | Échantillonnage de Poisson simplifié (« dart throwing ») | les arbres jamais trop serrés (`TREE_SPACING`), modulés par un bruit (`FOREST_DENSITY`) | Bridson, « Fast Poisson Disk Sampling in Arbitrary Dimensions » (2007) |
+  | Morceaux faits main posés sur le relief | maisons le long de la route, grange, puits, champs clôturés, butte, ruines, ville et cité | — |
+  | Remplissage des poches | une case qu'un camp ne peut atteindre devient un buisson (`_fill_pockets`), puis les vérifications de C1 (`check`) | — |
+  (Références citées de mémoire, non relues pendant la séance. Étudiée sans être retenue : la « Wave Function Collapse »
+  de Maxim Gumin, utile pour des villes entières, trop lourde ici.)
+  Lieux : village (étage 1 : route de terre sinueuse `roads`, 6 maisons en moyenne de part et d'autre, façade tournée vers
+  la route `facing`, grange à échelle, puits, champs clôturés, arbres et vergers), prairie (étage 2 : collines, butte,
+  bosquets serrés, rochers, herbes), forêt (nouveau, une graine sur deux aux étages ordinaires, `template_for(..., graine)` :
+  95 arbres en moyenne, clairières, sentier, sous-bois, butte rocheuse), relief (l'autre moitié : collines et petites
+  falaises, rochers, blocs, ruines, quelques arbres), ville (survie : les ruelles dans la partie large du disque), cité
+  (défense : rempart ligne `WALL_ROW` 22, d'un bord à l'autre du disque), arène (duel). Zones de départ plates (`_flat_zone`) ;
+  arbres, herbes et rochers permis sur leurs côtés (`_open_zone`). Chaque décor garde sa hauteur de base (`base`). Les
+  dispositions des monstres (`BattleAlert`) prennent les lignes de l'ancienne carte à l'échelle (`_y`). Sauvegarde
+  (`SAVE_VERSION` 11) : les étages figés d'un format d'avant sont refaits, le combat en cours reprend sur une carte neuve.
+  Outil : `tools/essai_cartes.gd` (comptes par lieu, échecs au premier essai, cartes en lettres).
+  3. Rendu 3D des nouveaux décors (`battle_view_3d.gd`) : sol et herbes à la hauteur du terrain ; pente douce = le niveau
+  d'en dessous et une rampe (`Shape.RAMP`, prisme coupé en biais, tourné vers la voisine basse) ; route de terre
+  (`ROAD_COLOR`, palette « road ») ; maisons crépies (palette « wall »), une porte côté route, un toit à deux pans sur
+  toute la maison (le faîte suit le grand côté) ; arbres de taille variée (une seconde boule de feuillage sur les
+  grands), buissons, clôtures de bois (piquets et lisses) ; lisière : arbres, rochers ou pans de ruine contre le
+  terrain, rien au-delà (la carte paraît ronde) ; palette « foret ». Aperçu de l'étage (`FloorPreview`) : sans la lisière.
+  4. Brouillard de guerre (`battle_view_3d.gd`, `_update_fog`, chiffres `FOG_*` ; que l'écran, rien ne change dans le
+  combat) : chaque case est éclairée si un bâtonnet d'un héros l'a parcourue à la dernière mise à jour de la perception
+  (`BattleExplore.explored`) ou si un héros est à moins de `FOG_AROUND` cases ; déjà vue : `FOG_REMEMBERED` (sombre) ;
+  jamais vue : `FOG_UNSEEN` (presque noire). Recalcul toutes les `FOG_REFRESH` s, couleurs des pièces multipliées
+  (`_fogged_color`). Un monstre que personne ne voit est caché (`fogged` ; le mode dev le montre, grisé, comme avant) ;
+  un corps n'apparaît que sur une case déjà vue. Pas de brouillard en duel. `capture_c2` recalcule le brouillard avant
+  l'image. Banc : `tools/test_cartes.gd` (lieux, forme, village, forêt, graine, sauvegarde).
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

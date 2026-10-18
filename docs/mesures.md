@@ -234,3 +234,18 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   Étages 1 à 4 dans le bruit. Étage 5 : +8 (brute) et +5,3 (préparée), « bloqués sans raison » 32 → 0 (brute) : les
   héros en fuite ne s'entassent plus au bas de la carte, ils s'éloignent des monstres. Par combat : la carte se resserre
   sur un héros vu 20 à 46 fois, 0,1 à 4,7 cases fouillées. Tutoriel (`sim_tutoriel`, 200 parties) : 99,5 %.
+
+## Cartes, étapes 2 et 3 (cartes rondes 24 x 26, nouveau générateur)
+- `sim_tower ... combats=300 graine=7`, après le point 5 du recensement « Techniques » (cartes 18 x 20) → nouvelles cartes,
+  victoires % (morts par combat), étages 1 / 2 / 3 / 4 / 5 / 10 :
+  brute 99,3 / 51,7 / 40,3 / 47,7 / 39,3 / 20,7 → 100 (0,31) / 58,3 (2,54) / 40,3 (3,30) / 42,3 (3,18) / 38,7 (3,38) / 19,3 (3,93) ;
+  préparée 100 / 91,7 / 86,7 / 84,7 / 73 / 39,7 → 100 (0,06) / 92 (0,67) / 85,3 (1,06) / 83,3 (1,20) / 69,3 (1,92) / 48,3 (3,11).
+  Pas d'isolement des héros (la crainte d'un essai précédent) : tout reste dans le bruit (±4 points), sauf la défense
+  préparée, +8,6 (la horde vient de plus loin). Durée moyenne : 27 à 44 s hors survie (avant : 19 à 37 s). Par lieu,
+  étages 3 et 4 : camp 33 à 81 % (alarme générale 74 à 87 %), endormis 34 à 91 %, poste 33 à 81 %, patrouilles 50 à 88 %.
+  « Bloqués sans raison » : 0 à 2 par série, sauf l'étage 5 brute (25, tous dans un même combat : une héroïne qui hésite
+  entre deux chemins pendant quelques secondes).
+- Génération : 40 graines par lieu, toutes valides du premier coup (aucune carte plate de secours) ; 13 à 22 ms par carte ;
+  village : 6,2 maisons en moyenne ; forêt : 95 arbres en moyenne (`test_cartes`, `essai_cartes`).
+- Tutoriel (`sim_tutoriel`, 200 parties) : 98,5 % (avant : 99,5 %). `capture_c2 mode=identique` : identique ;
+  `test_prompt3` : tout est bon.
