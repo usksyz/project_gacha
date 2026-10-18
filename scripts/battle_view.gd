@@ -527,7 +527,8 @@ func _update_hint() -> void:
 
 ## Mode dev (IA tactique, C3) : l'attitude du héros, sa case et ses 3 raisons.
 const ATTITUDE_NAMES := {"attendre": "attend", "engager": "engage", "distance": "garde ses distances",
-	"couvrir": "se couvre", "proteger": "protège", "decrocher": "décroche", "poste": "tient son poste"}
+	"couvrir": "se couvre", "proteger": "protège", "decrocher": "décroche", "poste": "tient son poste",
+	"regrouper": "rejoint l'équipe"}
 
 
 func tactic_text(hero: Dictionary) -> String:

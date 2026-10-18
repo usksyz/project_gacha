@@ -229,7 +229,8 @@ const BARRAGE_STAMINA_COST := 10.0
 # emporte jusqu'à POTIONS_PER_MISSION de l'entrepôt (POTION, items.gd) et rend celles qu'elle n'a pas bues.
 # Un immortel du mode dev passe aussi par l'agonie, mais reste « à terre » au lieu de mourir.
 const AGONY_SECONDS := 8.0
-const AGONY_HELP_RANGE := 8.0
+const AGONY_HELP_RANGE := 12.0
+const AGONY_SAFE_RADIUS := 2.5
 const AGONY_ALLY_RANGE := 1.5
 const AGONY_RESCUE_SECONDS := 3.0
 # Arme plantée (œuvre, ch. 11 : Jenna laisse la lame dans la plaie de Zid, qui se viderait de son sang si on
@@ -252,6 +253,19 @@ const POTIONS_PER_MISSION := 3
 # (Un héros à l'agonie passe avant.)
 const CARE_SECONDS := 3.0
 const CARE_HELP_RANGE := 6.0
+
+# --- Cohésion de l'équipe (ajout du projet, demande du porteur du projet, octobre 2026 : « un héros part au combat,
+# personne ne va l'aider, il tombe et personne pour le réanimer » ; avant, AGONY_HELP_RANGE valait 8 cases) ---
+# Un héros au contact d'un ennemi crie : les alliés à moins de HERO_SHOUT_RANGE cases apprennent ce qu'il voit (en plus de
+# la voix ordinaire, VOICE_RANGE). Un allié qui se bat sans personne à moins de COHESION_NEAR cases de lui : un héros
+# libre à moins de LONELY_HELP_RANGE cases va l'aider, même si l'ennemi est loin de lui (BattleTactics). Un héros
+# (pas solitaire) qui se retrouve sans allié debout à moins de COHESION_LEASH cases, sans ennemi au contact, rejoint
+# l'allié le plus proche (attitude « regrouper »). Un héros à l'agonie appelle : l'allié libre le plus proche, à
+# moins de AGONY_HELP_RANGE cases, court le relever.
+const HERO_SHOUT_RANGE := 10.0
+const COHESION_NEAR := 5.0
+const LONELY_HELP_RANGE := 12.0
+const COHESION_LEASH := 7.0
 
 # --- Perception en bâtonnets (cahier, « Combat v2 », section 4 ; étape C3) ---
 # Chaque combattant voit par un éventail de SIGHT_RAYS bâtonnets (rayons) sur SIGHT_ANGLE degrés vers l'avant,

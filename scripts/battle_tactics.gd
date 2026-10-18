@@ -220,13 +220,25 @@ func _plan(unit: Dictionary, known: Array, allies: Array) -> Dictionary:
 			reasons.append({"why": "aller chercher le tireur %s" % shooter["name"], "weight": 6.0})
 		else:
 			protect_ward = _ward(unit, known, allies)
+			var lonely := _lonely_fight(unit, known, allies) if contacts.is_empty() else {}
 			if not protect_ward.is_empty():
 				attitude = "proteger"
+			elif not lonely.is_empty():
+				attitude = "engager"
+				target = lonely["foe"]
+				reasons.append({"why": ("aider %s, seul au contact" if lonely["alone"] else "aider %s, au contact") \
+					% lonely["ally"]["name"], "weight": 7.0 if lonely["alone"] else 5.0})
+			elif contacts.is_empty() and _strayed(unit, allies):
+				attitude = "regrouper"
 			elif _should_engage(unit, target, known, allies, reasons):
 				attitude = "engager"
 	var plan := {"attitude": attitude, "cell": null, "target": target["id"] if not target.is_empty() else -1,
 		"reasons": [], "t": battle.time}
-	if attitude != "engager":
+	if attitude == "regrouper":
+		var buddy: Dictionary = battle._nearest(unit, allies.filter(func(a): return a["id"] != unit["id"]))
+		plan["cell"] = BattleMap.center(battle._cell_of(buddy["pos"]))
+		reasons.append({"why": "rejoindre %s : trop loin de l'équipe" % buddy["name"], "weight": 5.0})
+	elif attitude != "engager":
 		var best := _best_cell(unit, known, allies, attitude, protect_ward, shooter)
 		plan["cell"] = best["cell"]
 		reasons.append_array(best["reasons"])
@@ -247,6 +259,48 @@ func _plan(unit: Dictionary, known: Array, allies: Array) -> Dictionary:
 	plan["reasons"] = reasons.slice(0, 3)
 	unit["t_last_dist"] = _foe_pos(unit, target).distance_to(unit["pos"]) if not target.is_empty() else -1.0
 	return plan
+
+
+## Cohésion (ajout du projet, voir GameData.LONELY_HELP_RANGE) : un allié au contact d'un ennemi connu, à moins de
+## LONELY_HELP_RANGE cases : {"ally", "foe"} (d'abord un allié seul, sans autre héros debout à moins de COHESION_NEAR
+## cases de lui, puis le plus proche ; l'ennemi au contact de lui le plus proche), sinon {}. Pas pour un solitaire (il
+## ne s'occupe que de lui). Un tireur y va aussi : il s'approche jusqu'à avoir l'ennemi à sa portée.
+func _lonely_fight(unit: Dictionary, known: Array, allies: Array) -> Dictionary:
+	if battle.explore.roles.get(unit["id"], "") == "solitaire":
+		return {}
+	var result := {}
+	var best := INF
+	for ally in allies:
+		if ally["id"] == unit["id"]:
+			continue
+		var distance: float = ally["pos"].distance_to(unit["pos"])
+		if distance > GameData.LONELY_HELP_RANGE:
+			continue
+		var foe := {}
+		var foe_distance := D.CONTACT_RANGE
+		for candidate in known:
+			var d: float = _foe_pos(unit, candidate).distance_to(ally["pos"])
+			if d <= foe_distance:
+				foe_distance = d
+				foe = candidate
+		if foe.is_empty():
+			continue
+		var alone: bool = not allies.any(func(other): return other["id"] != ally["id"] and other["id"] != unit["id"] \
+				and other["pos"].distance_to(ally["pos"]) <= GameData.COHESION_NEAR)
+		var score: float = distance - (GameData.LONELY_HELP_RANGE if alone else 0.0)
+		if score < best:
+			best = score
+			result = {"ally": ally, "foe": foe, "alone": alone}
+	return result
+
+
+## Cohésion (ajout du projet) : il s'est éloigné de tous ses alliés debout (plus de COHESION_LEASH cases), et il
+## n'est pas solitaire : il doit les rejoindre.
+func _strayed(unit: Dictionary, allies: Array) -> bool:
+	if battle.explore.roles.get(unit["id"], "") == "solitaire":
+		return false
+	var others := allies.filter(func(a): return a["id"] != unit["id"])
+	return not others.is_empty() and not others.any(func(a): return a["pos"].distance_to(unit["pos"]) <= GameData.COHESION_LEASH)
 
 
 ## Faut-il aller chercher la cible plutôt que l'attendre ? (Avec la raison dans « reasons ».) On attend quand la
