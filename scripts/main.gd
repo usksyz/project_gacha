@@ -114,6 +114,7 @@ func _ready() -> void:
 	if not GameData.absence_report.is_empty():
 		_show_absence_report()
 	GameData.facility_completed.connect(_show_facility_completed)
+	GameData.system_notice.connect(func(title, lines): _show_facility_completed(title, lines, false))
 	GameData.relations_changed.connect(_show_relation_news)
 	_show_relation_news()
 	GameData.tip_requested.connect(_queue_tip)
@@ -239,7 +240,7 @@ func _check_held_windows() -> void:
 		return
 	if not held_facilities.is_empty():
 		var held: Array = held_facilities.pop_front()
-		_show_facility_completed(held[0], held[1])
+		_show_facility_completed(held[0], held[1], held[2] if held.size() > 2 else true)
 		return
 	if not GameData.relation_news.is_empty():
 		_show_relation_news()
@@ -375,10 +376,11 @@ func _show_next_challenge() -> void:
 
 
 ## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle
-## est ouverte, le hub 3D garde son animation de construction pour après.
-func _show_facility_completed(title: String, lines: Array) -> void:
+## est ouverte, le hub 3D garde son animation de construction pour après. « building » faux (GameData.system_notice,
+## mission du jour...) : la même fenêtre, avec un seul bouton « OK ».
+func _show_facility_completed(title: String, lines: Array, building := true) -> void:
 	if _in_battle():
-		held_facilities.append([title, lines])  # (étape C) montrée après le combat
+		held_facilities.append([title, lines, building])  # (étape C) montrée après le combat
 		return
 	Settings.vibrate(150)
 	HubCity3D.paused = true

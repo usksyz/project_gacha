@@ -13,6 +13,9 @@ signal lobby_updated
 ## Un bâtiment s'est construit tout seul, sa condition remplie (terrain d'entraînement...) :
 ## main.gd l'annonce dans une fenêtre, et le hub 3D joue l'animation de construction.
 signal facility_completed(title: String, lines: Array)
+## Une fenêtre du Système à montrer (mission du jour accomplie...), avec un seul bouton « OK » ; pendant un combat,
+## elle attend la fin (main.gd).
+signal system_notice(title: String, lines: Array)
 ## De nouvelles annonces de relations attendent dans relation_news (hostilité née à la cité) :
 ## main.gd les montre dans une fenêtre système.
 signal relations_changed
@@ -56,6 +59,13 @@ var pity_counter := 0
 var pity4_counter := 0
 ## Date (jour de l'appareil, « 2026-10-17 ») de la dernière invocation gratuite quotidienne ("" = jamais prise).
 var free_summon_day := ""
+## Missions du jour (plus bas, « Missions du jour ») : {"day": date du jour où elles comptent, "done": [identifiants faits ce jour-là]}.
+var daily_missions := {"day": "", "done": []}
+
+## Sauvegarde groupée (octobre 2026, sauvegarde plus légère) : entre hold_saves() et release_saves(), save_game()
+## note seulement qu'il faudra sauvegarder ; release_saves() sauvegarde une seule fois à la fin. Voir save.gd.
+var _saves_held := 0
+var _save_wanted := false
 
 ## Prochain étage de la Tour à conquérir.
 var tower_floor := 1
@@ -157,6 +167,61 @@ func add_gold(amount: int) -> void:
 	gold += amount
 	gold_changed.emit(gold)
 	save_game()
+
+
+# ---------------------------------------------------------------------------
+# Missions du jour (ajout du projet, octobre 2026 : des gemmes hors de la Tour ; voir docs/economie.md).
+# Ici (en bas de la pile) : l'entraînement, les armes, les invocations et la Tour les comptent.
+# ---------------------------------------------------------------------------
+
+## Avant, seule la première victoire à chaque étage de la Tour donnait des gemmes : environ 7 invocations spéciales
+## jusqu'à l'étage 10, loin de la garantie (PITY5_LIMIT). Chaque jour réel (jour de l'appareil), chaque mission
+## faite une fois rapporte ses gemmes, et les faire toutes rapporte DAILY_MISSIONS_BONUS de plus. Pas pendant le
+## tutoriel. Chiffres provisoires : DAILY_MISSIONS x 3 + bonus = 300 gemmes par jour (une invocation spéciale tous
+## les 2 jours environ, en plus de la Tour).
+const DAILY_MISSIONS := {
+	"combat": {"text": "Livrer un combat dans la Tour (un étage rejoué compte)", "gems": 60},
+	"invocation": {"text": "Invoquer un héros ou tirer des armes", "gems": 60},
+	"entrainement": {"text": "Inscrire un héros au terrain d'entraînement", "gems": 60},
+}
+const DAILY_MISSIONS_BONUS := 120
+
+
+## Les missions du jour : [{"id", "text", "gems", "done"}], dans l'ordre de DAILY_MISSIONS.
+func daily_mission_list() -> Array:
+	_refresh_daily_missions()
+	var result := []
+	for id in DAILY_MISSIONS:
+		result.append({"id": id, "text": DAILY_MISSIONS[id]["text"], "gems": DAILY_MISSIONS[id]["gems"],
+			"done": id in daily_missions["done"]})
+	return result
+
+
+## Un nouveau jour : les missions repartent de zéro.
+func _refresh_daily_missions() -> void:
+	if daily_missions.get("day", "") != Time.get_date_string_from_system():
+		daily_missions = {"day": Time.get_date_string_from_system(), "done": []}
+
+
+## Une mission du jour vient d'être faite : ses gemmes (une fois par jour), le bonus si c'était la dernière, et
+## une fenêtre du Système (system_notice). Rien pendant le tutoriel.
+func complete_daily_mission(id: String) -> void:
+	if tutorial_step != "" or not DAILY_MISSIONS.has(id):
+		return
+	_refresh_daily_missions()
+	if id in daily_missions["done"]:
+		return
+	daily_missions["done"].append(id)
+	var gained: int = DAILY_MISSIONS[id]["gems"]
+	var lines := ["Mission du jour accomplie : %s." % DAILY_MISSIONS[id]["text"]]
+	if daily_missions["done"].size() == DAILY_MISSIONS.size():
+		gained += DAILY_MISSIONS_BONUS
+		lines.append("Toutes les missions du jour sont faites : %d gemmes de plus !" % DAILY_MISSIONS_BONUS)
+	else:
+		lines.append("Encore %d mission(s) aujourd'hui." % (DAILY_MISSIONS.size() - daily_missions["done"].size()))
+	lines.insert(1, "Récompense : %d gemmes." % gained)
+	add_gems(gained)  # (et la partie est sauvegardée)
+	system_notice.emit.call_deferred("Mission du jour", lines)
 
 
 # ---------------------------------------------------------------------------

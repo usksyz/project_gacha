@@ -49,6 +49,7 @@ func save_game() -> void:
 	file.set_value("partie", "pity", pity_counter)
 	file.set_value("partie", "pity4", pity4_counter)
 	file.set_value("partie", "invocation_gratuite", free_summon_day)
+	file.set_value("partie", "missions_du_jour", daily_missions)
 	file.set_value("partie", "etage", tower_floor)
 	file.set_value("partie", "prochain_id", next_hero_id)
 	file.set_value("partie", "codes_utilises", used_codes)
@@ -92,6 +93,7 @@ func load_game() -> bool:
 	pity_counter = mini(file.get_value("partie", "pity", 0), PITY5_LIMIT - 1)
 	pity4_counter = mini(file.get_value("partie", "pity4", 0), PITY4_LIMIT - 1)
 	free_summon_day = file.get_value("partie", "invocation_gratuite", "")  # absente : celle du jour est à prendre
+	daily_missions = file.get_value("partie", "missions_du_jour", {"day": "", "done": []})  # (octobre 2026)
 	tower_floor = file.get_value("partie", "etage", 1)
 	next_hero_id = file.get_value("partie", "prochain_id", 1)
 	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
@@ -182,6 +184,7 @@ func _new_game() -> void:
 	pity_counter = 0
 	pity4_counter = 0
 	free_summon_day = ""
+	daily_missions = {"day": "", "done": []}
 	tower_floor = 1
 	roster.clear()
 	next_hero_id = 1

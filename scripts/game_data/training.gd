@@ -70,6 +70,8 @@ func set_training(hero: Dictionary, skill_name: String) -> bool:
 		hero["post"] = ""  # un héros ne travaille qu'à un endroit à la fois
 	hero["training_since"] = Time.get_unix_time_from_system()
 	save_game()
+	if skill_name != "":
+		complete_daily_mission("entrainement")
 	return true
 
 

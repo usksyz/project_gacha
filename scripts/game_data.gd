@@ -95,6 +95,12 @@ func dev_reset_free_summon() -> void:
 	save_game()
 
 
+## Les missions du jour sont de nouveau à faire (comme un nouveau jour).
+func dev_reset_daily_missions() -> void:
+	daily_missions = {"day": "", "done": []}
+	save_game()
+
+
 ## Fait gagner « count » niveaux à un héros (sans dépasser son niveau maximum).
 func dev_add_levels(hero: Dictionary, count: int) -> void:
 	for i in count:

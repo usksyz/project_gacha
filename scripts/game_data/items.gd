@@ -134,6 +134,7 @@ func draw_weapons(count: int) -> Array[Dictionary]:
 	gold_changed.emit(gold)
 	save_game()
 	advance_tutorial("armes")  # (tutoriel) étape suivante : composer une équipe
+	complete_daily_mission("invocation")
 	return results
 
 

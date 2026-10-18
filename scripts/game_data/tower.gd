@@ -1146,6 +1146,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		report["potions"] = "Potions de soin utilisées : %d (il en reste %d dans l'entrepôt)." \
 			% [battle.potions_used, material_count(POTION)]
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
+	complete_daily_mission("combat")  # (octobre 2026) mission du jour, victoire ou défaite
 	return report
 
 

@@ -247,6 +247,8 @@ const STONE_PICKUP_CHANCE := 0.03
 
 ## Durée d'une expédition (secondes de temps réel) et temps entre deux ramassages d'un héros.
 const EXPEDITION_SECONDS := 1800
+## Gemmes rapportées par chaque expédition (ajout du projet, octobre 2026 : des gemmes hors de la Tour).
+const EXPEDITION_GEMS := 40
 const PICKUP_SECONDS := 120
 
 ## Grades des matériaux ramassés et leur chance (total 1.0).
@@ -431,6 +433,9 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 	keys.sort()  # rangé par matériau
 	for key in keys:
 		lines.append("%s x%d" % [key, totals[key]])
+	# Gemmes hors de la Tour (ajout du projet, octobre 2026, voir game_state.gd « Missions du jour »).
+	add_gems(EXPEDITION_GEMS)
+	lines.append("Gemmes trouvées : %d." % EXPEDITION_GEMS)
 	# Les héros retrouvent la cité : l'entraînement reprend avec une séance neuve.
 	for hero in alive_heroes():
 		if hero["id"] in expedition["team"]:
