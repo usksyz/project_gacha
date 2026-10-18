@@ -429,6 +429,16 @@ const FLEE_REPLAN := 1.0
 const FLANK_WEIGHT := 2.5
 const SYNC_RANGE := 4.0
 const SYNC_WAIT := 4.0
+# Formations d'exploration et bond d'abri en abri (recensement « Techniques », point 7 ; ajout du projet ; voir
+# BattleExplore._formation_slot, _bound). L'équipe passe en file (« colonne », COLUMN_SPACING cases entre deux) quand il
+# y a moins de FORMATION_NARROW cases libres sur les 9 autour du meneur, sinon en éventail (« coin ») ; un message au plus
+# toutes les FORMATION_LOG s. Chacun se met contre un abri tout proche de sa place. Le meneur va d'abri en abri vers son
+# but (à moins de BOUND_STEP cases, au moins une case plus près), avec une pause de BOUND_PAUSE s à chaque abri.
+const FORMATION_NARROW := 6
+const COLUMN_SPACING := 1.2
+const FORMATION_LOG := 8.0
+const BOUND_STEP := 3.0
+const BOUND_PAUSE := 0.6
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

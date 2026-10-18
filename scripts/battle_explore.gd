@@ -51,7 +51,13 @@ var partners := {}
 var mates := {}
 var _ready := {}
 var _synced := {}
-var counts := {"synchronises": 0}
+var counts := {"synchronises": 0, "formations": 0, "bonds_abri": 0}
+## (point 7) La formation de l'équipe qui explore (« coin » ou « colonne »), le prochain message, l'abri visé par le
+## meneur et la fin de sa pause.
+var formation := "coin"
+var _formation_logged := 0.0
+var _bound_target := Vector2(-1, -1)
+var _bound_wait := 0.0
 
 
 func _init(owner) -> void:
@@ -131,7 +137,7 @@ func think(hero: Dictionary) -> bool:
 		"ralliement":
 			target = rally
 		"meneur":
-			target = goal
+			target = _bound(hero)  # (point 7) d'abri en abri vers le but
 			# Arrivé près du but (ou trop longtemps dessus) : il est exploré, on en choisit un autre.
 			if hero["pos"].distance_to(goal) <= 1.5 or battle.time - _goal_t > GameData.EXPLORE_GOAL_MAX:
 				_mark_around(battle.map.cell_of(goal), 1)
@@ -144,14 +150,9 @@ func think(hero: Dictionary) -> bool:
 			if hero["pos"].distance_to(leader["pos"]) > GameData.SCOUT_AHEAD and hero["pos"].distance_to(goal) < leader["pos"].distance_to(goal):
 				target = hero["pos"]
 		_:
-			# Derrière le meneur, à quelques pas (les tireurs et les prudents plus loin), un peu de côté.
-			var heading: Vector2 = (goal - leader["pos"]).normalized() if goal.distance_to(leader["pos"]) > 0.1 else Vector2(0, -1)
-			var back := 2.4 if hero["ranged"] or role == "prudent" else 1.3
-			var side: float = (hero["id"] % 3 - 1) * 1.2
-			target = leader["pos"] - heading * back + heading.orthogonal() * side
-			target = BattleMap.center(battle.map.cell_of(target))
-			if not battle.map.walkable(battle.map.cell_of(target)):
-				target = leader["pos"]
+			# Derrière le meneur, à sa place dans la formation (point 7 : en coin à découvert, en file dans un passage
+			# étroit), contre un abri tout proche s'il y en a un.
+			target = _formation_slot(hero, leader, role)
 	hero["post"] = hero["pos"]  # (il n'a plus de ligne de départ à tenir)
 	_mark_around(battle.map.cell_of(hero["pos"]), 1)
 	hero["stealth"] = stealth_of(hero)
@@ -159,6 +160,83 @@ func think(hero: Dictionary) -> bool:
 		hero["pace"] = GameData.EXPLORE_PACE
 		battle._move_towards(hero, target)
 	return true
+
+
+## (Recensement « Techniques », point 7) La formation de l'équipe qui explore, revue à chaque plan : « colonne » (en
+## file, l'un derrière l'autre) quand le passage autour du meneur est étroit (moins de FORMATION_NARROW cases libres sur
+## les 9 autour de lui), sinon « coin » (en éventail derrière lui, les tireurs et les prudents plus loin).
+func _formation_slot(hero: Dictionary, leader: Dictionary, role: String) -> Vector2:
+	var heading: Vector2 = (goal - leader["pos"]).normalized() if goal.distance_to(leader["pos"]) > 0.1 else Vector2(0, -1)
+	var target: Vector2
+	if formation == "colonne":
+		var rank: int = maxi(0, _followers().find(hero["id"])) + 1
+		target = leader["pos"] - heading * GameData.COLUMN_SPACING * rank
+	else:
+		var back := 2.4 if hero["ranged"] or role == "prudent" else 1.3
+		var side: float = (hero["id"] % 3 - 1) * 1.2
+		target = leader["pos"] - heading * back + heading.orthogonal() * side
+	var cell: Vector2i = battle.map.cell_of(target)
+	if not battle.map.walkable(cell):
+		return leader["pos"]
+	# Un abri (herbes hautes, pied d'un mur) tout près de sa place : il s'y met.
+	if battle.terrain != null:
+		var cover: Vector2i = battle.terrain.nearest("hide", BattleMap.center(cell), 1.0)
+		if cover.x >= 0:
+			cell = cover
+	return BattleMap.center(cell)
+
+
+## Les héros qui suivent le meneur (dans l'ordre de leur numéro) : leur rang dans la colonne.
+func _followers() -> Array:
+	var ids := []
+	for hero in battle._alive(battle.heroes):
+		if hero["id"] != leader_id and roles.get(hero["id"], "suit") in ["suit", "prudent"]:
+			ids.append(hero["id"])
+	ids.sort()
+	return ids
+
+
+## La formation selon le passage autour du meneur (voir _formation_slot).
+func _pick_formation(leader: Dictionary) -> void:
+	var open := 0
+	var here: Vector2i = battle.map.cell_of(leader["pos"])
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			if battle.map.walkable(here + Vector2i(dx, dy)):
+				open += 1
+	var wanted := "colonne" if open < GameData.FORMATION_NARROW else "coin"
+	if wanted != formation:
+		formation = wanted
+		counts["formations"] += 1
+		if battle.time >= _formation_logged:
+			_formation_logged = battle.time + GameData.FORMATION_LOG
+			battle._log("L'équipe passe en file indienne." if wanted == "colonne" else "L'équipe se déploie en éventail.")
+
+
+## (Point 7) D'abri en abri : le meneur ne marche pas droit vers son but ; il va à l'abri le plus proche qui l'en
+## rapproche (à moins de BOUND_STEP cases, au moins une case plus près du but), y marque une pause (BOUND_PAUSE s), puis
+## repart. Sans abri sur le chemin : droit vers le but.
+func _bound(hero: Dictionary) -> Vector2:
+	if battle.time < _bound_wait:
+		return hero["pos"]
+	if _bound_target.x >= 0.0 and hero["pos"].distance_to(_bound_target) > 0.6 \
+			and _bound_target.distance_to(goal) < hero["pos"].distance_to(goal):
+		return _bound_target
+	if _bound_target.x >= 0.0 and hero["pos"].distance_to(_bound_target) <= 0.6:
+		_bound_target = Vector2(-1, -1)
+		_bound_wait = battle.time + GameData.BOUND_PAUSE
+		counts["bonds_abri"] += 1
+		return hero["pos"]
+	if battle.terrain == null:
+		return goal
+	var away: float = hero["pos"].distance_to(goal)
+	var cover: Vector2i = battle.terrain.nearest("hide", hero["pos"].move_toward(goal, GameData.BOUND_STEP / 2.0),
+		GameData.BOUND_STEP, func(c): return BattleMap.center(c).distance_to(goal) <= away - 1.0 \
+			and BattleMap.center(c).distance_to(hero["pos"]) >= 1.0)
+	if cover.x < 0:
+		return goal
+	_bound_target = BattleMap.center(cover)
+	return _bound_target
 
 
 ## Il connaît des monstres qui ne l'ont pas repéré (aucun n'est en alerte, ni tout près de lui) : il ne charge pas
@@ -483,6 +561,7 @@ func _replan() -> void:
 	elif new_leader != leader_id:
 		battle._log("%s mène maintenant l'exploration." % best["name"])
 	leader_id = new_leader
+	_pick_formation(best)  # (point 7)
 	# Le but de l'équipe : on le garde tant qu'il reste à découvrir.
 	if goal.x < 0.0 or is_explored(battle.map.cell_of(goal)):
 		goal = _frontier(best["pos"])
