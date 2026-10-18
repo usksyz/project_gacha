@@ -307,6 +307,11 @@ func _build_map() -> void:
 	alley_exits.assign(map_data.get("alley_exits", []))
 
 
+## Le combat se passe-t-il la nuit ? Une quête de nuit, ou (recensement « Techniques », point 8) un camp endormi.
+func is_night() -> bool:
+	return quest.get("night", false) or (alert != null and alert.disposition == "endormis")
+
+
 ## Vrai si ce combattant se tient en hauteur (au-dessus du sol).
 func is_high(unit: Dictionary) -> bool:
 	return height_of(unit) > 0

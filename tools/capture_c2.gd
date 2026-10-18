@@ -5,6 +5,7 @@ extends Node
 ##   Godot --path <copie> res://tools/capture_c2.tscn -- mode=capture etage=5 graine=31 avance=6 rot=0 out=C:/.../e5.png
 ## Modes :
 ##   capture : image de l'écran de combat. Options : etage, graine (carte), avance (secondes de combat avant
+##     (point 8 : « dispo=camp|endormis|... » impose la disposition des monstres)
 ##     la capture), rot (quarts de tour de la caméra, 0 à 3), choisi (numéro du héros choisi : murs et toits
 ##     transparents devant lui), archer_toit=oui (un héros tireur posé d'office sur un toit, pour l'image), zoom.
 ##   ordres : touche un héros, puis un toit, puis la rue, comme un doigt (lancer de rayon), et vérifie la case
@@ -19,7 +20,7 @@ var _args := {}
 
 func _ready() -> void:
 	_args = {"mode": "capture", "etage": "1", "graine": "7", "avance": "5", "rot": "0", "choisi": "-1",
-		"archer_toit": "non", "zoom": "", "out": "user://capture_c2.png", "combats": "3"}
+		"archer_toit": "non", "zoom": "", "out": "user://capture_c2.png", "combats": "3", "dispo": ""}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
 		if parts.size() == 2:
@@ -45,6 +46,7 @@ func _make_battle(floor_number: int, map_seed: int) -> Battle:
 	var layout: Dictionary = MapGenerator.generate(floor_number, quest, map_seed)
 	var battle := Battle.new(_make_team(floor_number), layout["enemies"], quest)
 	battle.map_data = layout["map"]
+	battle.forced_disposition = _args.get("dispo", "")  # (point 8 : « dispo=endormis », un camp la nuit)
 	battle.start()
 	return battle
 

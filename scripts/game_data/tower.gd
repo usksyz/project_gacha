@@ -439,6 +439,11 @@ const COLUMN_SPACING := 1.2
 const FORMATION_LOG := 8.0
 const BOUND_STEP := 3.0
 const BOUND_PAUSE := 0.6
+# Camps et nuit (recensement « Techniques », point 8 ; ajout du projet). Un camp (gardé ou endormi) a un feu au centre et
+# TENTS_PER_CAMP tentes (obstacles bas) à TENT_RADIUS cases. Le camp endormi se passe la nuit (choix du projet : un camp
+# dort la nuit) : la vue des non-nocturnes x SIGHT_NIGHT_FACTOR (C3), et l'écran est sombre, éclairé par le feu.
+const TENTS_PER_CAMP := 3
+const TENT_RADIUS := 4.0
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

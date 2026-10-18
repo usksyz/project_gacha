@@ -124,7 +124,7 @@ func _look(unit: Dictionary) -> void:
 	if not person:
 		length *= GameData.SIGHT_MONSTER_FACTOR
 	length += battle.height_of(unit) * GameData.SIGHT_HEIGHT_BONUS
-	if battle.quest.get("night", false) and not (person and PersonalityEngine.axis(source, "RYT") >= GameData.NOCTURNE_MIN):
+	if battle.is_night() and not (person and PersonalityEngine.axis(source, "RYT") >= GameData.NOCTURNE_MIN):
 		length *= GameData.SIGHT_NIGHT_FACTOR
 	if unit["is_hero"] and (battle.afraid(unit) or battle.panicking(unit)) or unit["berserk"]:
 		angle *= GameData.SIGHT_TUNNEL_FACTOR  # vision en tunnel

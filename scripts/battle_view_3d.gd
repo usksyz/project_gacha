@@ -76,6 +76,9 @@ const FOLIAGE_COLOR := Color("355e26")
 const TRUNK_COLOR := Color("5a3e26")
 ## (cartes, étape 2) La route de terre et le sentier.
 const ROAD_COLOR := Color("8a7350")
+## (point 8) La toile des tentes et le feu de camp.
+const TENT_COLOR := Color("b49a6a")
+const FIRE_COLOR := Color("ff9a3a")
 const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
 const BOSS_COLOR := Color("8a3aa8")
@@ -113,6 +116,9 @@ var sun: DirectionalLight3D
 var overlay: Control
 var rotate_button: Button
 var fps_label: Label
+## (point 8) L'ambiance (assombrie la nuit) et la lumière du feu de camp.
+var environment: Environment
+var fire_light: OmniLight3D
 
 var cam_target := Vector3.ZERO
 var zoom := ZOOM_DEFAULT
@@ -160,7 +166,7 @@ func _init() -> void:
 	viewport.msaa_3d = MSAA
 	container.add_child(viewport)
 
-	var environment := Environment.new()
+	environment = Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color("12141c")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -218,6 +224,7 @@ func _init() -> void:
 func setup(owner_view: BattleView) -> void:
 	view = owner_view
 	battle = owner_view.battle
+	_apply_daylight()
 	fog_on = not battle.quest.get("duel", false)
 	fog = PackedFloat32Array()
 	fog.resize(battle.map.kinds.size())
@@ -298,6 +305,13 @@ func _build_map() -> void:
 		tops[i] = top
 		if round_map and not MapGenerator.inside(cell):
 			_add_edge(cell, palette, i)
+			continue
+		if battle.alert != null and cell in battle.alert.tents:
+			_add_tent(cell, top, i)
+			continue
+		if battle.alert != null and cell == battle.alert.fire:
+			_add_column(cell, -BASE_DEPTH, top, ground)
+			_add_fire(cell, top)
 			continue
 		match kind:
 			BattleMap.Kind.GROUND:
@@ -384,6 +398,43 @@ func _add_slope(cell: Vector2i, top: float, road: bool, ground: Color, palette: 
 	# (PrismMesh coupé en biais : le côté haut à gauche (-X) ; on tourne pour que le bas regarde la voisine basse)
 	var basis := Basis(Vector3.UP, atan2(-float(down.y), float(down.x)))
 	_add_part(cell, Shape.RAMP, Vector3(cell.x + 0.5, bottom + LEVEL / 2.0, cell.y + 0.5), Vector3(1.0, LEVEL, 1.0), color, false, basis)
+
+
+## (Recensement « Techniques », point 8.) Le jour ou la nuit (Battle.is_night : un camp endormi) : la nuit, le ciel, la
+## lumière ambiante et le soleil (la lune) s'assombrissent ; le feu de camp éclaire autour de lui.
+func _apply_daylight() -> void:
+	var night: bool = battle.is_night()
+	environment.background_color = Color("06070d") if night else Color("12141c")
+	environment.ambient_light_color = Color("4a5a90") if night else Color("8a94b0")
+	environment.ambient_light_energy = 0.4 if night else 0.75
+	sun.light_color = Color("9fb4ff") if night else Color("fff1d8")
+	sun.light_energy = 0.3 if night else 1.0
+
+
+## Une tente du camp (point 8) : une toile en prisme, un peu de travers, sur le sol.
+func _add_tent(cell: Vector2i, top: float, index: int) -> void:
+	_add_column(cell, -BASE_DEPTH, 0.0, _jitter(cell, _palette()["ground2"]))
+	var basis := Basis(Vector3.UP, fposmod(float(cell.x * 3 + cell.y * 5), 3.0) * 0.4)
+	_add_part(cell, Shape.PRISM, Vector3(cell.x + 0.5, top * 0.5, cell.y + 0.5), Vector3(0.95, top, 0.9),
+		_jitter(cell, TENT_COLOR, 0.1), true, basis)
+	tops[index] = top
+
+
+## Le feu de camp (point 8) : des pierres en rond, des braises, une flamme qui éclaire autour d'elle.
+func _add_fire(cell: Vector2i, top: float) -> void:
+	var center := Vector3(cell.x + 0.5, top, cell.y + 0.5)
+	for k in 6:
+		var angle := TAU * k / 6.0
+		_add_part(cell, Shape.SPHERE, center + Vector3(cos(angle) * 0.3, 0.05, sin(angle) * 0.3), Vector3(0.14, 0.1, 0.14), Color("6a6660"))
+	_add_part(cell, Shape.SPHERE, center + Vector3(0, 0.12, 0), Vector3(0.28, 0.32, 0.28), FIRE_COLOR)
+	if fire_light != null:
+		fire_light.queue_free()
+	fire_light = OmniLight3D.new()
+	fire_light.light_color = FIRE_COLOR
+	fire_light.light_energy = 2.2 if battle.is_night() else 0.8
+	fire_light.omni_range = 5.0
+	fire_light.position = center + Vector3(0, 0.6, 0)
+	viewport.add_child(fire_light)
 
 
 ## La lisière d'une carte ronde (cartes, étape 2 ; MapGenerator.inside) : selon « edge_style », des arbres serrés, des

@@ -37,6 +37,9 @@ var counts := {"mefiant": 0, "fausse_alerte": 0, "fige": 0, "cadavres": 0, "disp
 ## Point 2 : les corps des monstres tombés avant l'alarme ({"pos", "name", "squad", "t", "found", "missed"} ; voir
 ## on_death, _look_for_corpses, _notice_missing).
 var corpses: Array[Dictionary] = []
+## Point 8 : le feu du camp (Vector2i(-1, -1) : aucun) et les tentes (cases devenues des obstacles bas), pour la vue.
+var fire := Vector2i(-1, -1)
+var tents: Array[Vector2i] = []
 
 
 func _init(owner) -> void:
@@ -111,6 +114,34 @@ func _arrange_camp(units: Array, sleeping: bool) -> void:
 		_put(unit, cell, "sommeil" if sleeping else "repos", (home - BattleMap.center(cell)).normalized())
 	for unit in units:
 		unit["squad"] = 0  # (point 2 : un seul groupe, le camp)
+	_pitch_tents(center, units)
+
+
+## (Recensement « Techniques », point 8 : morceaux faits main pour les camps ; ajout du projet.) Le feu au centre du camp
+## (« fire », dessiné par la vue) et TENTS_PER_CAMP tentes autour, à TENT_RADIUS cases : de vrais obstacles bas (on
+## s'abrite derrière, ils cachent un héros accroupi), posés sur le sol libre, loin des places des monstres et de la ronde.
+## La carte du combat change (pas celle de l'étage, gardée dans la sauvegarde) : les chemins et l'annotation sont refaits.
+func _pitch_tents(center: Vector2i, units: Array) -> void:
+	fire = center
+	var avoid := {}
+	for unit in units:
+		avoid[_cell_of(unit["pos"])] = true
+		for point in unit.get("route", []):
+			avoid[_cell_of(point)] = true
+	var start := _rng.randf_range(0.0, TAU)
+	for i in GameData.TENTS_PER_CAMP:
+		var angle := start + TAU * i / GameData.TENTS_PER_CAMP
+		var cell := center + Vector2i(roundi(cos(angle) * GameData.TENT_RADIUS), roundi(sin(angle) * GameData.TENT_RADIUS * 0.8))
+		if not battle.map.in_bounds(cell) or not _standable(cell) or battle.map.height_at(cell) != 0 or avoid.has(cell):
+			continue
+		if battle.map.kind_at(cell) == BattleMap.Kind.LADDER or (cell - center).length() < 2.0:
+			continue
+		battle.map.kinds[battle.map.index(cell)] = BattleMap.Kind.BLOCK
+		battle.map.heights[battle.map.index(cell)] = 1
+		tents.append(cell)
+	if not tents.is_empty():
+		battle.map.build_graph()
+		battle.terrain = BattleTerrain.new(battle.map)
 
 
 ## Un poste fortifié : la hauteur la plus haute de la moitié ennemie ; les tireurs en haut, les autres au pied.
