@@ -179,3 +179,15 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   d'en bas (l'équipe l'attendait : 3 défaites au temps sur 80 à l'étage 1). Après : 0 défaite sur 150 (`trace_e`).
 - Tutoriel, étage 1 (`tools/sim_tutoriel.gd`, vrai déroulé, 200 parties) : 98,5 % de victoires (avant : 100 % sur 150),
   0,33 mort par combat ; jamais 6 défaites de suite. `test_tutoriel` : victoire au premier essai.
+
+## Étape E, point 3 (infiltration, assassinat, pièges)
+- `sim_tower ... combats=300 graine=7`, après les points 1 et 2 → après le point 3, victoires % (morts par combat) :
+  brute étages 1 / 2 / 3 / 4 / 5 : 100 (0,21) / 54,3 (2,70) / 34,3 (3,61) / 37 (3,54) / 34,7 (3,54) →
+  98,7 (0,29) / 53,7 (2,69) / 37,3 (3,49) / 37,3 (3,49) / 34,7 (3,54) ;
+  préparée : 100 (0,03) / 90,3 (0,75) / 79,3 (1,41) / 81 (1,26) / 64 (2,20) → 100 (0,05) / 90 (0,85) / 83 (1,15) /
+  83,7 (1,16) / 64 (2,20). Avant l'étape E (préparée) : 100 / 90 / 86 / 84,7 / 64. Étage 5 identique (horde).
+  Par combat : assassinats 0,07 à 0,17 (étages 1 et 2), 0,43 à 0,49 (étages 3 et 4) ; pièges posés 0,05 à 0,11,
+  déclenchés 0,00 à 0,03 (rares : il faut un poseur, un ralliement assez long, et que le monstre passe dessus).
+  Étage 1 brute : 4 défaites sur 300 (équipes balayées, pas de blocage : `trace_e pertes=200`, 0 défaite).
+- Essai de pièges en survie (retiré) : étage 5, 300 combats, brute 34,7 → 27,7 %, préparée 64 → 62,3 %, 0 piège posé.
+- Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 98 % (points 1 et 2 : 98,5 %).

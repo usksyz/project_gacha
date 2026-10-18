@@ -150,4 +150,4 @@ Le détail de chaque système est dans son fichier ; le lire avant d'y toucher, 
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : premières versions (`docs/lobby.md`).
 - Personnalité v2 : P1a, P1a-bis, P1b, P2 faites, première tranche de P3 (prompt 4) (`docs/personnalite.md`).
 - Combat v2 : C1, C2 faites ; C3 en cours (`docs/combat.md`).
-- Étape E (exploration et combat autonome) : points 1 et 2 faits (vigilance des monstres, exploration ; plus de placement par le Maître) ; restent pièges et assassinat (3), comportements liés aux liens (4) (`docs/combat.md`).
+- Étape E (exploration et combat autonome) : points 1 à 3 faits (vigilance des monstres, exploration ; plus de placement par le Maître ; infiltration, assassinat, pièges) ; reste le point 4 (comportements liés aux liens et au caractère) (`docs/combat.md`).

@@ -366,8 +366,30 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Maître (ordre « aller ») : il garde son poste. Mode dev : en touchant un héros, son rôle et la disposition des ennemis.
   Conseil du Système « exploration » (premier combat hors horde, hors tutoriel ; « placement » n'est plus montré).
   Simulateur : `sim_tower ... dispo=horde|camp|...` (sans : celle de l'étage), victoires et durée par disposition.
-  Mesures : voir `docs/mesures.md`, « Étape E ». Restent (points suivants) : infiltration et assassinat, pièges
-  (point 3) ; comportements liés aux liens et au caractère (protéger, appât, couvrir une retraite ; point 4).
+  Mesures : voir `docs/mesures.md`, « Étape E ».
+  3. Infiltration, assassinat, pièges (chiffres dans `tower.gd`, après `GATHER_MAX`). Discrétion (`fighter["stealth"]`,
+  remis à 1 à chaque décision ; `BattleExplore.stealth_of`) : un héros qui explore ou attend au ralliement n'est
+  remarqué qu'à `STEALTH_FACTOR` de la vue et de l'ouïe des monstres (`BattlePerception._cast`, ouïe dans `_look`), un
+  infiltrateur à `INFILTRATOR_STEALTH`, moins `STEALTH_PER_DODGE` par niveau de Mouvement souple. Assassinat
+  (`Battle._assassination`, dans `_hit`) : un héros frappe un monstre qui ne se doute de rien (pas en alerte, pas
+  d'alarme) et qui ne voit pas venir le coup : force x`ASSASSINATE_POWER` (tir x`ASSASSINATE_RANGED_POWER`, dague ou
+  Assassin x`ASSASSINATE_BLADE_POWER` et critique), et au moins une part de sa vie (`ASSASSINATE_HP_SHARE` : lame 100 %,
+  coup 50 %, tir 35 % ; un chef : moitié) ; pas les sorts. S'il le tue : sans un bruit (ni cri ni bruit de combat),
+  « X égorge Y sans un bruit. » ; chiffre « assassinat ! ». Infiltrateur (`_is_infiltrator` : au corps à corps, Assassin,
+  dague, accès « Éclaireur », ou Honnêteté <= -`INFILTRATOR_HON` et Audace >= 0) : pendant le ralliement, il n'attend
+  pas (`_infiltrate`) : il se glisse vers un monstre qui ne l'a pas vu, un guetteur d'abord, puis le plus isolé
+  (« X se glisse vers Y. ») ; l'équipe lui laisse `INFILTRATE_EXTRA` s de plus. Pièges (`Battle.traps`, `place_trap`,
+  `_check_traps`, `_trigger_trap`) : un poseur (`_is_trapper` : accès « Tacticien » ou composite Vigilance >=
+  `TRAPPER_VIGILANCE`) en pose un pendant le ralliement, `TRAP_DISTANCE` cases devant, vers l'ennemi (chacun un peu de
+  côté), en `TRAP_SECONDS` sur place (l'assaut l'attend) ; un monstre qui marche dessus : `TRAP_POWER` x l'attaque du
+  poseur moins la moitié de sa défense, immobilisé `TRAP_HOLD` s (`fighter["trapped_until"]`, vitesse nulle ; un chef :
+  moitié, pas immobilisé), ça s'entend. Croix brune sur la case dans les deux vues. Pas en horde : essayé en survie (à la
+  sortie des ruelles), la horde arrivait en 3 s, avant la pose, et les poseurs quittaient la formation pour rien (étage 5
+  brute 34,7 → 27,7 %) ; retiré. Mode dev : « s'infiltre vers X », « pose un piège ». Simulateur : assassinats et pièges
+  par combat. Banc : `tools/test_etapeE.gd` (dispositions, embusqué vu de près seulement, assassinat d'un dormeur sans
+  réveiller les autres, coup d'épée surprise, piège, discrétion face à un guetteur, 12 combats complets).
+  Reste (point 4) : comportements liés aux liens et au caractère (protéger, appât, abandonner un allié, couvrir une
+  retraite).
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
