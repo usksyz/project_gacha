@@ -827,6 +827,15 @@ func _draw_rays(positions: Dictionary) -> void:
 		arena.draw_dashed_line(from, corner + Vector2.ONE * size / 2.0, TACTIC_COLOR, 1.5, 6.0)
 
 
+## La couleur de la jauge de détection d'un monstre : jaune (méfiant), orange (il vient voir), rouge (presque pleine).
+static func detect_color(level: float) -> Color:
+	if level < GameData.DETECT_SUSPECT:
+		return Color("fff070").darkened(0.25)
+	if level < GameData.DETECT_INVESTIGATE:
+		return Color("fff070")
+	return Color("ffb060").lerp(Color("ff4040"), clampf((level - GameData.DETECT_INVESTIGATE) / (1.0 - GameData.DETECT_INVESTIGATE), 0.0, 1.0))
+
+
 ## Vrai si un ennemi n'est vu (ni entendu) par aucun héros : on le grise (pas de brouillard total).
 func unseen(unit: Dictionary) -> bool:
 	return not unit["is_hero"] and battle.perception_on and battle.perception != null \
@@ -894,6 +903,11 @@ func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
 			var size := maxi(10, int(cell * 0.3))
 			arena.draw_string(font, bar_pos + Vector2(-cell * 0.6, -3), state[0], HORIZONTAL_ALIGNMENT_CENTER, bar_width + cell * 1.2,
 				size, state[1])
+		# Sa jauge de détection (du jaune au rouge), juste au-dessus de sa vie.
+		var level: float = battle.alert.detect_level(unit)
+		if level > 0.01:
+			arena.draw_rect(Rect2(bar_pos + Vector2(0, -3), Vector2(bar_width, 2.5)), Color("12131c"))
+			arena.draw_rect(Rect2(bar_pos + Vector2(0, -3), Vector2(bar_width * level, 2.5)), detect_color(level))
 	if battle.height_of(unit) > 0:  # en hauteur : sa hauteur dans une pastille claire
 		var badge := center + Vector2(radius * 0.8, radius * 0.7)
 		arena.draw_circle(badge, maxf(5.0, cell * 0.16), Color("e8e2c8"))

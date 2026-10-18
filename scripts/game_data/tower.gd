@@ -320,9 +320,10 @@ const SIXTH_SENSE_ANGLE := 60.0
 # - "patrouilles" : des groupes de 2 ou 3 font des rondes au milieu de la carte ;
 # - "embuscade" : cachés dans les herbes hautes ou derrière les rochers ; vus seulement à moins de HIDDEN_SIGHT cases
 #   (+ HIDDEN_ACUITY par palier d'Acuité) ; ils bondissent quand un héros passe à moins de AMBUSH_TRIGGER cases.
-# États d'un monstre (« state ») : sommeil, repos, guet, ronde, poste, embusque, fouille (il va voir un bruit),
-# alerte (il chasse les héros). Un monstre qui repère un héros réagit après REACTION_SECONDS (selon son état : le
-# temps de se lever, de comprendre), puis crie : les monstres à moins de SHOUT_RANGE cases passent en alerte ; un
+# États d'un monstre (« state ») : sommeil, repos, guet, ronde, poste, embusque, mefiant (il a cru voir quelque chose,
+# voir la jauge de détection plus bas), fouille (il va voir un bruit), alerte (il chasse les héros). Un monstre qui
+# repère un héros (sa jauge pleine, pleine en REACTION_SECONDS selon son état : le temps de se lever, de comprendre)
+# crie : les monstres à moins de SHOUT_RANGE cases passent en alerte ; un
 # guetteur donne l'alarme générale (tout le camp). Chaque coup s'entend à NOISE_FIGHT cases (un dormeur : moitié) :
 # les monstres qui l'entendent viennent voir (fouille, au pas SEARCH_PACE), regardent SEARCH_SECONDS puis reprennent
 # leur place. Un monstre frappé passe en alerte. Rondes au pas PATROL_PACE. Sans aucun contact au bout de
@@ -336,7 +337,7 @@ const ENEMY_DISPOSITIONS := {
 const DISPOSITION_NAMES := {"horde": "Horde", "pillage": "Pillage", "camp": "Camp gardé", "endormis": "Camp endormi",
 	"poste": "Poste fortifié", "patrouilles": "Patrouilles", "embuscade": "Embuscade"}
 const REACTION_SECONDS := {"sommeil": 2.5, "repos": 1.2, "guet": 0.8, "ronde": 0.6, "poste": 0.6, "fouille": 0.4, "embusque": 0.0}
-const STATE_SIGHT := {"sommeil": 0.0, "repos": 0.6, "guet": 1.35, "fouille": 1.1}
+const STATE_SIGHT := {"sommeil": 0.0, "repos": 0.6, "guet": 1.35, "mefiant": 1.1, "fouille": 1.1}
 const SLEEP_HEARING_FACTOR := 0.5
 const SHOUT_RANGE := 7.0
 const NOISE_FIGHT := 5.0
@@ -349,6 +350,33 @@ const HIDDEN_SIGHT := 2.5
 const HIDDEN_ACUITY := 0.25
 const AMBUSH_TRIGGER := 2.5
 const ALARM_SECONDS := 80.0
+# Jauge de détection (recensement « Techniques de programmation pour le combat », point 1, comme Splinter Cell
+# Blacklist ; ajout du projet). Un monstre qui ne chasse pas encore ne repère plus un héros d'un coup : sa jauge
+# (« detect », 0 à 1) monte tant qu'il le voit ou l'entend lui-même (pas ce que lui disent ses voisins), d'autant
+# plus vite que le héros est proche (DETECT_REF_DIST / distance, borné à DETECT_PROX_MIN..MAX), au centre de son regard
+# (sur les côtés : x DETECT_SIDE), qu'il bouge (immobile : x DETECT_STILL), qu'il est vu (seulement entendu :
+# x DETECT_HEARD), et selon l'état du monstre (pleine en REACTION_SECONDS[état] à DETECT_REF_DIST cases). Elle
+# redescend de DETECT_DECAY par seconde. À moins de DETECT_INSTANT cases, elle se remplit d'un coup. Paliers :
+# - DETECT_SUSPECT : « méfiant » (« ? » jaune) : il s'arrête et regarde par là ;
+# - DETECT_INVESTIGATE : il va voir (fouille, au pas SEARCH_PACE) là où il a cru voir quelqu'un ;
+# - 1 : il a repéré le héros (alerte, il crie, comme avant).
+# Un monstre qui a été méfiant, qui a fouillé ou trouvé un indice garde une « vigilance accrue » (« wary ») jusqu'à
+# la fin du combat : vue x WARY_SIGHT, jauge x WARY_RATE, un guetteur balaie plus large (WARY_SWEEP), un dormeur
+# ne se rendort pas. Un héros discret qui voit un monstre méfiant tourné vers lui se fige (s'il n'est pas déjà
+# à portée de coup) : immobile, la jauge monte moins vite et peut redescendre. Chiffres provisoires.
+const DETECT_SUSPECT := 0.35
+const DETECT_INVESTIGATE := 0.7
+const DETECT_DECAY := 0.4
+const DETECT_REF_DIST := 3.0
+const DETECT_PROX_MIN := 0.4
+const DETECT_PROX_MAX := 2.5
+const DETECT_SIDE := 0.5
+const DETECT_STILL := 0.3
+const DETECT_HEARD := 0.5
+const DETECT_INSTANT := 1.5
+const WARY_SIGHT := 1.2
+const WARY_RATE := 1.5
+const WARY_SWEEP := 1.4
 # Exploration des héros (étape E) : sans ennemi connu, les héros ne restent plus sur leur ligne de départ (le Maître
 # ne les place plus) : ils explorent le terrain (les cases que leurs bâtonnets ont parcourues sont « explorées »).
 # L'équipe suit un meneur (un Meneur, sinon le plus audacieux) vers la case inexplorée la plus proche, en préférant

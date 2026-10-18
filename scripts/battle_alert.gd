@@ -5,14 +5,17 @@ extends RefCounted
 ## Avant l'étape E, les monstres savaient toujours où étaient les héros et fonçaient sur eux (la « horde »). Désormais,
 ## sauf en survie, en défense et en duel, ils n'attaquent que s'ils voient ou entendent les héros (perception en
 ## bâtonnets de C3), et leur disposition change selon la mission (GameData.ENEMY_DISPOSITIONS) : pillage du village,
-## camp gardé par des guetteurs, camp endormi, poste fortifié sur une hauteur, patrouilles, embuscade. Un monstre qui
-## repère un héros réagit après un court moment (le temps de se lever) puis crie ; un guetteur donne l'alarme à tout
-## le camp ; les bruits de combat attirent les curieux. C'est ce qui rend possibles l'infiltration et l'assassinat :
+## camp gardé par des guetteurs, camp endormi, poste fortifié sur une hauteur, patrouilles, embuscade. Un monstre ne
+## repère pas un héros d'un coup : sa jauge de détection monte tant qu'il le voit ou l'entend (recensement
+## « Techniques de programmation pour le combat », point 1, comme Splinter Cell Blacklist ; voir _watch) ; il devient
+## méfiant, va voir, puis crie ; une fausse alerte le laisse sur ses gardes (vigilance accrue, « wary ») jusqu'à la
+## fin du combat. Un guetteur donne l'alarme à tout le camp ; les bruits de combat attirent les curieux. C'est ce qui rend possibles l'infiltration et l'assassinat :
 ## un monstre qui ne voit pas venir le coup est surpris (Battle._surprise).
 ##
 ## Ce qu'un monstre garde (voir Battle._make_fighter) : « state » (son état, voir GameData, tower.gd, « Vigilance des
 ## monstres »), « home_state », « home_pos », « home_facing » (sa place et son état de départ), « route » et « route_i »
-## (sa ronde), « spot_t » (moment où il a repéré quelqu'un), « search » et « search_until » (le bruit qu'il va voir).
+## (sa ronde), « search » et « search_until » (le bruit qu'il va voir), « detect » (sa jauge, 0 à 1), « detect_pos »
+## (là où il a cru voir quelqu'un), « wary » (vigilance accrue).
 ## Aucun tirage au hasard pendant le combat : la disposition est tirée d'un générateur à part, à partir de la graine de
 ## la carte (même étage, même disposition ; même graine, même combat).
 
@@ -24,6 +27,12 @@ var alarm := true
 ## Le centre du camp (ou le sommet du poste) : les renforts en sortent tant que l'alarme n'est pas donnée.
 var home := Vector2(-1, -1)
 var _rng := RandomNumberGenerator.new()
+## Jauge de détection (point 1 du recensement « Techniques ») : les héros qui n'ont pas bougé au dernier pas
+## ({numéro: vrai}) et leur place à ce pas-là. Compteurs pour les mesures (sim_tower) : monstres devenus méfiants,
+## revenus au calme sans avoir repéré personne (« presque vu »), héros qui se sont figés à temps.
+var _still := {}
+var _last_pos := {}
+var counts := {"mefiant": 0, "presque_vu": 0, "fige": 0}
 
 
 func _init(owner) -> void:
@@ -233,27 +242,46 @@ func on_spawn(enemy: Dictionary) -> void:
 # Ce que fait un monstre qui ne chasse pas encore
 # ---------------------------------------------------------------------------
 
-## Un monstre pas encore en alerte : il réagit à ce qu'il a repéré, fait sa ronde, va voir un bruit, ou garde sa
-## place. Renvoie faux s'il chasse (alerte) : le combat normal reprend la main (voir Battle._think).
+## Un monstre pas encore en alerte : sa jauge de détection monte ou descend (voir _watch) ; selon elle, il continue,
+## devient méfiant, va voir, ou repère le héros. Sinon il fait sa ronde, va voir un bruit, ou garde sa place. Renvoie
+## faux s'il chasse (alerte) : le combat normal reprend la main (voir Battle._think).
 func think(unit: Dictionary, known: Array) -> bool:
 	if alarm or unit["state"] == "alerte":
 		return false
-	if not known.is_empty():
-		var hero: Dictionary = battle._nearest(unit, known)
-		if unit["state"] == "embusque":
-			# Embusqué : il attend que sa proie passe tout près.
-			if unit["pos"].distance_to(hero["pos"]) <= GameData.AMBUSH_TRIGGER:
-				raise(unit, hero)
+	if unit["state"] == "embusque":
+		# Embusqué : il attend que sa proie passe tout près (pas de jauge : il guette déjà).
+		if not known.is_empty():
+			var prey: Dictionary = battle._nearest(unit, known)
+			if unit["pos"].distance_to(prey["pos"]) <= GameData.AMBUSH_TRIGGER:
+				raise(unit, prey)
 				return false
 			return true
-		if unit["spot_t"] < 0.0:
-			unit["spot_t"] = battle.time
-		if battle.time - unit["spot_t"] >= GameData.REACTION_SECONDS.get(unit["state"], 0.5):
-			raise(unit, hero)
+	else:
+		var noticed := _watch(unit)
+		if unit["detect"] >= 1.0:
+			raise(unit, noticed)
 			return false
-		return true  # (il comprend ce qu'il voit : il se lève, se retourne...)
-	unit["spot_t"] = -1.0
+		if unit["detect"] >= GameData.DETECT_INVESTIGATE and not noticed.is_empty():
+			# Il en est presque sûr : il va voir (et suit ce qu'il entrevoit).
+			if unit["state"] != "fouille":
+				_note_suspicion(unit, true)
+			unit["state"] = "fouille"
+			unit["search"] = unit["detect_pos"]
+			unit["search_until"] = -1.0
+		elif unit["detect"] >= GameData.DETECT_SUSPECT and not unit["state"] in ["mefiant", "fouille"]:
+			_note_suspicion(unit, false)
+			unit["state"] = "mefiant"
 	match unit["state"]:
+		"mefiant":
+			# Il s'arrête et regarde par là ; la jauge retombée, il reprend sa place, sur ses gardes.
+			var toward: Vector2 = unit["detect_pos"] - unit["pos"]
+			if toward.length() > 0.05:
+				unit["facing"] = toward.normalized()
+			if unit["detect"] <= 0.0:
+				_calm_down(unit)
+				counts["presque_vu"] += 1
+				if _seen(unit):
+					battle._log("%s reprend sa place, mais reste sur ses gardes." % unit["name"], "reinforce")
 		"ronde":
 			var route: Array = unit["route"]
 			if route.is_empty():
@@ -272,9 +300,8 @@ func think(unit: Dictionary, known: Array) -> bool:
 				else:
 					unit["search_until"] = battle.time + GameData.SEARCH_SECONDS
 			elif battle.time >= unit["search_until"]:
-				# Rien trouvé : il reprend sa place (un dormeur réveillé ne se rendort pas).
-				unit["state"] = "repos" if unit["home_state"] == "sommeil" else unit["home_state"]
-				unit["search_until"] = -1.0
+				# Rien trouvé : il reprend sa place, sur ses gardes.
+				_calm_down(unit)
 			else:
 				unit["facing"] = unit["facing"].rotated(0.35)  # il regarde autour de lui
 		_:
@@ -285,6 +312,87 @@ func think(unit: Dictionary, known: Array) -> bool:
 			else:
 				unit["facing"] = unit["home_facing"]
 	return true
+
+
+## La jauge de détection (voir GameData, tower.gd, « Jauge de détection ») : elle monte selon le héros qu'il remarque
+## le plus (de ses propres yeux ou oreilles), sinon elle redescend. Renvoie ce héros ({} : aucun) ; retient où il l'a
+## entrevu (« detect_pos »).
+func _watch(unit: Dictionary) -> Dictionary:
+	# (méfiant : à la vitesse de son état de départ ; c'est sa vigilance accrue qui le rendra plus vif ensuite)
+	var state: String = unit["home_state"] if unit["state"] == "mefiant" else unit["state"]
+	var rate: float = 1.0 / maxf(0.05, GameData.REACTION_SECONDS.get(state, 0.5))
+	if unit["wary"]:
+		rate *= GameData.WARY_RATE
+	var half: float = deg_to_rad(GameData.SIGHT_ANGLE / 2.0)
+	var best: Dictionary = {}
+	var best_gain := 0.0
+	for hero in battle._alive(battle.heroes):
+		var seen: bool = unit["sees"].has(hero["id"])
+		if not seen and not unit["hears"].has(hero["id"]):
+			continue
+		var rel: Vector2 = hero["pos"] - unit["pos"]
+		var distance := rel.length()
+		if seen and distance <= GameData.DETECT_INSTANT:
+			best = hero
+			best_gain = INF  # (tout près : aucun doute)
+			break
+		var gain: float = rate * clampf(GameData.DETECT_REF_DIST / maxf(0.1, distance), GameData.DETECT_PROX_MIN, GameData.DETECT_PROX_MAX)
+		if seen:
+			var side := clampf(absf(unit["facing"].angle_to(rel)) / half, 0.0, 1.0) if half > 0.0 else 0.0
+			gain *= lerpf(1.0, GameData.DETECT_SIDE, side)
+		else:
+			gain *= GameData.DETECT_HEARD
+		if _still.get(hero["id"], false):
+			gain *= GameData.DETECT_STILL
+		if gain > best_gain:
+			best_gain = gain
+			best = hero
+	if best_gain == INF:
+		unit["detect"] = 1.0
+	else:
+		unit["detect"] = clampf(unit["detect"] + (best_gain - GameData.DETECT_DECAY) * battle.TICK, 0.0, 1.0)
+	if not best.is_empty():
+		unit["detect_pos"] = best["pos"]
+	return best
+
+
+## Il devient méfiant (ou va voir) : compté, et dit dans le journal si un héros le voit.
+func _note_suspicion(unit: Dictionary, going: bool) -> void:
+	if unit["state"] != "mefiant":
+		counts["mefiant"] += 1
+	if not _seen(unit):
+		return
+	if going:
+		battle._log("%s a cru voir quelque chose : il s'approche pour vérifier." % unit["name"], "reinforce")
+	elif unit["state"] == "sommeil":
+		battle._log("%s ouvre un œil..." % unit["name"], "reinforce")
+	else:
+		battle._log("%s s'arrête et regarde dans votre direction..." % unit["name"], "reinforce")
+
+
+## Fausse alerte (ou fouille sans rien trouver) : il reprend sa place et son état, mais garde une vigilance accrue
+## jusqu'à la fin du combat (un dormeur réveillé ne se rendort pas).
+func _calm_down(unit: Dictionary) -> void:
+	unit["state"] = "repos" if unit["home_state"] == "sommeil" else unit["home_state"]
+	unit["search_until"] = -1.0
+	unit["wary"] = true
+
+
+## Un héros qui voit un monstre méfiant (ou qui vient voir) tourné vers lui : ce monstre ({} : aucun).
+func watching(hero: Dictionary) -> Dictionary:
+	if alarm:
+		return {}
+	var best: Dictionary = {}
+	for unit in battle._alive(battle.enemies):
+		if not unit["state"] in ["mefiant", "fouille"] or unit["detect"] < GameData.DETECT_SUSPECT:
+			continue
+		if not unit["sees"].has(hero["id"]) and not unit["hears"].has(hero["id"]):
+			continue
+		if not battle.perception.knows_now(hero, unit):
+			continue
+		if best.is_empty() or unit["detect"] > best["detect"]:
+			best = unit
+	return best
 
 
 ## Il a repéré un héros (ou il est attaqué) : il passe en alerte et crie. Un guetteur donne l'alarme générale ; un
@@ -318,6 +426,7 @@ func _wake(unit: Dictionary, hero: Dictionary) -> void:
 		battle._log("%s se réveille en sursaut !" % unit["name"], "reinforce")
 	unit["state"] = "alerte"
 	unit["alert_t"] = battle.time
+	unit["detect"] = 1.0
 	if not hero.is_empty():
 		unit["knows"][hero["id"]] = {"pos": hero["pos"], "t": battle.time}
 
@@ -360,7 +469,7 @@ func noise(pos: Vector2, radius: float) -> void:
 		var reach := radius * (GameData.SLEEP_HEARING_FACTOR if state == "sommeil" else 1.0)
 		if unit["pos"].distance_to(pos) > reach:
 			continue
-		if unit["home_state"] == "guet" and state == "guet":
+		if unit["home_state"] == "guet" and state in ["guet", "mefiant"]:
 			general_alarm("%s, le guetteur, entend des bruits de combat : il donne l'alarme !" % unit["name"])
 			return
 		if state == "sommeil" and _seen(unit):
@@ -368,6 +477,7 @@ func noise(pos: Vector2, radius: float) -> void:
 		unit["state"] = "fouille"
 		unit["search"] = pos
 		unit["search_until"] = -1.0
+		unit["detect"] = maxf(unit["detect"], GameData.DETECT_INVESTIGATE)
 
 
 ## Un coup porté (voir Battle._hit) : il s'entend ; un monstre frappé passe en alerte (s'il est encore debout).
@@ -380,7 +490,12 @@ func on_hit(attacker: Dictionary, target: Dictionary) -> void:
 
 
 ## Toutes les secondes du combat : sans aucun contact au bout de ALARM_SECONDS, les monstres flairent l'équipe.
+## Note aussi, à chaque pas, quels héros n'ont pas bougé depuis le pas d'avant (jauge de détection).
 func tick() -> void:
+	for hero in battle.heroes:
+		var last = _last_pos.get(hero["id"])
+		_still[hero["id"]] = last != null and last.distance_to(hero["pos"]) < 0.005
+		_last_pos[hero["id"]] = hero["pos"]
 	if not alarm and battle.clock_start < 0.0 and battle.time >= GameData.ALARM_SECONDS:
 		general_alarm("Les monstres ont flairé ton équipe : ils se lancent à sa recherche !")
 
@@ -398,7 +513,7 @@ func hidden(unit: Dictionary) -> bool:
 func sight_factor(unit: Dictionary) -> float:
 	if unit["is_hero"] or alarm:
 		return 1.0
-	return GameData.STATE_SIGHT.get(unit["state"], 1.0)
+	return GameData.STATE_SIGHT.get(unit["state"], 1.0) * (GameData.WARY_SIGHT if unit["wary"] else 1.0)
 
 
 func hearing_factor(unit: Dictionary) -> float:
@@ -411,7 +526,7 @@ func hearing_factor(unit: Dictionary) -> float:
 func facing_for(unit: Dictionary) -> Vector2:
 	if unit["is_hero"] or alarm or unit["state"] != "guet" or unit["pos"].distance_to(unit["home_pos"]) > 0.6:
 		return Vector2.ZERO
-	return unit["home_facing"].rotated(sin(battle.time * 0.7 + unit["id"]) * 0.9)
+	return unit["home_facing"].rotated(sin(battle.time * 0.7 + unit["id"]) * 0.9 * (GameData.WARY_SWEEP if unit["wary"] else 1.0))
 
 
 ## Ce que l'écran écrit au-dessus d'un monstre (texte et couleur ; texte vide : rien). « ! » quelques secondes après
@@ -427,14 +542,25 @@ func state_tag(unit: Dictionary) -> Array:
 		"sommeil":
 			return ["Zzz", Color("9ab8ff")]
 		"repos":
-			return ["au repos", Color("c8c8c8")]
+			return ["aux aguets" if unit["wary"] else "au repos", Color("c8c8c8")]
 		"guet":
 			return ["guetteur", Color("ffd060")]
+		"mefiant":
+			return ["?", Color("fff070")]
 		"fouille":
 			return ["?", Color("ffb060")]
 		"embusque":
 			return ["embusqué", Color("b0e080")]
+	if unit["wary"]:
+		return ["sur ses gardes", Color("e0c890")]
 	return ["", Color.WHITE]
+
+
+## La jauge de détection à afficher au-dessus d'un monstre (0 à 1 ; 0 : rien), tant qu'il ne chasse pas.
+func detect_level(unit: Dictionary) -> float:
+	if unit["is_hero"] or alarm or unit["hp"] <= 0 or unit["state"] in ["alerte", "embusque"]:
+		return 0.0
+	return unit["detect"]
 
 
 # ---------------------------------------------------------------------------

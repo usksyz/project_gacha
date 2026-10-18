@@ -42,6 +42,8 @@ var infiltrators := {}
 var trappers := {}
 var _infiltrating := {}
 var _trap_work := {}
+## Le monstre méfiant devant lequel chaque héros s'est figé ({héros: monstre} ; voir _hide).
+var _frozen := {}
 
 
 func _init(owner) -> void:
@@ -163,6 +165,8 @@ func stalk(hero: Dictionary, known: Array) -> bool:
 	hero["target_id"] = -1
 	hero["post"] = hero["pos"]
 	hero["stealth"] = stealth_of(hero)
+	if _hide(hero):
+		return true
 	# Un poseur de pièges en pose un entre le point de ralliement et l'ennemi.
 	# (une fois commencé, il garde sa case même si le monstre bouge)
 	var trap_cell: Vector2i = _trap_work[hero["id"]]["cell"] if _trap_work.has(hero["id"]) else Vector2i(-1, -1)
@@ -205,9 +209,29 @@ func _infiltrate(hero: Dictionary, known: Array) -> bool:
 	hero["stealth"] = stealth_of(hero)
 	if battle._in_reach(hero, target, hero["reach"]):
 		battle._try_attack(hero, target, battle._alive(battle.enemies))
-	else:
+	elif not _hide(hero):
 		hero["pace"] = GameData.EXPLORE_PACE
 		battle._approach(hero, target)
+	return true
+
+
+## Jauge de détection (recensement « Techniques », point 1) : un monstre méfiant regarde vers lui (voir
+## BattleAlert.watching). Il se fige (immobile, il se remarque moins : la jauge du monstre peut redescendre) ; si le
+## monstre vient voir, il recule hors de sa vue. Renvoie vrai s'il se cache ainsi ce pas-ci.
+func _hide(hero: Dictionary) -> bool:
+	var watcher: Dictionary = battle.alert.watching(hero)
+	if watcher.is_empty():
+		_frozen.erase(hero["id"])
+		return false
+	if _frozen.get(hero["id"], -1) != watcher["id"]:
+		_frozen[hero["id"]] = watcher["id"]
+		battle.alert.counts["fige"] += 1
+		battle._log("%s se fige : %s regarde dans sa direction." % [hero["name"], watcher["name"]])
+	if watcher["state"] == "fouille":
+		var away: Vector2 = (hero["pos"] - watcher["pos"]).normalized()
+		var cell: Vector2i = battle.map.nearest_walkable(battle.map.cell_of(hero["pos"] + away * 2.0))
+		hero["pace"] = GameData.EXPLORE_PACE
+		battle._move_towards(hero, BattleMap.center(cell))
 	return true
 
 

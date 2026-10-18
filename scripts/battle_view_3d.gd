@@ -896,6 +896,13 @@ func _draw_unit_info(unit: Dictionary, head: Vector2, body: Vector2, k: float) -
 		overlay.draw_rect(Rect2(mana.position, Vector2(width * clampf(unit["mana"] / unit["max_mana"], 0, 1), mana.size.y)), Color("4a8fe8"))
 	if unit["bleed"]["ticks"] > 0:  # saigne : une goutte rouge
 		overlay.draw_circle(bar.position + Vector2(width + 5.0 * k, 2.0), 3.5 * k, Color("ff3030"))
+	# La jauge de détection d'un monstre qui ne chasse pas encore (du jaune au rouge), juste au-dessus de sa vie.
+	if not unit["is_hero"] and battle.alert != null and not view.unseen(unit):
+		var level: float = battle.alert.detect_level(unit)
+		if level > 0.01:
+			var gauge := Rect2(bar.position - Vector2(0, 3.5 * k), Vector2(width, 2.5 * k))
+			overlay.draw_rect(gauge, Color("12131c"))
+			overlay.draw_rect(Rect2(gauge.position, Vector2(width * level, gauge.size.y)), BattleView.detect_color(level))
 	# L'état, au-dessus de la barre (le plus important seulement).
 	var tag := ""
 	var tag_color := Color.WHITE

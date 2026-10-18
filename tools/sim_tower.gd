@@ -77,6 +77,7 @@ func _ready() -> void:
 		var by_dispo := {}  # (étape E) {disposition: [combats, victoires, alarmes générales, durée totale]}
 		var stealth := [0, 0, 0]  # (étape E, point 3) assassinats, pièges posés, pièges déclenchés
 		var ties := {"couvert": 0, "appat": 0, "abandon": 0, "revers": 0}  # (étape E, point 4)
+		var watch := {}  # (recensement « Techniques ») compteurs de BattleAlert.counts : méfiants, presque vus, figés...
 		for i in count:
 			GameData.arsenal = []
 			GameData.warehouse = {}
@@ -128,6 +129,9 @@ func _ready() -> void:
 				stealth[0] += battle.assassinations
 				stealth[1] += battle.traps_placed
 				stealth[2] += battle.traps_sprung
+			if battle.get("alert") != null and battle.alert.get("counts") != null:
+				for kind in battle.alert.counts:
+					watch[kind] = watch.get(kind, 0) + battle.alert.counts[kind]
 			if battle.get("ties") != null:
 				for kind in ties:
 					ties[kind] += battle.ties.counts[kind]
@@ -167,6 +171,11 @@ func _ready() -> void:
 			stealth[2] / float(count)])
 		print("  liens par combat : ami couvert %.2f, appât %.2f, abandon %.2f, coups à revers %.2f" % [ties["couvert"] / float(count),
 			ties["appat"] / float(count), ties["abandon"] / float(count), ties["revers"] / float(count)])
+		if not watch.is_empty():
+			var watch_parts := []
+			for kind in watch:
+				watch_parts.append("%s %.2f" % [kind, watch[kind] / float(count)])
+			print("  vigilance par combat : %s" % ", ".join(watch_parts))
 		for dispo in by_dispo:
 			var entry: Array = by_dispo[dispo]
 			print("  disposition %s : %d combats, victoires %.1f%%, alarme générale %.0f%%, durée moyenne %.0f s" % [dispo, entry[0],

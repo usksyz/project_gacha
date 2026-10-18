@@ -417,8 +417,8 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"hurt_hero_at": -100.0,    # dernier moment où il a blessé un héros (colère, cible « qui fait mal »)
 		"hurt_hero_id": -1,        # le héros blessé
 		# Étape E (voir BattleAlert, BattleExplore) : son pas (1 : normal ; ronde, exploration prudente : moins), son
-		# état de vigilance (monstres : sommeil, repos, guet, ronde, poste, embusque, fouille, alerte), sa place et son
-		# état de départ, sa ronde, le moment où il a repéré quelqu'un, le bruit qu'il va voir, son dernier cri.
+		# état de vigilance (monstres : sommeil, repos, guet, ronde, poste, embusque, mefiant, fouille, alerte), sa place
+		# et son état de départ, sa ronde, le bruit qu'il va voir, son dernier cri.
 		"pace": 1.0,
 		"state": "alerte",
 		"home_state": "alerte",
@@ -426,10 +426,14 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"home_facing": Vector2(0, 1),
 		"route": [],
 		"route_i": 0,
-		"spot_t": -1.0,
 		"search": Vector2.ZERO,
 		"search_until": -1.0,
 		"alert_t": -100.0,
+		# Jauge de détection (recensement « Techniques », point 1 ; voir BattleAlert._watch) : 0 à 1, l'endroit où il a cru
+		# voir quelqu'un, et sa vigilance accrue (il a déjà été méfiant ou a fouillé : il ne revient jamais au calme).
+		"detect": 0.0,
+		"detect_pos": Vector2.ZERO,
+		"wary": false,
 		# Étape E, point 3 : sa discrétion (1 : normal ; les monstres le remarquent à cette part de leur vue et de leur
 		# ouïe, voir BattleExplore.stealth_of), et pris dans un piège jusqu'à ce moment.
 		"stealth": 1.0,
