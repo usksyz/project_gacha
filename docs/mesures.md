@@ -249,3 +249,23 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   village : 6,2 maisons en moyenne ; forêt : 95 arbres en moyenne (`test_cartes`, `essai_cartes`).
 - Tutoriel (`sim_tutoriel`, 200 parties) : 98,5 % (avant : 99,5 %). `capture_c2 mode=identique` : identique ;
   `test_prompt3` : tout est bon.
+
+## Techniques, points 6 à 10 (sur les nouvelles cartes)
+- `sim_tower ... combats=300 graine=7`, victoires % (morts par combat), étages 1 / 2 / 3 / 4 (et 5 / 10 quand ils changent).
+  Cartes, étape 2 (référence) : brute 100 / 58,3 / 40,3 / 42,3 ; préparée 100 / 92 / 85,3 / 83,3 ; étages 5 / 10 : brute
+  38,7 / 19,3, préparée 69,3 / 48,3.
+- Point 6 (contournement, assassinats synchronisés) : brute 100 (0,29) / 56 (2,66) / 39,3 (3,29) / 36,7 (3,47) ; préparée
+  100 (0,07) / 93,7 (0,71) / 83 (1,15) / 81,3 (1,33). Étage 4 brute -5,6, un peu au-delà du bruit (les monstres qui
+  contournent frappent à revers) ; le reste dans le bruit. Assassinats synchronisés : 0 (les équipes du simulateur sont
+  neuves, sans amis ; le banc vérifie la mécanique).
+- Point 7, première version (formations + bond d'abri en abri + place contre un abri) : brute 86,3 (0,59) / 50,7 / 29,3 /
+  35 ; préparée 90,7 (0,18) / 85,7 / 72,7 / 71,3 ; combats de 40 à 60 s ; tutoriel 83 %. Variantes, étages 1 et 3, 150
+  combats : sans le bond, brute 98,7 / 30,7, préparée 100 / 78 ; sans le bond ni la place contre un abri, brute 98,7 /
+  42, préparée 99,3 / 80,7. Retenu : les formations seules (bond et place coupés, `BOUND_ON`, `COVER_SNAP`).
+- Points 7 (corrigé) et 8 (camps et nuit) : brute 99,3 (0,33) / 52,7 (2,82) / 43,3 (3,07) / 43 (3,09) / 38,7 / 19,3 ;
+  préparée 99,7 (0,09) / 92,3 (0,72) / 87 (0,99) / 83,7 (1,14) / 69,3 / 48,3. Étages 5 et 10 identiques à la référence
+  (horde : rien ne change). Tutoriel : 99 %.
+- Point 9 (le combat a sa propre graine, re-semée à chaque pas : les tirages changent, pas les règles) : brute 99 (0,29) /
+  59 (2,51) / 42 (3,20) / 45,3 (3,00) / 36,7 (3,43) / 25,7 (3,93) ; préparée 100 (0,05) / 92,3 (0,69) / 81 (1,27) / 82
+  (1,18) / 67,7 (2,06) / 49,7 (2,92). Dans le bruit. Tutoriel : 99 %. `capture_c2 mode=identique` : identique.
+- Point 10 (la tension, mesurée) : ne tire aucun dé, ne change rien (mêmes combats qu'au point 9).

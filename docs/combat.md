@@ -469,6 +469,57 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   rupture) court vers la case la plus loin, à pied, des monstres qu'il connaît, à au plus `FLEE_RADIUS` pas (chaque pas
   coûte `FLEE_EFFORT`), revue toutes les `FLEE_REPLAN` s ; sans monstre connu, le bas de la carte comme avant. Vaut aussi
   en horde. Simulateur : « recherche_vus », « recherche_fouilles » par combat.
+  6. Coordination (chiffres après `FLEE_REPLAN`). Monstres, hors horde : pour choisir sa place autour d'une cible
+  (`Battle._attack_slot`), une place à l'opposé de celles de ses compagnons compte `FLANK_WEIGHT` cases de moins : le
+  second monstre contourne le héros et le prend à revers (le coup à revers de l'étape E, point 4, vaut pour tous).
+  Héros (choix du porteur du projet : sans ordre du Maître, selon le lien et le caractère) : un héros lié à un
+  infiltrateur (au moins ami, `BOND_FRIEND`), pas mage ni soigneur, d'Audace >= -`PRUDENT_AUD`, devient son équipier
+  (`BattleExplore.setup_partners`, `partners`, `mates` ; le plus lié). Pendant le ralliement, il s'infiltre avec lui :
+  il attend que l'infiltrateur ait choisi sa proie, puis prend un autre monstre à moins de `SYNC_RANGE` cases d'elle
+  (répartition des cibles ; « X se glisse avec Y vers Z. »). À portée, chacun attend l'autre (`_strike_now`, au plus
+  `SYNC_WAIT` s), puis ils frappent au même pas (« X et Y frappent ensemble, d'un même geste. ») : la seconde proie ne
+  voit pas tomber la première. Simulateur : « synchronises » par combat. Banc : `test_techniques` (contournement,
+  équipier, coup ensemble, coup seul au bout de `SYNC_WAIT`).
+  7. Formations d'exploration et bond d'abri en abri (chiffres après `SYNC_WAIT` ; `BattleExplore._formation_slot`,
+  `_pick_formation`, `_bound`). La formation est revue à chaque plan : en file (« colonne », `COLUMN_SPACING` cases
+  entre deux, dans l'ordre des numéros) quand il y a moins de `FORMATION_NARROW` cases libres sur les 9 autour du
+  meneur, sinon en éventail (« coin », comme avant) ; « L'équipe passe en file indienne. » / « L'équipe se déploie en
+  éventail. » (au plus un message toutes les `FORMATION_LOG` s). Chacun se met contre un abri (une cachette de
+  `BattleTerrain`) à moins d'une case de sa place. Le meneur ne va plus droit vers son but : il va à la cachette la plus
+  proche qui l'en rapproche (à moins de `BOUND_STEP` cases, au moins une case plus près), y marque une pause de
+  `BOUND_PAUSE` s, puis repart. Simulateur : « formations », « bonds_abri » par combat.
+  Mesuré puis coupé (interrupteurs `BOUND_ON`, `COVER_SNAP`, faux) : le bond d'abri en abri et la place contre un abri
+  ralentissaient trop l'exploration (combats de 40 à 60 s ; étage 1 : 100 → 86,3 % brute ; tutoriel : 83 %), surtout en
+  forêt où presque chaque case touche un arbre. Restent les formations (file, éventail). Voir `docs/mesures.md`.
+  8. Nouveaux terrains : le bruit cohérent et les automates cellulaires sont venus avec les cartes (« Cartes », étape 2 :
+  forêts, relief). Ajouts du point 8 (chiffres après `BOUND_PAUSE`) : un camp fait main (`BattleAlert._pitch_tents`,
+  camps gardés et endormis) : un feu au centre (`alert.fire`) et `TENTS_PER_CAMP` tentes à `TENT_RADIUS` cases
+  (`alert.tents`), de vrais obstacles bas (1 niveau : ils cachent un héros) posés sur le sol libre, loin des monstres et de
+  la ronde ; seule la carte du combat change (pas celle de l'étage) ; chemins et annotation refaits. Nuit
+  (`Battle.is_night` ; choix du projet : le camp endormi se passe la nuit) : la vue des non-nocturnes x
+  `SIGHT_NIGHT_FACTOR` (prévue en C3, jamais utilisée jusque-là) ; à l'écran, ciel, lumière ambiante et lune sombres
+  (`BattleView3D._apply_daylight`), le feu éclaire autour de lui (`OmniLight3D`). `capture_c2 ... dispo=endormis`.
+  9. Outils (mode dev). Calques de débogage (`BattleView3D._draw_layer`, bouton « Calques » sous « Tourner », mode dev) :
+  « Regards » (les cases que regardent les monstres connus, `BattleAlert.exposure`, en rouge), « Recherche » (la carte de
+  probabilité des monstres, `BattleSearch.heat`, en orange), « Terrain » (`BattleTerrain` : cachettes en vert, points
+  hauts en bleu, goulets en jaune) ; `capture_c2 ... calque=terrain`. Revoir le dernier combat (Outils du mode dev >
+  Tour > « Revoir le dernier combat », `DevPanel._replay_last_fight`) : `GameData.record_fight` note au départ d'un
+  combat de la Tour des copies de l'équipe et des ennemis, la quête, la carte, une graine, les potions et les ordres du
+  Maître (`Battle.order_log`, `_order_begin`) ; `dev_replay_battle` refait le combat avec les copies et rejoue les
+  ordres au même pas (`replay_orders`, `_apply_replay`). Pour qu'il soit identique, le combat a sa propre graine
+  (`battle_seed`) : le hasard est re-semé à la création, au début, à chaque pas et à chaque ordre (`step_count`) ; ce qui
+  tire au hasard ailleurs dans le jeu entre deux pas n'y change plus rien. Rien n'est enregistré dans la sauvegarde ; le
+  combat revu ne touche pas à la partie. Banc : `test_techniques` (combat revu identique, avec un ordre et du hasard tiré
+  entre les pas).
+  10. « Plus tard » dans le document : machine à états hiérarchique (quand les états des monstres dépasseront une
+  dizaine ; il y en a 9 : sommeil, repos, guet, ronde, poste, embusque, mefiant, fouille, alerte), arbres de comportement
+  pour les boss, planification (HTN ou GOAP) pour des plans d'équipe, directeur d'IA pour le rythme. Fait : la première
+  brique du directeur (`scripts/battle_director.gd`, `BattleDirector`, `Battle.director` ; chiffres après `COVER_SNAP`),
+  qui ne change RIEN au combat : chaque seconde, la tension (vie perdue par les héros x `DIRECTOR_DAMAGE_WEIGHT`, part des
+  monstres qui chassent x `DIRECTOR_HUNT_WEIGHT`, héros à terre x `DIRECTOR_DOWN_WEIGHT`, lissée), et la phase (calme,
+  tension, pic). Mode dev : « tension 0,42 (tension) » à côté des images par seconde ; simulateur : « rythme par combat »
+  (pics, part du temps dans chaque phase, tension moyenne). Le reste attend une décision du porteur du projet : un vrai
+  directeur changerait l'équilibre (laisser souffler l'équipe après un pic, retarder ou presser les renforts).
 - Cartes (demande du porteur du projet après le point 5 du recensement « Techniques » : « améliorer les map, plus
   grandes, du relief au sol, des constructions, si village on voit un village, une forêt avec des arbres, suppression
   de la vue de dessus moins performante, affichage des perf du matériel hors mode dev, options dans les réglages, map
