@@ -1,7 +1,8 @@
 class_name AssignmentPanel
 extends Control
 ## Fenêtre des affectations (bouton « Affectations » du hub) : pour chaque bâtiment construit,
-## ses postes d'assistant (GameData.POSTS_PER_BUILDING). On touche un poste libre pour y mettre
+## ses postes d'assistant (GameData.POSTS_PER_BUILDING), et les postes de reconversion (octobre 2026 :
+## instructeur, administrateur, GameData.ROLE_POSTS). On touche un poste libre pour y mettre
 ## un héros, ou un poste occupé pour libérer le héros. Un héros affecté quitte le terrain
 ## d'entraînement : il ne travaille qu'à un endroit à la fois. S'ouvre avec open().
 
@@ -74,23 +75,27 @@ func _refresh() -> void:
 		var none := UI.make_label("Aucun bâtiment construit pour l'instant (bouton « Construction »).", 22)
 		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		list.add_child(none)
-		return
-	for building_id in GameData.BUILDINGS:
-		if not building_id in GameData.buildings:
+	for building_id in GameData.BUILDINGS.keys() + GameData.ROLE_POSTS.keys():
+		if not GameData.post_open(building_id):
 			continue
 		var panel := PanelContainer.new()
 		panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b"), Color("9b6be0"), 2))
 		var box := VBoxContainer.new()
 		box.add_theme_constant_override("separation", 6)
 		panel.add_child(box)
-		box.add_child(UI.make_label(GameData.BUILDINGS[building_id]["name"], 24))
+		box.add_child(UI.make_label(GameData.post_name(building_id), 24))
+		if GameData.ROLE_POSTS.has(building_id):
+			var role_hint := UI.make_label(GameData.ROLE_POSTS[building_id]["info"], 18)
+			role_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			role_hint.modulate = Color(1, 1, 1, 0.7)
+			box.add_child(role_hint)
 		if building_id == "forge":
 			var hint := UI.make_label("Les assistants deviennent artisans en travaillant (compétence « Forge »).", 18)
 			hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			hint.modulate = Color(1, 1, 1, 0.7)
 			box.add_child(hint)
 		var posted := GameData.posted_heroes(building_id)
-		for i in GameData.POSTS_PER_BUILDING:
+		for i in GameData.post_slots(building_id):
 			var button: Button
 			if i < posted.size():
 				var hero: Dictionary = posted[i]
@@ -125,7 +130,8 @@ func _open_picker(building_id: String) -> void:
 	var layout := VBoxContainer.new()
 	layout.add_theme_constant_override("separation", 10)
 	margin.add_child(layout)
-	layout.add_child(UI.make_label("Assistant : %s" % GameData.BUILDINGS[building_id]["name"], 28))
+	layout.add_child(UI.make_label(GameData.post_name(building_id) if GameData.ROLE_POSTS.has(building_id) \
+		else "Assistant : %s" % GameData.post_name(building_id), 28))
 	var scroll := UI.make_scroll()
 	layout.add_child(scroll)
 	var heroes := VBoxContainer.new()

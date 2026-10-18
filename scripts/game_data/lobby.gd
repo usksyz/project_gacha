@@ -44,6 +44,27 @@ const MAGIC_HALL_NAME := "Hall de magie"
 ## Postes d'assistant par bâtiment (cahier : « deux postes d'assistant par métier »).
 const POSTS_PER_BUILDING := 2
 
+## Le nom d'un poste (bâtiment ou reconversion), "" s'il n'existe pas.
+func post_name(post_id: String) -> String:
+	if BUILDINGS.has(post_id):
+		return BUILDINGS[post_id]["name"]
+	return ROLE_POSTS.get(post_id, {}).get("name", "")
+
+
+## Nombre de postes d'un bâtiment ou d'une reconversion.
+func post_slots(post_id: String) -> int:
+	return ROLE_POSTS[post_id]["slots"] if ROLE_POSTS.has(post_id) else POSTS_PER_BUILDING
+
+
+## Le poste existe-t-il en ce moment (bâtiment construit ; instructeur : terrain ouvert) ?
+func post_open(post_id: String) -> bool:
+	match post_id:
+		"instructeur":
+			return training_unlocked()
+		"administrateur":
+			return tutorial_step == ""
+	return post_id in buildings
+
 
 ## (Étape C) « Affecter automatiquement » : chaque poste libre reçoit un héros de la cité qui ne fait rien (ni poste,
 ## ni entraînement, ni repos, pas parti), le plus doué pour ce bâtiment (post_score). Renvoie les annonces (textes).
@@ -100,9 +121,9 @@ func posted_heroes(building_id: String) -> Array[Dictionary]:
 func set_post(hero: Dictionary, building_id: String) -> bool:
 	last_refusal = ""
 	if building_id != "":
-		if not building_id in buildings or hero.get("post", "") == building_id:
+		if not post_open(building_id) or hero.get("post", "") == building_id:
 			return false
-		if posted_heroes(building_id).size() >= POSTS_PER_BUILDING:
+		if posted_heroes(building_id).size() >= post_slots(building_id):
 			return false
 		if not accepts_work(hero):
 			return false
@@ -120,8 +141,10 @@ func activity_text(hero: Dictionary) -> String:
 		return "Dans la Tour"
 	if on_expedition(hero):
 		return "Au donjon journalier"
+	if ROLE_POSTS.has(hero.get("post", "")):
+		return ROLE_POSTS[hero["post"]]["name"]
 	if hero.get("post", "") != "":
-		return "Assistant : %s" % BUILDINGS[hero["post"]]["name"]
+		return "Assistant : %s" % post_name(hero["post"])
 	if hero.get("training", "") != "":
 		return "Terrain d'entraînement"
 	if is_broken(hero):

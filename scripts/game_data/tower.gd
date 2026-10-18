@@ -1069,6 +1069,9 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 				report["items"].append({"name": PROMOTION_STONE, "grade": "F", "count": BOSS_STONES})
 			for item in report["items"]:
 				add_material(item["name"], item["grade"], item["count"])
+		# (octobre 2026) l'administrateur (reconversion, training.gd) fait rentrer plus d'or
+		rewards["gold"] = roundi(rewards["gold"] * admin_gold_factor())
+		report["gold"] = rewards["gold"]
 		add_gold(rewards["gold"])
 		add_gems(rewards["gems"])
 	else:

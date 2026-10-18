@@ -39,6 +39,79 @@ func _announce_training_ground() -> void:
 	show_tip("batiment")  # premier bâtiment : conseil du Système, après la fenêtre
 
 
+# ---------------------------------------------------------------------------
+# Reconversion : instructeur et administrateur (ici pour que l'entraînement et la Tour les lisent)
+# ---------------------------------------------------------------------------
+
+## Reconversion (ajout du projet, octobre 2026, d'après l'analyse du projet : un héros qui ne se bat plus, ou mal,
+## sert autrement qu'en synthèse ; dans l'œuvre, les héros ont une vie et un rôle à la cité). Deux postes qui ne
+## sont pas des bâtiments (hero["post"] vaut « instructeur » ou « administrateur ») :
+## - instructeur, au terrain d'entraînement (une fois ouvert) : chaque instructeur présent (ni parti, ni au repos)
+##   ajoute INSTRUCTOR_BONUS aux progrès de chaque séance, et INSTRUCTOR_MASTER_BONUS de plus pour un élève qu'il
+##   dépasse dans la compétence travaillée (training.gd) ;
+## - administrateur, à la cité : l'or des victoires dans la Tour et des ventes augmente de ADMIN_GOLD_BASE +
+##   ADMIN_GOLD_PER_INT par point d'Intelligence (Intelligence 10 : +10 %), s'il est présent.
+## « slots » : nombre de postes. Chiffres provisoires.
+const ROLE_POSTS := {
+	"instructeur": {"name": "Instructeur (terrain d'entraînement)", "slots": 2,
+		"info": "Fait progresser plus vite les héros qui s'entraînent, surtout dans ce qu'il maîtrise mieux qu'eux."},
+	"administrateur": {"name": "Administrateur (cité)", "slots": 1,
+		"info": "Gère la cité : plus d'or pour chaque victoire dans la Tour (selon son Intelligence)."},
+}
+const INSTRUCTOR_BONUS := 0.15
+const INSTRUCTOR_MASTER_BONUS := 0.15
+const ADMIN_GOLD_BASE := 0.05
+const ADMIN_GOLD_PER_INT := 0.005
+
+
+## Les héros à un poste de reconversion qui sont là (ni partis, ni au repos, ni en rupture).
+func role_workers(post_id: String) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for hero in alive_heroes():
+		if hero.get("post", "") == post_id and not is_away(hero) and not is_resting(hero) and not is_broken(hero):
+			result.append(hero)
+	return result
+
+
+## Instructeurs (reconversion) : le multiplicateur des progrès d'un élève qui travaille « program ».
+func instructor_factor(trainee: Dictionary, program: String) -> float:
+	var factor := 1.0
+	if not training_unlocked():
+		return factor
+	for teacher in role_workers("instructeur"):
+		factor += INSTRUCTOR_BONUS
+		if skill_level(teacher["skills"], program) > skill_level(trainee["skills"], program):
+			factor += INSTRUCTOR_MASTER_BONUS
+	return factor
+
+
+## Les compétences de TEACHABLE_SKILLS qu'un instructeur présent connaît mieux que cet élève (et qu'il peut apprendre).
+func teachable_from_instructors(trainee: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	if not training_unlocked():
+		return result
+	for skill_name in TEACHABLE_SKILLS:
+		var own := skill_level(trainee["skills"], skill_name)
+		if own >= SKILL_MAX_LEVEL or (own == 0 and (not can_learn_skill(trainee, trainee["skills"], skill_name) \
+				or not PersonalityEngine.has_affinity(trainee, skill_name))):
+			continue
+		for teacher in role_workers("instructeur"):
+			if skill_level(teacher["skills"], skill_name) > own:
+				result.append(skill_name)
+				break
+	return result
+
+
+## Administrateur (reconversion) : le multiplicateur de l'or gagné (1 sans administrateur présent).
+func admin_gold_factor() -> float:
+	var factor := 1.0
+	if tutorial_step != "":
+		return factor
+	for admin in role_workers("administrateur"):
+		factor += ADMIN_GOLD_BASE + ADMIN_GOLD_PER_INT * float(admin["stats"].get("int", 0))
+	return factor
+
+
 ## Vrai quand le terrain d'entraînement est ouvert (assez d'armes tirées).
 func training_unlocked() -> bool:
 	return weapon_draws >= TRAINING_UNLOCK_DRAWS
@@ -111,9 +184,14 @@ func update_training() -> void:
 			continue  # (plus rien d'utile à apprendre : il est retourné au repos)
 		var needed := skill_progress_needed(program)
 		# (les compétences qui comptent autrement, comme l'arc par flèche, gardent le même nombre de séances par niveau)
+		# (octobre 2026) les instructeurs (reconversion, plus haut) font progresser plus vite
 		var points: int = maxi(1, roundi(sessions * (TRAINING_POINTS_BASE + hero["growth"]) * efficiency \
-			* needed / float(TRAINING_POINTS_PER_LEVEL)))
+			* instructor_factor(hero, program) * needed / float(TRAINING_POINTS_PER_LEVEL)))
 		training_news.append_array(add_skill_progress(hero, program, points, needed))
+		# (octobre 2026) Un instructeur transmet aussi les compétences de l'œuvre qu'il connaît mieux que l'élève.
+		for skill_name in teachable_from_instructors(hero):
+			training_news.append_array(add_skill_progress(hero, skill_name, sessions * TEACH_POINTS_PER_SESSION,
+				skill_progress_needed(skill_name)))
 		# Chaque séance oriente aussi la croissance de ses stats (voir heroes.gd) : l'épée exerce la Force,
 		# le bouclier la Santé. (L'entraînement ne donne ni stats ni niveaux : seulement au prochain niveau.)
 		add_activity(hero, {TRAINING_STATS.get(program, "str"): sessions * TRAINING_ACTIVITY_PER_SESSION})
