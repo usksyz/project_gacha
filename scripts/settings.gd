@@ -14,9 +14,14 @@ var fullscreen := false
 var new_visuals := true
 ## Conseils du Système (fenêtres « Conseil » la première fois qu'on fait quelque chose, voir GameData.show_tip).
 var tips := true
+## Affichage des performances (images par seconde, matériel), par-dessus tous les écrans (voir PerfOverlay) ; hors mode
+## dev aussi.
+var show_perf := false
 
 ## Émis quand on change de visuels : les écrans concernés se redessinent.
 signal visuals_changed
+## Émis quand on affiche ou cache les performances.
+signal perf_changed
 
 ## Mode dev (pour tester) : activé par un code secret, il donne de l'or et des gemmes infinis
 ## et ouvre les outils du mode dev (Paramètres, et la fiche de chaque héros). Enregistré sur l'appareil :
@@ -56,6 +61,8 @@ func change(setting: String, value: Variant) -> void:
 	save_settings()
 	if setting == "new_visuals":
 		visuals_changed.emit()
+	if setting == "show_perf":
+		perf_changed.emit()
 	if setting == "dev_mode":
 		dev_mode_changed.emit()
 		# L'or et les gemmes affichés changent (infinis, ou les vraies réserves).
@@ -94,6 +101,7 @@ func save_settings() -> void:
 	file.set_value("affichage", "nouveaux_visuels", new_visuals)
 	file.set_value("jeu", "mode_dev", dev_mode)
 	file.set_value("jeu", "conseils", tips)
+	file.set_value("affichage", "performances", show_perf)
 	file.save(FILE_PATH)
 
 
@@ -108,3 +116,4 @@ func load_settings() -> void:
 	new_visuals = file.get_value("affichage", "nouveaux_visuels", new_visuals)
 	dev_mode = file.get_value("jeu", "mode_dev", dev_mode)
 	tips = file.get_value("jeu", "conseils", tips)
+	show_perf = file.get_value("affichage", "performances", show_perf)

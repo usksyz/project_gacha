@@ -1,6 +1,6 @@
 class_name BattleView
 extends Control
-## Écran de combat, en direct et vu du dessus.
+## Écran de combat, en direct, en vue isométrique 3D (BattleView3D).
 ## En haut le titre, le chrono et la barre de vie du boss ; au milieu le champ de bataille ;
 ## en dessous l'encart de l'équipe (vie en rouge, mana en bleu, toucher un héros le choisit) ;
 ## en bas le journal et la pause.
@@ -17,7 +17,8 @@ const ENEMY_COLOR := Color("e05252")
 const ORDER_COLOR := Color("f5d142")
 const GROUND_COLOR := Color("27301f")
 
-## Couleur de chaque type de case (voir BattleMap.Kind) ; plus claire à chaque niveau de hauteur
+## Couleur de chaque type de case (voir BattleMap.Kind ; l'aperçu de l'étage, FloorPreview, s'en sert) ; plus claire
+## à chaque niveau de hauteur
 ## (HEIGHT_LIGHTEN par niveau), et le chiffre de la hauteur dans le coin (Combat v2, C1).
 const KIND_COLORS := {
 	BattleMap.Kind.GROUND: Color("27301f"),
@@ -34,8 +35,6 @@ const KIND_COLORS := {
 }
 const HEIGHT_LIGHTEN := 0.09
 const LADDER_COLOR := Color("c99a5b")
-const EDGE_COLOR := Color(0, 0, 0, 0.55)
-const HEIGHT_TEXT_COLOR := Color(1, 1, 1, 0.55)
 
 ## Couleur des lignes spéciales du journal, selon leur « style » (voir Battle.events).
 const STYLE_COLORS := {
@@ -51,9 +50,6 @@ const STRIKE_TIME := 0.25
 const FLOAT_TIME := 0.9
 ## Durée d'affichage de la bulle « Non ! » d'un héros qui refuse un ordre.
 const BUBBLE_TIME := 1.5
-
-## Distance (en cases) à laquelle un toucher « attrape » un pion.
-const TAP_RADIUS := 0.8
 
 ## Portraits de l'équipe : hauteur de la rangée, couleurs des barres (cahier : vie rouge, mana bleue).
 const PORTRAIT_HEIGHT := 106
@@ -74,7 +70,6 @@ var layout: VBoxContainer
 var title_label: Label
 var clock_label: Label
 var hint_label: Label
-var arena: Control
 var boss_bar: Control
 var portraits: Control
 var log_label: RichTextLabel
@@ -89,11 +84,9 @@ var barrage_button: Button
 ## « Œil de faucon » (C3) : pour un héros choisi qui l'a, quand il peut l'activer.
 var hawk_button: Button
 
-## La vue isométrique 3D (Combat v2, C2 : BattleView3D), à la place de « arena » quand use_3d est vrai :
-## par défaut avec les nouveaux visuels ; le mode dev a un bouton pour passer de l'une à l'autre en combat.
+## La vue isométrique 3D (Combat v2, C2 : BattleView3D) : la seule vue du combat depuis que la vue de dessus a été
+## retirée (anciens visuels compris).
 var arena3d: BattleView3D
-var use_3d := false
-var view_button: Button
 
 var paused := false
 ## Voir play() : fin d'un combat qui n'est pas de la Tour (duel).
@@ -153,7 +146,6 @@ func play(new_battle: Battle, title: String, on_finish := Callable()) -> void:
 		old.queue_free()
 	selected_id = -1
 	paused = false
-	use_3d = Settings.new_visuals
 	_build(title)
 	_update_hint()
 
@@ -172,11 +164,6 @@ func _build(title: String) -> void:
 	clock_label = UI.make_label("", 24)
 	clock_label.add_theme_color_override("font_color", Color("f5b82e"))
 	header.add_child(clock_label)
-	# Mode dev : passer de la vue 3D à la vue de dessus (et retour) en plein combat.
-	view_button = UI.make_button("", _toggle_view, 16)
-	view_button.custom_minimum_size = Vector2(96, 40)
-	view_button.visible = Settings.dev_mode
-	header.add_child(view_button)
 
 	hint_label = UI.make_label("", 20)
 	hint_label.add_theme_color_override("font_color", ORDER_COLOR)
@@ -190,19 +177,13 @@ func _build(title: String) -> void:
 	boss_bar.visible = battle.enemies.any(func(enemy): return enemy["boss"])
 	layout.add_child(boss_bar)
 
-	# Le champ de bataille : dessiné par _draw_arena, et on le touche pour donner des ordres.
-	arena = Control.new()
-	arena.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	arena.draw.connect(_draw_arena)
-	arena.gui_input.connect(_on_arena_input)
-	layout.add_child(arena)
-	# Le même champ de bataille en vue isométrique 3D (une seule des deux vues est visible).
+	# Le champ de bataille en vue isométrique 3D (on le touche pour donner des ordres). La vue de dessus a été retirée
+	# (demande du porteur du projet : moins belle, et la 3D suffit).
 	arena3d = BattleView3D.new()
 	arena3d.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	arena3d.tapped.connect(_arena_tap)
 	layout.add_child(arena3d)
 	arena3d.setup(self)
-	_apply_view()
 
 	# Encart de l'équipe, sous le champ de bataille : les héros côte à côte, avec leurs PV
 	# (actuels / max et pourcentage) et leur mana (mages et soigneurs). Toucher un héros le choisit.
@@ -257,26 +238,11 @@ func _build(title: String) -> void:
 	controls.add_child(pause_button)
 
 
-## Mode dev : vue 3D ↔ vue de dessus (le combat continue, rien ne change dans la simulation).
-func _toggle_view() -> void:
-	use_3d = not use_3d
-	_apply_view()
-
-
-func _apply_view() -> void:
-	arena.visible = not use_3d
-	arena3d.visible = use_3d
-	view_button.text = "Vue de dessus" if use_3d else "Vue 3D"
-	if hint_label != null and battle != null:
-		_update_hint()
-
-
 func _toggle_pause() -> void:
 	paused = not paused
 	pause_button.text = "Reprendre" if paused else "Pause"
 	selected_id = -1  # pas d'ordre pendant la pause
 	_update_hint()
-	arena.queue_redraw()
 
 
 ## Le combat avance en direct, même si l'écran est caché (autre onglet), sauf en pause.
@@ -313,8 +279,6 @@ func _advance() -> void:
 	# Les effets trop vieux pour être montrés (coups, chiffres, bulles) : on ne les parcourt plus.
 	while first_effect < battle.effects.size() and battle.effects[first_effect]["t"] < battle.time - BUBBLE_TIME:
 		first_effect += 1
-	if arena.visible:
-		arena.queue_redraw()
 	portraits.queue_redraw()
 	boss_bar.queue_redraw()
 
@@ -449,7 +413,6 @@ func _on_portraits_input(event: InputEvent) -> void:
 	var hero_id: int = battle.heroes[index]["id"]
 	selected_id = -1 if selected_id == hero_id else hero_id
 	_update_hint()
-	arena.queue_redraw()
 	portraits.queue_redraw()
 
 
@@ -518,7 +481,7 @@ func _update_hint() -> void:
 		if Settings.dev_mode:
 			hint_label.text = tactic_text(battle.units[selected_id])  # (mode dev : son plan et ses raisons)
 		elif not battle.height_cells().is_empty():
-			hint_label.text += (" Touche un toit pour l'y envoyer." if use_3d else " Le chiffre d'une case : sa hauteur.") \
+			hint_label.text += " Touche un toit pour l'y envoyer." \
 				+ " On monte par les échelles et les escaliers ; d'en haut, on frappe plus fort et on tire plus loin."
 	else:
 		hint_label.text = "Touche un héros pour le guider."
@@ -585,7 +548,6 @@ func _order_swap() -> void:
 	Settings.vibrate(30)
 	selected_id = -1
 	_update_hint()
-	arena.queue_redraw()
 	portraits.queue_redraw()
 
 
@@ -597,7 +559,6 @@ func _order_barrage() -> void:
 	Settings.vibrate(30)
 	selected_id = -1
 	_update_hint()
-	arena.queue_redraw()
 	portraits.queue_redraw()
 
 
@@ -608,7 +569,6 @@ func _order_hawk_eye() -> void:
 	battle.order_hawk_eye(battle.units[selected_id])
 	Settings.vibrate(30)
 	_update_hint()
-	arena.queue_redraw()
 
 
 ## Ordre du Maître : le héros choisi entre en rage, ou en sort (il peut refuser, voir Battle.order_berserk).
@@ -620,21 +580,11 @@ func _order_berserk() -> void:
 	Settings.vibrate(30)
 	selected_id = -1
 	_update_hint()
-	arena.queue_redraw()
 	portraits.queue_redraw()
 
 
-func _on_arena_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
-		return  # pas d'ordre pendant la pause, ni pendant un duel
-	var map_pos: Vector2 = (event.position - _origin()) / _cell_size()
-	_arena_tap(_unit_at(map_pos), map_pos, Rect2(0, 0, Battle.GRID_W, Battle.GRID_H).has_point(map_pos))
-
-
-## Un toucher sur le champ de bataille (vue de dessus ou vue 3D) : « touched » le combattant touché ({} sinon),
-## « map_pos » le point de la carte (en cases), « inside » s'il est sur la carte. Mêmes ordres dans les deux vues.
+## Un toucher sur le champ de bataille (vue 3D) : « touched » le combattant touché ({} sinon),
+## « map_pos » le point de la carte (en cases), « inside » s'il est sur la carte.
 func _arena_tap(touched: Dictionary, map_pos: Vector2, inside: bool) -> void:
 	if battle == null or battle.finished or paused or battle.quest.get("duel", false):
 		return  # pas d'ordre pendant la pause, ni pendant un duel
@@ -652,192 +602,18 @@ func _arena_tap(touched: Dictionary, map_pos: Vector2, inside: bool) -> void:
 		Settings.vibrate(30)
 		selected_id = -1
 	_update_hint()
-	arena.queue_redraw()
 
-
-## Le combattant debout le plus proche du point touché (ou {} si personne n'est assez près).
-func _unit_at(map_pos: Vector2) -> Dictionary:
-	var result: Dictionary = {}
-	var best := TAP_RADIUS
-	for unit in battle.units:
-		if not unit["present"] or unit["hp"] <= 0:
-			continue
-		var distance: float = unit["pos"].distance_to(map_pos)
-		if distance < best:
-			best = distance
-			result = unit
-	return result
 
 
 # ---------------------------------------------------------------------------
-# Dessin du champ de bataille
+# Couleurs et outils de dessin (la vue 3D, BattleView3D, s'en sert ; la vue de dessus a été retirée)
 # ---------------------------------------------------------------------------
-
-## Taille d'une case à l'écran, et coin haut-gauche de la carte (la carte est centrée).
-func _cell_size() -> float:
-	return minf(arena.size.x / Battle.GRID_W, arena.size.y / Battle.GRID_H)
-
-
-func _origin() -> Vector2:
-	return (arena.size - Vector2(Battle.GRID_W, Battle.GRID_H) * _cell_size()) / 2
-
-
-## Position à l'écran d'un point de la carte (en cases).
-func _to_screen(pos: Vector2) -> Vector2:
-	return _origin() + pos * _cell_size()
-
-
-func _draw_arena() -> void:
-	if battle == null:
-		return
-	var cell := _cell_size()
-	if cell < 4:
-		return  # zone trop petite (écran en train de se fermer) : rien à dessiner
-	var origin := _origin()
-	arena.draw_rect(Rect2(origin, Vector2(Battle.GRID_W, Battle.GRID_H) * cell), GROUND_COLOR)
-	_draw_cells(origin, cell)
-
-	# Entre deux pas du combat, les pions glissent de leur ancienne position à la nouvelle.
-	var weight := clampf(accumulator / Battle.TICK, 0.0, 1.0)
-	var positions := {}
-	for unit in battle.units:
-		if unit["present"]:
-			positions[unit["id"]] = unit["prev_pos"].lerp(unit["pos"], weight)
-
-	_draw_traps(origin, cell)
-	_draw_orders(positions, cell)
-	_draw_rays(positions)
-	for id in positions:
-		_draw_unit(battle.units[id], _to_screen(positions[id]), cell)
-	_draw_names(positions, cell)
-	_draw_effects(positions, cell)
-
 
 ## Étape E, point 3 : les pièges posés par les héros (le Maître les voit : ses héros savent où ils sont), une croix brune.
 const TRAP_COLOR := Color("c08040")
 
-
-func _draw_traps(origin: Vector2, cell: float) -> void:
-	for trap in battle.traps:
-		var center: Vector2 = origin + (Vector2(trap["cell"]) + Vector2(0.5, 0.5)) * cell
-		var r := cell * 0.25
-		arena.draw_line(center - Vector2(r, r), center + Vector2(r, r), TRAP_COLOR, 2.5)
-		arena.draw_line(center - Vector2(r, -r), center + Vector2(r, -r), TRAP_COLOR, 2.5)
-		arena.draw_arc(center, r * 1.3, 0, TAU, 16, TRAP_COLOR, 1.5)
-	# (recensement « Techniques », point 2) Les corps des monstres tombés avant l'alarme : gris, rouge une fois découverts.
-	if battle.alert != null:
-		for corpse in battle.alert.corpses:
-			var at: Vector2 = origin + corpse["pos"] * cell
-			arena.draw_circle(at, cell * 0.16, CORPSE_FOUND_COLOR if corpse["found"] else CORPSE_COLOR)
-
-
 const CORPSE_COLOR := Color(0.35, 0.33, 0.32, 0.8)
 const CORPSE_FOUND_COLOR := Color(0.6, 0.2, 0.2, 0.85)
-
-
-## La carte « 3D sur grille » vue du dessus (Combat v2, C1) : chaque case dans la couleur de son type, plus
-## claire quand elle est haute, avec sa hauteur écrite dans le coin ; les échelles, escaliers, toits, tours,
-## remparts, murets, rochers et herbes ont leur dessin ; un trait sombre marque chaque bord qui tombe vers une
-## case plus basse (on lit le relief).
-func _draw_cells(origin: Vector2, cell: float) -> void:
-	var map: BattleMap = battle.map
-	var font := ThemeDB.fallback_font
-	var font_size := maxi(8, int(cell * 0.32))
-	for i in map.kinds.size():
-		var c := map.cell_at(i)
-		var kind := map.kinds[i]
-		var height := map.heights[i]
-		var area := Rect2(origin + Vector2(c) * cell, Vector2.ONE * cell)
-		var color: Color = KIND_COLORS.get(kind, GROUND_COLOR).lightened(height * HEIGHT_LIGHTEN)
-		if kind != BattleMap.Kind.GROUND or height > 0:
-			arena.draw_rect(area, color)
-		match kind:
-			BattleMap.Kind.BLOCK:
-				# Obstacle (maison fermée, arbre, puits, pan de mur) : hachuré.
-				arena.draw_rect(area.grow(-1.5), color.darkened(0.25), false, 1.5)
-				arena.draw_line(area.position + Vector2(3, 3), area.end - Vector2(3, 3), color.lightened(0.15), 1.0)
-				arena.draw_line(Vector2(area.end.x - 3, area.position.y + 3), Vector2(area.position.x + 3, area.end.y - 3), color.lightened(0.15), 1.0)
-			BattleMap.Kind.ROOF:
-				# Toit : des rangées de tuiles.
-				for k in range(1, 4):
-					var y := area.position.y + area.size.y * k / 4.0
-					arena.draw_line(Vector2(area.position.x, y), Vector2(area.end.x, y), color.darkened(0.2), 1.0)
-			BattleMap.Kind.LADDER:
-				# Échelle : deux montants et des barreaux.
-				var left := area.position.x + cell * 0.28
-				var right := area.end.x - cell * 0.28
-				arena.draw_line(Vector2(left, area.position.y + 2), Vector2(left, area.end.y - 2), LADDER_COLOR, 2.0)
-				arena.draw_line(Vector2(right, area.position.y + 2), Vector2(right, area.end.y - 2), LADDER_COLOR, 2.0)
-				for k in range(1, 5):
-					var y := area.position.y + area.size.y * k / 5.0
-					arena.draw_line(Vector2(left, y), Vector2(right, y), LADDER_COLOR, 1.5)
-			BattleMap.Kind.STAIRS:
-				# Escalier ou pente : des marches.
-				for k in range(1, 3):
-					var x := area.position.x + area.size.x * k / 3.0
-					arena.draw_line(Vector2(x, area.position.y + 3), Vector2(x, area.end.y - 3), color.lightened(0.2), 1.0)
-			BattleMap.Kind.LOW_WALL:
-				arena.draw_rect(Rect2(area.position + Vector2(2, cell * 0.3), Vector2(cell - 4, cell * 0.4)), color.lightened(0.15))
-			BattleMap.Kind.RAMPART:
-				# Chemin de ronde : des créneaux côté ennemis (en haut).
-				arena.draw_rect(Rect2(area.position + Vector2(cell * 0.1, 0), Vector2(cell * 0.3, cell * 0.25)), color.lightened(0.2))
-				arena.draw_rect(Rect2(area.position + Vector2(cell * 0.6, 0), Vector2(cell * 0.3, cell * 0.25)), color.lightened(0.2))
-			BattleMap.Kind.TOWER:
-				# Clocher : la cloche.
-				arena.draw_circle(area.get_center(), cell * 0.22, Color("d8b04a"))
-			BattleMap.Kind.ROCK:
-				arena.draw_circle(area.get_center(), cell * 0.38, color.lightened(0.12))
-			BattleMap.Kind.GRASS:
-				for k in 4:
-					var p := area.position + Vector2(cell * (0.2 + 0.2 * k), cell * (0.35 if k % 2 == 0 else 0.65))
-					arena.draw_line(p, p + Vector2(0, -cell * 0.18), color.lightened(0.3), 1.0)
-		# Bords qui tombent vers une case plus basse : un trait sombre.
-		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var next: Vector2i = c + d
-			if map.in_bounds(next) and map.height_at(next) < height and kind != BattleMap.Kind.BLOCK:
-				var a := area.get_center() + Vector2(d) * cell * 0.5 + Vector2(d.y, d.x) * cell * 0.5
-				var b := area.get_center() + Vector2(d) * cell * 0.5 - Vector2(d.y, d.x) * cell * 0.5
-				arena.draw_line(a, b, EDGE_COLOR, 2.0)
-		if height > 0:
-			arena.draw_string(font, area.position + Vector2(2, font_size), str(height), HORIZONTAL_ALIGNMENT_LEFT, -1,
-				font_size, HEIGHT_TEXT_COLOR)
-
-
-## Les ordres en cours : un trait jaune vers l'endroit ou l'ennemi visé.
-func _draw_orders(positions: Dictionary, cell: float) -> void:
-	for hero in battle.heroes:
-		var order: Dictionary = hero["order"]
-		if order.is_empty() or hero["hp"] <= 0 or not positions.has(hero["id"]):
-			continue
-		var from := _to_screen(positions[hero["id"]])
-		if order["kind"] == "move":
-			var to := _to_screen(order["pos"])
-			arena.draw_dashed_line(from, to, Color(ORDER_COLOR, 0.7), 2.0, 8.0)
-			arena.draw_arc(to, cell * 0.25, 0, TAU, 16, ORDER_COLOR, 2.0)
-		elif positions.has(order["target"]):
-			var to := _to_screen(positions[order["target"]])
-			arena.draw_dashed_line(from, to, Color(ORDER_COLOR, 0.7), 2.0, 8.0)
-			arena.draw_arc(to, cell * 0.55, 0, TAU, 20, ORDER_COLOR, 2.0)
-
-
-## Perception (C3, effet « lidar ») : les bâtonnets du héros choisi, en traits fins, avec un point brillant là
-## où chacun s'arrête.
-func _draw_rays(positions: Dictionary) -> void:
-	if selected_id < 0 or not positions.has(selected_id):
-		return
-	var hero: Dictionary = battle.units[selected_id]
-	var from := _to_screen(positions[selected_id])
-	for end in hero.get("rays", PackedVector2Array()):
-		var to := _to_screen(end)
-		arena.draw_line(from, to, RAY_COLOR, 1.0, true)
-		arena.draw_circle(to, 2.5, RAY_DOT_COLOR)
-	# Mode dev (IA tactique) : la case qu'il a choisie, un carré en tirets.
-	var cell = hero.get("tactic", {}).get("cell")
-	if Settings.dev_mode and cell != null:
-		var size := _cell_size()
-		var corner := _to_screen(Vector2(floorf(cell.x), floorf(cell.y)))
-		arena.draw_rect(Rect2(corner, Vector2.ONE * size), TACTIC_COLOR, false, 2.0)
-		arena.draw_dashed_line(from, corner + Vector2.ONE * size / 2.0, TACTIC_COLOR, 1.5, 6.0)
 
 
 ## La couleur de la jauge de détection d'un monstre : jaune (méfiant), orange (il vient voir), rouge (presque pleine).
@@ -853,159 +629,6 @@ static func detect_color(level: float) -> Color:
 func unseen(unit: Dictionary) -> bool:
 	return not unit["is_hero"] and battle.perception_on and battle.perception != null \
 		and battle.perception.updated_at >= 0.0 and not battle.perception.seen_by_heroes.has(unit["id"])
-
-
-func _draw_unit(unit: Dictionary, center: Vector2, cell: float) -> void:
-	var font := ThemeDB.fallback_font
-	var radius := cell * (0.5 if unit["boss"] else 0.36)
-	if unit["hp"] <= 0:
-		# Un héros à l'agonie : un cercle rouge qui bat, et les secondes qui lui restent.
-		if unit.get("agony", false):
-			var pulse := 0.5 + 0.5 * sin(battle.time * 8.0)
-			arena.draw_circle(center, radius, Color(0.6, 0.1, 0.1, 0.5 + 0.4 * pulse))
-			arena.draw_arc(center, radius + 3, 0, TAU, 24, Color(1, 0.25, 0.25), 2.0)
-			arena.draw_string(font, center + Vector2(-radius * 2, radius * 0.4), str(ceili(unit["agony_until"] - battle.time)),
-				HORIZONTAL_ALIGNMENT_CENTER, radius * 4, int(radius * 1.2), Color.WHITE)
-			return
-		# Un ennemi vaincu disparaît ; un héros tombé reste, grisé.
-		if unit["is_hero"]:
-			arena.draw_circle(center, radius, Color(0.3, 0.3, 0.3, 0.6))
-			arena.draw_string(font, center + Vector2(-radius, radius * 0.4), "x", HORIZONTAL_ALIGNMENT_CENTER,
-				radius * 2, int(radius * 1.2), Color(0.8, 0.8, 0.8))
-		return
-
-	if unit["id"] == selected_id:  # héros choisi : un anneau jaune
-		arena.draw_arc(center, radius + 6, 0, TAU, 24, ORDER_COLOR, 3.0)
-	if unit["berserk"]:  # Berserk : un halo rouge
-		arena.draw_circle(center, radius + 5, Color(1, 0.15, 0.15, 0.45))
-	var fill := Color("7a2a2a")
-	var outline := ENEMY_COLOR
-	if _is_duel():
-		# Duel : les deux sont des héros (couleur de leur rareté) ; le cercle dit le camp (vert / rouge).
-		fill = GameData.RARITY_COLORS[unit["rarity"]].darkened(0.35)
-		outline = HERO_COLOR if unit["is_hero"] else ENEMY_COLOR
-	elif unit["is_hero"]:
-		fill = GameData.RARITY_COLORS[unit["rarity"]].darkened(0.35)
-		outline = HERO_COLOR
-	elif unit["boss"]:
-		fill = Color("5a1f6e")
-	if unseen(unit):  # aucun héros ne le voit : grisé
-		fill = UNSEEN_COLOR
-		outline = UNSEEN_COLOR.lightened(0.25)
-	arena.draw_circle(center, radius, fill)
-	arena.draw_arc(center, radius, 0, TAU, 24, outline, 2.0)
-	arena.draw_string(font, center + Vector2(-radius, radius * 0.45), unit["name"].left(1),
-		HORIZONTAL_ALIGNMENT_CENTER, radius * 2, int(radius * 1.2), Color.WHITE)
-
-	# Barre de vie au-dessus du pion (et, pour un héros, l'endurance juste dessous, en jaune).
-	var bar_width := cell * 0.8
-	var bar_pos := center + Vector2(-bar_width / 2, -radius - 10 if unit["person"] else -radius - 7)
-	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width, 4)), Color("12131c"))
-	arena.draw_rect(Rect2(bar_pos, Vector2(bar_width * clampf(float(unit["hp"]) / unit["max_hp"], 0, 1), 4)), outline)
-	if unit["person"]:
-		var stamina_pos := bar_pos + Vector2(0, 4)
-		arena.draw_rect(Rect2(stamina_pos, Vector2(bar_width, 2.5)), Color("12131c"))
-		arena.draw_rect(Rect2(stamina_pos, Vector2(bar_width * clampf(unit["stamina"] / unit["max_stamina"], 0, 1), 2.5)),
-			STAMINA_TIRED_COLOR if unit["exhausted"] else STAMINA_COLOR)
-
-	if unit["bleed"]["ticks"] > 0:  # saigne : une goutte rouge
-		arena.draw_circle(center + Vector2(radius * 0.8, -radius * 0.6), 3.5, Color("ff3030"))
-	if not unit["is_hero"] and battle.alert != null and not unseen(unit):
-		var state: Array = battle.alert.state_tag(unit)  # (étape E) Zzz, guetteur, au repos, ?, !
-		if state[0] != "":
-			var size := maxi(10, int(cell * 0.3))
-			arena.draw_string(font, bar_pos + Vector2(-cell * 0.6, -3), state[0], HORIZONTAL_ALIGNMENT_CENTER, bar_width + cell * 1.2,
-				size, state[1])
-		# Sa jauge de détection (du jaune au rouge), juste au-dessus de sa vie.
-		var level: float = battle.alert.detect_level(unit)
-		if level > 0.01:
-			arena.draw_rect(Rect2(bar_pos + Vector2(0, -3), Vector2(bar_width, 2.5)), Color("12131c"))
-			arena.draw_rect(Rect2(bar_pos + Vector2(0, -3), Vector2(bar_width * level, 2.5)), detect_color(level))
-	if battle.height_of(unit) > 0:  # en hauteur : sa hauteur dans une pastille claire
-		var badge := center + Vector2(radius * 0.8, radius * 0.7)
-		arena.draw_circle(badge, maxf(5.0, cell * 0.16), Color("e8e2c8"))
-		var size := maxi(8, int(cell * 0.24))
-		arena.draw_string(font, badge + Vector2(-size, size * 0.38), str(battle.height_of(unit)), HORIZONTAL_ALIGNMENT_CENTER,
-			size * 2, size, Color("1b1b1b"))
-
-
-## Nom des héros sous leur pion, seulement s'il a la place (pas d'autre héros trop près).
-## Duel : les deux noms, toujours, celui du défié au-dessus de son pion pour ne pas se chevaucher.
-func _draw_names(positions: Dictionary, cell: float) -> void:
-	var font := ThemeDB.fallback_font
-	if _is_duel():
-		for id in positions:
-			var duelist: Dictionary = battle.units[id]
-			var at := _to_screen(positions[id])
-			var offset := Vector2(-cell * 1.5, cell * 0.36 + 14) if duelist["is_hero"] else Vector2(-cell * 1.5, -cell * 0.36 - 12)
-			arena.draw_string(font, at + offset, duelist["name"], HORIZONTAL_ALIGNMENT_CENTER, cell * 3, 14,
-				HERO_COLOR.lightened(0.4) if duelist["is_hero"] else ENEMY_COLOR.lightened(0.3))
-		return
-	for id in positions:
-		var unit: Dictionary = battle.units[id]
-		if not unit["is_hero"]:
-			continue
-		var crowded := false
-		for other in positions:
-			if other != id and battle.units[other]["is_hero"] and positions[other].distance_to(positions[id]) < 1.6:
-				crowded = true
-				break
-		if not crowded or id == selected_id:
-			var center := _to_screen(positions[id])
-			arena.draw_string(font, center + Vector2(-cell, cell * 0.36 + 12), unit["name"],
-				HORIZONTAL_ALIGNMENT_CENTER, cell * 2, 11, Color(1, 1, 1, 0.8))
-
-
-## Coups (traits), sorts, soins, et chiffres qui s'envolent.
-func _draw_effects(positions: Dictionary, cell: float) -> void:
-	var font := ThemeDB.fallback_font
-	var now := battle.time
-	var ranks := float_ranks(battle, first_effect)
-	for i in range(first_effect, battle.effects.size()):
-		var effect: Dictionary = battle.effects[i]
-		var age: float = now - effect["t"]
-		if not positions.has(effect["to"]):
-			continue
-		var to := _to_screen(positions[effect["to"]])
-		var from: Vector2 = _to_screen(positions[effect["from"]]) if positions.has(effect["from"]) else to
-
-		if age < STRIKE_TIME:
-			var fade := 1.0 - age / STRIKE_TIME
-			match effect["kind"]:
-				"hit":
-					arena.draw_line(from.lerp(to, 0.4), to, Color(1, 1, 1, fade), 3.0)
-				"arrow":
-					arena.draw_line(from, to, Color(1, 0.85, 0.3, fade), 2.0)
-				"spell":
-					arena.draw_line(from, to, Color(0.7, 0.45, 1, fade), 2.0)
-					arena.draw_circle(to, Battle.SPELL_RADIUS * cell * 0.5, Color(0.6, 0.3, 1, 0.25 * fade))
-				"heal":
-					arena.draw_line(from, to, Color(0.4, 1, 0.5, fade), 2.0)
-				"bolt":  # petit trait de magie, quand le mage n'a plus de mana
-					arena.draw_line(from, to, Color(0.55, 0.75, 1, fade), 1.5)
-
-		# Ordre refusé : une petite bulle « Non ! » au-dessus du héros, qui reste puis s'efface.
-		if effect["kind"] == "refuse":
-			_draw_bubble(font, to + Vector2(0, -cell * 0.4), effect["text"], clampf(2.0 * (1.0 - age / BUBBLE_TIME), 0.0, 1.0))
-			continue
-		if age > FLOAT_TIME:
-			continue
-
-		# Le chiffre monte et s'efface.
-		var color := Color.WHITE
-		var size := 16
-		if effect["crit"]:
-			color = Color("ffa030")
-			size = 22
-		elif effect["kind"] == "heal":
-			color = Color("6fe08a")
-		elif effect["kind"] == "bleed":
-			color = Color("ff5050")
-		elif effect["text"] == "esquive !":
-			color = Color("9fd3ff")
-		color.a = clampf(1.0 - age / FLOAT_TIME, 0.0, 1.0)
-		var rise := Vector2(-80, -cell * 0.4 - age * cell * 0.8 - ranks.get(i, 0) * FLOAT_LINE)
-		arena.draw_string(font, to + rise, effect["text"], HORIZONTAL_ALIGNMENT_CENTER, 160, size, color)
 
 
 ## Étape C : chiffres empilés. Pour chaque chiffre encore visible, son rang parmi ceux de la même cible (0 = le plus
@@ -1024,10 +647,6 @@ static func float_ranks(fight: Battle, first: int) -> Dictionary:
 		counts[effect["to"]] = ranks[i] + 1
 	return ranks
 
-
-## Bulle de parole (fond blanc, petite pointe vers le bas) centrée au-dessus du point « tip ».
-func _draw_bubble(font: Font, tip: Vector2, text: String, alpha: float) -> void:
-	draw_bubble_on(arena, font, tip, text, alpha)
 
 
 ## La même bulle, dessinée sur n'importe quel Control (la vue 3D s'en sert aussi).
@@ -1056,9 +675,7 @@ func _show_result(report: Dictionary) -> void:
 ## Remplace la carte et la pause par ces fenêtres de fin, puis un bouton « Continuer ».
 func _show_windows(windows: Array) -> void:
 	controls.queue_free()
-	arena.visible = false
 	arena3d.visible = false
-	view_button.visible = false
 	hint_label.visible = false
 	boss_bar.visible = false
 	portraits.visible = false

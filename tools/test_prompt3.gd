@@ -3,7 +3,7 @@ extends SceneTree
 ## placement des héros par le Maître, bilan d'une défaite. Il RECOMMENCE la partie : le lancer dans une COPIE du
 ## projet (worktree + override.cfg, voir CLAUDE.md) :
 ##   Godot --path <copie> -s res://tools/test_prompt3.gd [-- captures=<dossier>]
-## Avec une fenêtre et « captures=<dossier> » : images de l'aperçu, du placement (vue de dessus et 3D) et du bilan.
+## Avec une fenêtre et « captures=<dossier> » : images de l'aperçu, du début du combat (anciens et nouveaux visuels, en 3D) et du bilan.
 
 var failures := 0
 var started := false
@@ -82,8 +82,8 @@ func _check_placement() -> void:
 		view.play(battle, "Exploration")
 		for i in 10:
 			await process_frame
-		_check(view.pause_button.visible and battle.time > 0.0, "le combat avance tout de suite (%s)" % ("3D" if use_3d else "dessus"))
-		await _capture("exploration_" + ("3d" if use_3d else "dessus"))
+		_check(view.pause_button.visible and battle.time > 0.0, "le combat avance tout de suite (%s, en 3D : la vue de dessus est retirée)" % ("nouveaux visuels" if use_3d else "anciens visuels"))
+		await _capture("exploration_" + ("nouveaux" if use_3d else "anciens"))
 		view.get_parent().queue_free()
 	settings.new_visuals = true
 	# Le Meneur organise la défense (survie, étage 5, deux boucliers et un Meneur).

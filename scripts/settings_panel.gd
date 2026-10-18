@@ -65,6 +65,8 @@ func _ready() -> void:
 	_add_toggle_row(content, "Plein écran", "fullscreen")
 	# Pour comparer les images de la piste graphique avec les anciens visuels.
 	_add_toggle_row(content, "Nouveaux visuels", "new_visuals")
+	# Les performances (images par seconde, matériel), sur tous les écrans, hors mode dev aussi (voir PerfOverlay).
+	_add_toggle_row(content, "Performances", "show_perf")
 	# Conseils du Système (voir GameData.show_tip) : les couper, ou les revoir tous depuis le début.
 	_add_toggle_row(content, "Conseils du Système", "tips")
 	var tips_button := UI.make_button("Réafficher les conseils", func(): pass, 24)

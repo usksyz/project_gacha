@@ -104,6 +104,8 @@ func _ready() -> void:
 	# Les paramètres s'affichent par-dessus tout le reste.
 	settings_panel = SettingsPanel.new()
 	add_child(settings_panel)
+	# Les performances (option des paramètres), au-dessus de tout.
+	add_child(PerfOverlay.new())
 
 	GameData.gems_changed.connect(func(_amount): _refresh_money())
 	GameData.gold_changed.connect(func(_amount): _refresh_money())

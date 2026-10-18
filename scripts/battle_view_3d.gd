@@ -2,8 +2,8 @@ class_name BattleView3D
 extends Control
 ## Le champ de bataille en vue isométrique semi-3D (cahier, onglet « Combat v2 », sections 1 et 9 : étape C2).
 ## La simulation ne change pas (battle.gd, BattleMap, MapGenerator) : cette vue ne fait que la montrer. Elle
-## remplace la carte vue de dessus dans BattleView (qui garde tout le reste : titre, chrono, barre du boss,
-## encart de l'équipe, journal, boutons d'ordres, fenêtres système).
+## est la seule carte du combat dans BattleView (la vue de dessus est retirée), qui garde tout le reste : titre,
+## chrono, barre du boss, encart de l'équipe, journal, boutons d'ordres, fenêtres système.
 ## - La carte : une colonne de blocs par case (hauteur 0 à 4 niveaux, BattleMap.heights), couleur selon son
 ##   type (BattleMap.kinds) et le gabarit de la carte (village, prairie, ville en ruine, cité...), en
 ##   MultiMesh ; les décors de MapGenerator (« structures » : arbres, maisons, clocher...) ont leur forme.
@@ -514,7 +514,7 @@ func _camp_color(unit: Dictionary) -> Color:
 	return HERO_COLOR if unit["is_hero"] else ENEMY_COLOR
 
 
-## Position d'un combattant sur la carte (glissée entre deux pas du combat, comme la vue de dessus).
+## Position d'un combattant sur la carte (glissée entre deux pas du combat).
 func unit_map_pos(unit: Dictionary) -> Vector2:
 	var weight := clampf(view.accumulator / Battle.TICK, 0.0, 1.0)
 	return unit["prev_pos"].lerp(unit["pos"], weight)
@@ -779,8 +779,9 @@ func _process(delta: float) -> void:
 		_update_camera()
 	_update_units(delta)
 	_update_fade(delta)
-	fps_label.visible = Settings.dev_mode
-	if Settings.dev_mode:
+	# (mode dev ; l'option « Performances » des paramètres montre tout cela, et plus, sur tous les écrans)
+	fps_label.visible = Settings.dev_mode and not Settings.show_perf
+	if fps_label.visible:
 		fps_label.text = "%d images/s" % Engine.get_frames_per_second()
 	overlay.queue_redraw()
 
