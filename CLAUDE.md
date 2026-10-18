@@ -143,6 +143,13 @@ Le détail de chaque système est dans son fichier ; le lire avant d'y toucher, 
 - `docs/lobby.md` : hub 3D, terrain d'entraînement, affectations, donjon journalier, forge, chambre de synthèse (phases 4 à 6).
 - `docs/mesures.md` : outils de simulation et toutes les mesures (avant / après de chaque étape).
 
+## Bancs de test à chaque push
+`tools/lancer_tests.sh <chemin de Godot>` lance tous les bancs sans écran (check_scripts, test_combat_v2,
+test_personality, test_summon, test_economie, test_etapeA/C/D/E, test_prompt3/4/5, test_ameliorations) et sort en
+erreur si l'un échoue. GitHub le lance sur chaque branche et chaque PR (`.github/workflows/tests.yml`) et avant la
+publication sur `main` (`deploy-web.yml`, tâche `tests` : la version web n'est publiée que si les bancs passent).
+Les bancs recommencent la partie : en local, seulement dans une copie du projet. Un nouveau banc : l'ajouter au script.
+
 ## Avancement (phases du cahier des charges)
 - Phase 1 (héros et combat) : faite (`docs/heros.md`, `docs/combat.md`).
 - Phase 2 (Tour) : faite (`docs/combat.md`, « Phase 2 »).
@@ -150,4 +157,9 @@ Le détail de chaque système est dans son fichier ; le lire avant d'y toucher, 
 - Phases 4 à 6 (lobby, artisanat, fin de jeu) : premières versions (`docs/lobby.md`).
 - Personnalité v2 : P1a, P1a-bis, P1b, P2 faites, première tranche de P3 (prompt 4) (`docs/personnalite.md`).
 - Combat v2 : C1, C2 faites ; C3 en cours (`docs/combat.md`).
+- Octobre 2026, améliorations de l'analyse du projet : équipes de référence du simulateur, cohésion en combat, gemmes
+  hors de la Tour (missions du jour, expéditions), reconversion (instructeur, administrateur), trois compétences de
+  l'œuvre, phase 1.3 (chef et nom d'équipe, suggestions de formation, volontaires, écart de niveau), arrivée
+  déboussolée et motivation cachée (première tranche du prompt 5.3), étages 2 à 4 adoucis, sauvegardes groupées
+  (`hold_saves` / `release_saves`). Banc `tools/test_ameliorations.gd`.
 - Étape E (exploration et combat autonome) : faite (vigilance des monstres, exploration ; plus de placement par le Maître ; infiltration, assassinat, pièges ; liens et caractère en combat : protéger un ami, appât, abandon, `battle_ties.gd`) (`docs/combat.md`).

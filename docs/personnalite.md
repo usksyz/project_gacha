@@ -301,3 +301,14 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Sauvegarde version 10. Mode dev : Outils > « Vie de la cité » (« Une demande maintenant », « Rapport du jour à
   revoir »). Banc : `tools/test_prompt4.gd` (copie du projet, avec une fenêtre, `-- captures=<dossier>`).
   Reste (P3 complet) : décisions par la personnalité (`decide`), bulles en combat, autres demandes.
+- Arrivée déboussolée et motivation cachée (octobre 2026 ; cahier, « Améliorations », lot C étape 1 ;
+  `personality.gd`, dernière section). Un 1-2 étoiles arrive « Déboussolé » (`hero["arc"]`, parmi les héros secrets
+  seul Aaron) : il refuse l'entraînement, ferme la marche en combat, « erre dans la cité ». Il en sort en survivant à
+  un combat, en voyant une synthèse, ou seul après 24 h réelles (de 6 à 48 h selon Stabilité et Curiosité) ; une
+  notification le dit, et il parle de sa motivation. Motivation (`hero["motivation"]`, valeur principale du document
+  de référence : famille, liberté, justice, reconnaissance, survie, devoir, camaraderie, ou aucune) tirée à
+  l'invocation, fixe pour les héros secrets, « ? » sur la fiche tant qu'il n'en a pas parlé ; avec une motivation, ses
+  pertes de santé mentale x0,9 (ajout du projet). Après, l'arc vaut « resigne » ; Engagé, Forgé et Brisé viendront
+  avec le prompt 5.3. Anciennes sauvegardes : motivation tirée au chargement, personne n'est déboussolé.
+  Écart à trancher par le porteur du projet : l'onglet « Améliorations » donne une autre liste de motivations (un
+  proche, prouver sa valeur, protéger son groupe, liberté, aucune).

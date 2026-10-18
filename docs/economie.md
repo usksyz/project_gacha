@@ -75,3 +75,13 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
 - Étape B, forge à 500 gemmes avec 500 gemmes au départ : gardé (prix du cahier, et 500 gemmes de départ demandées au
   prompt 1). Les étages 1 à 4 rapportent 600 gemmes : la forge vient après quelques étages, ou une invocation spéciale
   avant ; c'est un choix du Maître (à revoir avec le porteur du projet s'il le trouve frustrant).
+- Gemmes hors de la Tour (octobre 2026, analyse du projet : avant, presque toutes les gemmes venaient des étages, et un
+  joueur bloqué à un étage n'avait plus rien pour invoquer). Ajouts du projet, chiffres provisoires :
+  - Missions du jour (`game_state.gd`, section « Missions du jour » : `DAILY_MISSIONS`, `complete_daily_mission`) :
+    faire un combat dans la Tour (victoire ou défaite), une invocation (ou un tirage d'armes), envoyer un héros
+    s'entraîner ; 60 gemmes chacune, 120 de plus quand les trois sont faites. Une fois par jour (date de l'appareil,
+    `daily_missions` enregistré sous « missions_du_jour »), rien pendant le tutoriel. Fenêtre du Système à chaque
+    mission (signal `system_notice`, affiché par `main.gd`) ; liste sur l'écran d'invocation. Mode dev : « Missions du
+    jour à refaire ».
+  - Expéditions (`lobby.gd`) : chaque expédition rapporte `EXPEDITION_GEMS` (40) gemmes, dites dans le rapport.
+  Au plus 300 gemmes par jour par les missions (une invocation simple coûte 100 gemmes).

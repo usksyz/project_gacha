@@ -205,3 +205,26 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
 - Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 97,5 % (point 3 : 98 %) ; `test_tutoriel` : victoire au premier essai.
 - Bilan de l'étape E, préparée, étages 1 à 5 et 10 : avant (eee5e49) 100 / 90 / 86 / 84,7 / 64 / 40,7 → après
   99,7 / 90,3 / 84,7 / 77,7 / 67,7 / 39 ; brute 100 / 54,3 / 42,7 / 35,3 / 34,7 / 20,7 → 99,7 / 59 / 42,3 / 42,3 / 31,3 / 14,7.
+## Octobre 2026 (améliorations de l'analyse du projet)
+Équipes de référence de `sim_tower` (`equipe=`) : `non_preparee` (monstres -2 niveaux, armes F), `cahier` (au niveau
+des monstres, armes D), `realiste` (niveau gagné par l'XP des étages précédents, rejoués une fois ; armes : le tirage
+x10 du tutoriel et les tirages payés par l'or gagné, `REALISTIC_REPLAYS`), en plus de `brute` et `preparee`. Mesure
+« cohesion » : secondes par combat où un héros est isolé (personne à moins de 5 cases), spectateur (un ennemi connu,
+rien à faire), à l'agonie sans allié à portée. Toutes les séries : 200 combats, graine 7 (bruit environ ±4 points).
+- Avant (victoires %, morts par combat), étages 1 / 2 / 3 / 4 / 5 / 10 : brute 99,5 (0,21) / 65 (2,23) / 40,5 (3,27) /
+  42 (3,28) / 32,5 (3,65) / 16 (3,79) ; cahier 100 / 86,5 (1,02) / 75,5 (1,57) / 68 (1,95) / 60,5 (2,43) / 32,5 (3,20) ;
+  non préparée 98,5 / 37 (3,46) / 24 (3,96) / 32,5 (3,62) / 27 (3,88) / 17,5 ; préparée 100 / 90,5 / 81,5 / 76,5 /
+  68,5 / 40 ; réaliste 99 / 68,5 (2,02) / 59,5 (2,42) / 62 (2,27) / - / 25,5. L'équipe réaliste a le niveau 1 à 4 contre
+  des monstres de niveau 3 à 6 ; les armes comptent beaucoup (réaliste contre non préparée).
+- Cohésion, étage 2, brute : tout ensemble avec un secours à 14 cases : 43 % (les sauveteurs couraient dans la mêlée) ;
+  secours à 12 cases mais jamais sous les coups (`AGONY_SAFE_RADIUS`) : 63 %, agonie sans allié à portée 3,0 → 0,8 s.
+  Cri, regroupement et aide à l'allié seul : neutres à eux seuls. Aide à l'allié seul seulement (A) contre aide à tout
+  allié au contact, l'allié seul d'abord (B, gardé) : étage 2 64 → 68,5 %, étage 3 51 → 58 % (avant : 65 et 40,5).
+- Vue plus longue (6 → 8,5 cases), avec B : étage 2 68,5 → 59 %, étage 3 58 → 40,5 % : écartée.
+- Étages 2 à 4 (réaliste, avec la cohésion) : 6 monstres 71,5 / 62,5 / 68 % → 5 monstres 90,5 / 73,5 / 74,5 % ; étage
+  2 sans archers (6 monstres, 2 sortes) : 100 %, écarté ; cahier étage 3 : 90,5 %.
+- Bilan (tout le lot) : réaliste étages 2 / 3 / 4 / 5 : 89,5 (0,76) / 76 (1,53) / 74,5 (1,60) / 34 (3,48) ; préparée
+  étages 3 / 4 : 97 (0,33) / 92 (0,58) ; brute étage 2 : 82,5 (1,17). Cohésion réaliste étage 3 : isolé 5,9 → 3,5 s,
+  agonie sans allié à portée 0,7 → 0,2 s. L'étage 5 (survie, broyeur de héros) reste très dur pour l'équipe réaliste.
+- Étage 1 avec des héros déboussolés (rôle prudent) : réaliste 100 % (0,01 mort).
+- Sauvegarde : 13 ms par sauvegarde avec 45 héros (PC) ; fin d'un combat de la Tour : 4 sauvegardes → 1.
