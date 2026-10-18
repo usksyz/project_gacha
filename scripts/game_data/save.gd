@@ -55,6 +55,7 @@ func save_game() -> void:
 	file.set_value("partie", "codes_utilises", used_codes)
 	file.set_value("partie", "heros", roster)
 	file.set_value("partie", "equipes", teams)
+	file.set_value("partie", "equipes_infos", team_info)
 	file.set_value("partie", "combat_en_cours", pending_battle)
 	file.set_value("partie", "nouvelles_entrainement", training_news)
 	file.set_value("partie", "arsenal", arsenal)
@@ -102,6 +103,9 @@ func load_game() -> bool:
 	teams = file.get_value("partie", "equipes", _empty_teams())
 	while teams.size() < TEAM_COUNT:
 		teams.append([])
+	team_info = file.get_value("partie", "equipes_infos", _empty_team_info())  # (phase 1.3)
+	while team_info.size() < TEAM_COUNT:
+		team_info.append({"name": "", "leader": -1})
 	pending_battle = file.get_value("partie", "combat_en_cours", {})
 	training_news = file.get_value("partie", "nouvelles_entrainement", [])
 	arsenal = file.get_value("partie", "arsenal", [])
@@ -190,6 +194,7 @@ func _new_game() -> void:
 	next_hero_id = 1
 	used_codes.clear()
 	teams = _empty_teams()
+	team_info = _empty_team_info()
 	pending_battle = {}
 	absence_report = {}
 	training_news = []

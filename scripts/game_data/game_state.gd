@@ -83,6 +83,10 @@ var used_codes: Array[String] = []
 ## Équipes composées à l'avance : TEAM_COUNT listes de numéros (id) de héros, dans l'ordre choisi.
 var teams: Array = []
 
+## (phase 1.3) Nom et chef de chaque équipe : TEAM_COUNT dictionnaires {"name": "" (nom par défaut),
+## "leader": numéro du chef ou -1}. Voir heroes.gd, « Chefs et noms d'équipe ».
+var team_info: Array = []
+
 ## Combat de la Tour en cours (vide s'il n'y en a pas) : {"floor", "team": [id des héros],
 ## "enemies": [...], "quest": {...}}. Il est sauvegardé dès le début du combat : si le jeu est fermé
 ## en plein combat, les héros se débrouillent seuls et le combat est terminé au lancement suivant.

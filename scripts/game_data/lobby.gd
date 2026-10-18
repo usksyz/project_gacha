@@ -446,7 +446,7 @@ func _finish_expedition(expedition: Dictionary) -> Dictionary:
 				add_material(JUNK_NAME, "F", 1)
 				var junk_key := "%s (F)" % JUNK_NAME
 				totals[junk_key] = totals.get(junk_key, 0) + 1
-	var lines := ["L'équipe %d est revenue du donjon journalier (%s)." % [expedition["team_index"] + 1,
+	var lines := ["L'équipe « %s » est revenue du donjon journalier (%s)." % [team_name(expedition["team_index"]),
 		expedition_dungeon(expedition)["name"]]]
 	for monster in rare_monsters:
 		lines.append("Monstre rare chassé : %s !" % monster)

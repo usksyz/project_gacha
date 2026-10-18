@@ -1164,3 +1164,95 @@ func berserk_preview(hero: Dictionary) -> Array:
 		var base: int = hero["stats"][stat]
 		rows.append([STAT_NAMES[stat], maxi(1, base + changes[stat]), base])
 	return rows
+
+
+# ---------------------------------------------------------------------------
+# Suggestions de formation (phase 1.3)
+# ---------------------------------------------------------------------------
+# Feuille de route v2 : « un héros peut suggérer une formation » ; fenêtre de l'œuvre « Le héros X vous suggère
+# une formation ! » avec les cartes des équipes proposées, Oui / Non. Ici (tower.gd, pour lire les armes) : un héros
+# qui a fait au moins FORMATION_MIN_FIGHTS combats et qui est chef d'équipe, Meneur, ou a assez confiance en le
+# Maître (FORMATION_MIN_TRUST) propose une composition pour son équipe (celle qu'il mène, sinon la sienne, sinon la
+# première) : lui, puis de quoi couvrir les trois portées, puis les plus forts, en évitant ses hostiles et en
+# préférant ses amis. Seuls les héros sans équipe ou déjà dans celle-ci sont proposés (on ne défait pas les autres).
+# La demande passe par les demandes des héros (personality.gd). Chiffres provisoires.
+const FORMATION_MIN_FIGHTS := 8
+const FORMATION_MIN_TRUST := 10.0
+
+
+## La portée d'un héros d'après son arme : « courte », « moyenne » ou « longue » (comme Battle.range_band).
+func hero_band(hero: Dictionary) -> String:
+	if uses_magic(hero):
+		return "longue"
+	var weapon := fighting_weapon(hero)
+	return WEAPON_TYPES.get(weapon.get("type", ""), {}).get("band", "courte")
+
+
+## La composition qu'un héros proposerait pour l'équipe « index » (numéros des héros, lui en premier).
+func suggest_formation(hero: Dictionary, index: int) -> Array:
+	var candidates: Array[Dictionary] = []
+	for other in alive_heroes():
+		if other["id"] == hero["id"] or is_away(other) or bond_level(hero, other) == BOND_HOSTILE:
+			continue
+		var elsewhere := false
+		for i in TEAM_COUNT:
+			if i != index and other["id"] in teams[i]:
+				elsewhere = true
+		if not elsewhere:
+			candidates.append(other)
+	var score := func(other: Dictionary) -> float:
+		return other["level"] + other["rarity"] * 2.0 + (3.0 if bond_level(hero, other) >= BOND_FRIEND else 0.0)
+	candidates.sort_custom(func(a, b): return score.call(a) > score.call(b))
+	var chosen: Array[Dictionary] = [hero]
+	for band in ["courte", "longue", "moyenne"]:
+		if chosen.size() >= TEAM_SIZE or chosen.any(func(h): return hero_band(h) == band):
+			continue
+		for other in candidates:
+			if not other in chosen and hero_band(other) == band:
+				chosen.append(other)
+				break
+	for other in candidates:
+		if chosen.size() >= TEAM_SIZE:
+			break
+		if not other in chosen:
+			chosen.append(other)
+	return chosen.map(func(h): return h["id"])
+
+
+## (remplace celle de personality.gd) Une suggestion de formation à ajouter aux demandes possibles : [poids, demande].
+func _formation_request() -> Array:
+	var best: Dictionary = {}
+	var best_score := 0.0
+	var best_team := 0
+	for hero in alive_heroes():
+		if is_away(hero) or hero.get("fights", 0) < FORMATION_MIN_FIGHTS \
+				or pending_requests.any(func(r): return r["hero"] == hero["id"]):
+			continue
+		var led := -1
+		var own := -1
+		for index in TEAM_COUNT:
+			if team_leader(index).get("id", -1) == hero["id"]:
+				led = index
+			if hero["id"] in teams[index] and own < 0:
+				own = index
+		var hero_score := 0.0
+		if led >= 0:
+			hero_score += 3.0
+		if has_trait(hero, "Meneur"):
+			hero_score += 2.0
+		if PersonalityEngine.trust(hero) >= FORMATION_MIN_TRUST:
+			hero_score += 1.0
+		if hero_score > best_score:
+			best = hero
+			best_score = hero_score
+			best_team = led if led >= 0 else (own if own >= 0 else 0)
+	if best.is_empty():
+		return []
+	var ids := suggest_formation(best, best_team)
+	var current: Array = teams[best_team].duplicate()
+	if ids.size() < 2 or (ids.size() == current.size() and ids.all(func(id): return id in current)):
+		return []  # rien à proposer de neuf
+	return [best_score * 0.3, {"kind": "formation", "hero": best["id"], "team": best_team, "ids": ids,
+		"reason": "suggère une formation : %d combats, chef %s, Meneur %s, confiance %+.0f" % [best.get("fights", 0),
+			"oui" if team_leader(best_team).get("id", -1) == best["id"] else "non",
+			"oui" if has_trait(best, "Meneur") else "non", PersonalityEngine.trust(best)]}]

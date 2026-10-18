@@ -86,6 +86,7 @@ func _ready() -> void:
 
 	_add_section(content, "Vie de la cité")
 	_add_row(content, [["Une demande maintenant", func(): return GameData.dev_force_request()],
+		["Suggestion de formation", func(): return GameData.dev_formation_request()],
 		["Rapport du jour à revoir", func():
 			GameData.dev_reset_daily_report()
 			return "Le rapport de la fée s'affichera (fenêtre à la fermeture des outils)."]])

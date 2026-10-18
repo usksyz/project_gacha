@@ -658,6 +658,7 @@ const STRESS_TYPES := {
 	"fear": {"name": "Prendre peur", "axes": {}},
 	"berserk": {"name": "Rage (Berserk)", "axes": {}},
 	"hostile": {"name": "Un hostile dans l'équipe", "axes": {"COL": 0.05}},
+	"level_gap": {"name": "Bien plus faible que ses coéquipiers", "axes": {"AMB": 0.04, "OPT": -0.04}},
 	"defeat": {"name": "Défaite", "axes": {"OPT": -0.05, "AMB": 0.03}},
 	"synthesis": {"name": "Voir une synthèse", "axes": {"EMP": 0.05, "SEN": 0.05}, "subject": "synthesis"},
 	"left_out": {"name": "Laissé à la cité", "axes": {"AMB": 0.05}},

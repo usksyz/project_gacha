@@ -350,6 +350,11 @@ const QUARREL_CHANCE_PER_HOUR := 0.1
 const QUARREL_MAX_HOURS := 24
 ## Deux hostiles dans la même équipe de combat : chacun perd ceci au début du combat.
 const MENTAL_LOSS_HOSTILE := 5.0
+## (phase 1.3, feuille de route v2 : « un écart de niveau important dans une équipe fait monter le stress des plus
+## faibles ») Un héros qui a LEVEL_GAP_STRESS niveaux ou plus de moins que le plus fort de l'équipe perd ceci au
+## début du combat (type de stress « level_gap »). Chiffres provisoires.
+const LEVEL_GAP_STRESS := 5
+const MENTAL_LOSS_LEVEL_GAP := 3.0
 
 
 ## « Han (★) » : le nom suivi des étoiles, comme dans les fenêtres système.
@@ -902,9 +907,13 @@ func chatter(hero: Dictionary, nearby: Array) -> Dictionary:
 #   l'équipe N (qui a de la place) ;
 # - « X demande un jour de repos » : un héros qui s'entraîne ou tient un poste, fatigué (santé mentale sous 60),
 #   peu persévérant ou peu vif.
-# Répondre change la confiance envers le Maître (REQUEST_TRUST). Le jour de repos accordé : ni entraînement ni
-# poste pendant REST_SECONDS (le temps du lobby ira plus tard 3 fois plus vite), et un peu de santé mentale.
+# - (phase 1.3) « Le héros X vous suggère une formation ! » : un héros vieux de plusieurs étages (chef d'équipe,
+#   Meneur ou qui a confiance en le Maître) propose une composition (tower.gd, « Suggestions de formation »).
+# Répondre change la confiance envers le Maître (REQUEST_TRUST ; une formation refusée : FORMATION_REFUSED_TRUST,
+# « la baisse un peu »). Le jour de repos accordé : ni entraînement ni poste pendant REST_SECONDS (le temps du lobby
+# ira plus tard 3 fois plus vite), et un peu de santé mentale.
 const REQUEST_CHANCE_PER_HOUR := 0.1
+const FORMATION_REFUSED_TRUST := 2.0
 const REQUESTS_MAX := 3
 const REQUEST_TRUST := 5.0
 const REST_SECONDS := 6 * 3600
@@ -962,6 +971,9 @@ func roll_request() -> Dictionary:
 				options.append([weight, {"kind": "rest", "hero": hero["id"],
 					"reason": "veut du repos : santé mentale %d, Persévérance %+d, Vitalité %+d" % [roundi(mental(hero)),
 						per * 10, vit * 10]}])
+	var formation := _formation_request()  # (phase 1.3) [poids, demande], ou []
+	if not formation.is_empty():
+		options.append(formation)
 	var total := 0.0
 	for option in options:
 		total += option[0]
@@ -973,8 +985,13 @@ func roll_request() -> Dictionary:
 	return {}
 
 
+## (vraie fonction : tower.gd, « Suggestions de formation ») [poids, demande « formation »] ou [].
+func _formation_request() -> Array:
+	return []
+
+
 ## La prochaine demande encore valable (les autres sont oubliées) : la demande, avec « hero » (le héros) et
-## « text » (la carte), ou {}.
+## « text » (la carte), ou {} ; une formation a aussi « members » (les héros proposés).
 func next_request() -> Dictionary:
 	while not pending_requests.is_empty():
 		var entry: Dictionary = pending_requests[0]
@@ -984,11 +1001,27 @@ func next_request() -> Dictionary:
 			valid = teams[entry["team"]].size() < TEAM_SIZE and not teams.any(func(team): return hero["id"] in team)
 		if valid and entry["kind"] == "rest":
 			valid = not is_resting(hero)
+		var members: Array[Dictionary] = []
+		if valid and entry["kind"] == "formation":
+			for id in entry["ids"]:
+				var member := hero_by_id(id)
+				if member.is_empty() or not member["alive"]:
+					valid = false
+				else:
+					members.append(member)
 		if valid:
 			var result := entry.duplicate()
 			result["hero"] = hero
-			result["text"] = "%s souhaite rejoindre l'équipe %d." % [hero["name"], entry["team"] + 1] \
-				if entry["kind"] == "join" else "%s demande un jour de repos." % hero["name"]
+			match entry["kind"]:
+				"join":
+					result["text"] = "%s souhaite rejoindre l'équipe « %s ». L'autorisez-vous ?" % [hero["name"],
+						team_name(entry["team"])]
+				"rest":
+					result["text"] = "%s demande un jour de repos." % hero["name"]
+				"formation":
+					result["text"] = "Le héros %s vous suggère une formation ! (équipe « %s »)" % [hero["name"],
+						team_name(entry["team"])]
+					result["members"] = members
 			return result
 		pending_requests.pop_front()
 	return {}
@@ -998,13 +1031,22 @@ func next_request() -> Dictionary:
 func answer_request(request: Dictionary, accept: bool) -> Array[String]:
 	var hero: Dictionary = request["hero"]
 	pending_requests = pending_requests.filter(func(r): return not (r["hero"] == hero["id"] and r["kind"] == request["kind"]))
-	PersonalityEngine.add_trust(hero, REQUEST_TRUST if accept else -REQUEST_TRUST)
+	var refused_trust := FORMATION_REFUSED_TRUST if request["kind"] == "formation" else REQUEST_TRUST
+	PersonalityEngine.add_trust(hero, REQUEST_TRUST if accept else -refused_trust)
 	var lines: Array[String] = []
 	match request["kind"]:
+		"formation":
+			if accept:
+				set_team(request["team"], request["ids"])
+				lines.append("%s hoche la tête : l'équipe « %s » est formée comme il l'a proposé." % [hero["name"],
+					team_name(request["team"])])
+			else:
+				lines.append("%s range sa proposition sans insister." % hero["name"])
 		"join":
 			if accept:
 				teams[request["team"]].append(hero["id"])
-				lines.append("%s rejoint l'équipe %d. Il a l'air fier." % [hero["name"], request["team"] + 1])
+				hero["volunteer_team"] = request["team"]  # (phase 1.3) volontaire : bonus de combat dans cette équipe
+				lines.append("%s rejoint l'équipe « %s ». Il a l'air fier." % [hero["name"], team_name(request["team"])])
 			else:
 				lines.append("%s baisse les yeux et s'éloigne." % hero["name"])
 		"rest":

@@ -26,6 +26,8 @@ var edited_team := 0
 var team_tabs: HBoxContainer
 var team_slots: TeamSlots
 var team_hint: Label
+var team_name_edit: LineEdit  # (phase 1.3) nom de l'équipe
+var leader_picker: OptionButton  # (phase 1.3) chef de l'équipe
 var compose_grid: GridContainer
 var presets_box: HBoxContainer
 
@@ -224,8 +226,8 @@ func _refresh_daily() -> void:
 
 	for expedition in GameData.expeditions:
 		var remaining := GameData.expedition_remaining(expedition)
-		var title := UI.make_label("Équipe %d — %s : récolte en cours, rappel dans %d:%02d." % [
-			expedition["team_index"] + 1, GameData.expedition_dungeon(expedition)["name"],
+		var title := UI.make_label("%s — %s : récolte en cours, rappel dans %d:%02d." % [
+			GameData.team_name(expedition["team_index"]), GameData.expedition_dungeon(expedition)["name"],
 			remaining / 60, remaining % 60], 20)
 		title.add_theme_color_override("font_color", Color("f5b82e"))
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -304,7 +306,7 @@ func _add_daily_team_buttons(dungeon_id: String) -> void:
 	daily_box.add_child(buttons)
 	for index in GameData.TEAM_COUNT:
 		var members := GameData.expedition_members(index)
-		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()],
+		var button := UI.make_button("%s (%d)" % [GameData.team_name(index), members.size()],
 			_on_daily_team_pressed.bind(index, dungeon_id), 22)
 		button.custom_minimum_size.y = 70
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -376,6 +378,25 @@ func _build_teams_page() -> Control:
 	team_tabs.add_theme_constant_override("separation", 8)
 	layout.add_child(team_tabs)
 
+	# (phase 1.3) Le nom de l'équipe (modifiable) et son chef, désigné par le Maître.
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 8)
+	layout.add_child(name_row)
+	team_name_edit = LineEdit.new()
+	team_name_edit.placeholder_text = "Nom de l'équipe"
+	team_name_edit.max_length = GameData.TEAM_NAME_MAX
+	team_name_edit.custom_minimum_size.y = 64
+	team_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	team_name_edit.add_theme_font_size_override("font_size", 24)
+	team_name_edit.text_submitted.connect(func(text: String): _rename_team(text))
+	team_name_edit.focus_exited.connect(func(): _rename_team(team_name_edit.text))
+	name_row.add_child(team_name_edit)
+	leader_picker = OptionButton.new()
+	leader_picker.custom_minimum_size = Vector2(230, 64)
+	leader_picker.add_theme_font_size_override("font_size", 22)
+	leader_picker.item_selected.connect(_choose_leader)
+	name_row.add_child(leader_picker)
+
 	# Les places de l'équipe choisie : une carte par héros, ou une place libre.
 	var slots_panel := PanelContainer.new()
 	slots_panel.add_theme_stylebox_override("panel", UI.make_panel_style(Color("262a3b")))
@@ -427,7 +448,8 @@ func _refresh_teams_page() -> void:
 		child.queue_free()
 
 	for index in GameData.TEAM_COUNT:
-		var tab := UI.make_button("Équipe %d" % (index + 1), _select_team.bind(index), 24)
+		var tab := UI.make_button(GameData.team_name(index), _select_team.bind(index), 24)
+		tab.clip_text = true
 		tab.custom_minimum_size.y = 70
 		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if index == edited_team:
@@ -439,15 +461,38 @@ func _refresh_teams_page() -> void:
 	var members := GameData.team_members(edited_team)
 	var member_ids := members.map(func(hero): return hero["id"])
 	team_slots.set_heroes(member_ids)
+	team_name_edit.text = GameData.team_info[edited_team].get("name", "")
+	team_name_edit.placeholder_text = "Équipe %d" % (edited_team + 1)
+	leader_picker.clear()
+	leader_picker.add_item("Pas de chef", -1)
+	var leader := GameData.team_leader(edited_team)
+	for hero in members:
+		leader_picker.add_item("Chef : %s" % hero["name"], hero["id"])
+		if hero["id"] == leader.get("id", -1):
+			leader_picker.select(leader_picker.item_count - 1)
 	_fill_hero_grid(compose_grid, _sorted_heroes(), member_ids, _toggle_team_member, _remove_team_member)
-	team_hint.text = "Équipe %d : %d/%d héros. Conseil du Système : maintiens une carte puis glisse-la dans l'équipe, ou touche-la. Tout est enregistré." \
-		% [edited_team + 1, members.size(), GameData.TEAM_SIZE]
+	team_hint.text = "%s : %d/%d héros. Conseil du Système : maintiens une carte puis glisse-la dans l'équipe, ou touche-la. Tout est enregistré." \
+		% [GameData.team_name(edited_team), members.size(), GameData.TEAM_SIZE]
 
 
 func _select_team(index: int) -> void:
 	edited_team = index
 	_refresh_teams_page.call_deferred()
 
+
+## (phase 1.3) Le Maître renomme l'équipe en cours (texte vide : « Équipe N »).
+func _rename_team(text: String) -> void:
+	if text.strip_edges() == GameData.team_info[edited_team].get("name", ""):
+		return
+	GameData.rename_team(edited_team, text)
+	_refresh_teams_page.call_deferred()
+
+
+## (phase 1.3) Le Maître désigne le chef de l'équipe en cours : fenêtre du Système.
+func _choose_leader(item: int) -> void:
+	var notice := GameData.set_team_leader(edited_team, leader_picker.get_item_id(item))
+	if notice != "":
+		GameData.system_notice.emit("Chef d'équipe", [notice])
 
 func _toggle_team_member(hero_id: int) -> void:
 	if not GameData.toggle_team_member(edited_team, hero_id):
@@ -796,7 +841,8 @@ func _refresh_team() -> void:
 		child.queue_free()
 	for index in GameData.TEAM_COUNT:
 		var members := GameData.team_members(index).filter(func(hero): return not GameData.is_away(hero))
-		var button := UI.make_button("Équipe %d (%d)" % [index + 1, members.size()], _use_team.bind(index), 22)
+		var button := UI.make_button("%s (%d)" % [GameData.team_name(index), members.size()], _use_team.bind(index), 22)
+		button.clip_text = true
 		button.custom_minimum_size.y = 70
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.disabled = members.is_empty()

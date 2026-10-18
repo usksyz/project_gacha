@@ -65,6 +65,21 @@ func start() -> void:
 	if quest.get("warnings", 0) > 0:
 		for hero in heroes:
 			_stress(hero, GameData.MENTAL_LOSS_WARNINGS, "warnings")
+	# (phase 1.3) L'équipe composée à l'avance : son chef mène l'exploration (battle_explore.gd), ses volontaires
+	# acceptés se battent mieux (_formation_attack). Un héros bien plus faible que les autres est stressé.
+	team_index = GameData.team_index_of(heroes.map(func(h): return h["source"].get("id", -1)))
+	var leader: Dictionary = GameData.team_leader(team_index) if team_index >= 0 else {}
+	var top_level := 0
+	for hero in heroes:
+		top_level = maxi(top_level, hero["level"])
+		hero["volunteer"] = team_index >= 0 and hero["source"].get("volunteer_team", -1) == team_index
+		if not leader.is_empty() and hero["source"].get("id", -1) == leader["id"]:
+			team_leader_id = hero["id"]
+	if not quest.get("duel", false):
+		for hero in heroes:
+			if top_level - hero["level"] >= GameData.LEVEL_GAP_STRESS:
+				_log("%s se sent bien faible à côté des autres." % hero["name"], "disobey")
+				_stress(hero, GameData.MENTAL_LOSS_LEVEL_GAP, "level_gap")
 	# Deux hostiles dans la même équipe : l'ambiance est tendue, chacun en perd de la santé mentale.
 	for i in heroes.size():
 		for j in range(i + 1, heroes.size()):

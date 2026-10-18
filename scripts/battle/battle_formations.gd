@@ -180,12 +180,15 @@ func _behind_shield(unit: Dictionary, target: Dictionary) -> bool:
 
 ## Formations : ce que l'attaque d'un héros gagne (trois portées couvertes).
 func _formation_attack(unit: Dictionary) -> float:
-	return 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
+	var factor := 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
+	if unit.get("volunteer", false):
+		factor *= 1.0 + GameData.VOLUNTEER_BONUS  # (phase 1.3) volontaire accepté dans cette équipe
+	return factor
 
 
 ## Formations : ce que la défense d'un héros gagne (trois portées couvertes, mur de boucliers).
 func _formation_defense(unit: Dictionary) -> float:
-	var factor := _formation_attack(unit)
+	var factor := 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
 	return factor * (1.0 + _wall_allies(unit).size() * GameData.SHIELD_WALL_DEFENSE_PER_ALLY)
 
 
