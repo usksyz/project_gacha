@@ -159,7 +159,8 @@ func change_mental(hero: Dictionary, amount: float) -> void:
 ## au type d'événement « type », accoutumance), puis moins ce que Calme protège. Renvoie la perte réelle.
 func mental_loss(hero: Dictionary, amount: float, type := "", context := {}) -> float:
 	var before := mental(hero)
-	change_mental(hero, -PersonalityEngine.stress(hero, type, amount, context) * (1.0 - mental_guard(hero["skills"])))
+	change_mental(hero, -PersonalityEngine.stress(hero, type, amount, context) * (1.0 - mental_guard(hero["skills"]))
+		* motivation_factor(hero))  # (octobre 2026) une motivation aide à tenir
 	return before - mental(hero)
 
 
@@ -801,6 +802,8 @@ func mental_after_synthesis(sacrifice_count: int) -> String:
 		mental_loss(hero, MENTAL_LOSS_SYNTHESIS * sacrifice_count, "synthesis")
 		if mental(hero) > 0.0:
 			PersonalityEngine.habituate(hero, "synthesis")
+	# (octobre 2026) l'œuvre : Aaron décide de survivre en voyant une synthèse
+	end_disorientation_all(alive_heroes(), " après avoir vu la synthèse : il a décidé de survivre")
 	return "Tes héros ont vu la synthèse : leur santé mentale baisse (chacun le vit à sa façon ; moins avec Calme)."
 
 
@@ -1153,3 +1156,124 @@ func synthesis_hints(sacrifices: Array) -> Array:
 					"reason": "aptitude %d en %s" % [PersonalityEngine.aptitude(hero, domain), domain]})
 				break
 	return hints
+
+
+# ---------------------------------------------------------------------------
+# Arrivée déboussolée et motivation cachée (octobre 2026)
+# ---------------------------------------------------------------------------
+# Cahier, onglet « Améliorations combat, classes, entraînement », lot C (étape 1 : « arrivée déboussolée,
+# motivation cachée ») et document de référence (« Arrivée déboussolée | Stabilité, Curiosité, étoiles | Les 1-2
+# étoiles commencent Déboussolés ; durée selon Stabilité et Curiosité ») ; l'œuvre : « choc, panique, chercher une
+# sortie, puis décider de survivre » (Aaron, Dolph).
+# - hero["arc"] : "deboussole" à l'arrivée d'un 1-2 étoiles (parmi les héros secrets, seul Aaron : « commence
+#   Déboussolé ») ; ensuite "resigne". Les autres étapes (Engagé, Forgé, Brisé) viendront avec le prompt 5.3.
+#   Un héros sans « arc » (ancienne sauvegarde) n'est pas déboussolé.
+# - Déboussolé : il refuse l'entraînement (training.gd, set_training), ferme la marche en combat (rôle « prudent »,
+#   battle_explore.gd) et erre dans la cité. Il en sort en survivant à un combat, en voyant une synthèse, ou après
+#   DISORIENTED_HOURS heures réelles (moins avec Stabilité et Curiosité hautes : DISORIENTED_HOURS_PER_TIER par
+#   palier, entre DISORIENTED_HOURS_MIN et DISORIENTED_HOURS_MAX). Une notification le dit, et il parle alors de sa motivation.
+# - hero["motivation"] : sa raison de se battre (valeur principale du document de référence), tirée à l'invocation
+#   (fixe pour les héros secrets), cachée (« ? » sur la fiche) jusqu'à ce qu'il en parle (hero["motivation_known"]).
+#   Effet (ajout du projet, chiffre provisoire ; l'œuvre : « elle résiste à la rupture ») : un héros qui a une
+#   motivation perd MOTIVATION_STRESS_FACTOR fois la santé mentale prévue ; « aucune » (les plus fragiles) : rien.
+# Écart signalé au porteur du projet : l'onglet « Améliorations » donne une autre liste (un proche, prouver sa
+# valeur, protéger son groupe, liberté, aucune) ; on suit celle du document de référence, plus « aucune ».
+const DISORIENTED_HOURS := 24.0
+const DISORIENTED_HOURS_PER_TIER := 3.0
+const DISORIENTED_HOURS_MIN := 6.0
+const DISORIENTED_HOURS_MAX := 48.0
+const MOTIVATION_STRESS_FACTOR := 0.9
+const MOTIVATIONS := {
+	"famille": {"name": "La famille", "talk": "%s a parlé de quelqu'un qui l'attend chez lui."},
+	"liberte": {"name": "La liberté", "talk": "%s a dit qu'un jour, il sortirait d'ici."},
+	"justice": {"name": "La justice", "talk": "%s a dit qu'il ne supportait pas de voir les faibles écrasés."},
+	"reconnaissance": {"name": "La reconnaissance", "talk": "%s a dit qu'il voulait qu'on se souvienne de son nom."},
+	"survie": {"name": "La survie", "talk": "%s a dit qu'il ne mourrait pas ici."},
+	"devoir": {"name": "Le devoir", "talk": "%s a dit qu'on lui avait confié une tâche et qu'il irait au bout."},
+	"camaraderie": {"name": "La camaraderie", "talk": "%s a dit qu'il se battait pour ceux qui sont à côté de lui."},
+	"aucune": {"name": "Aucune", "talk": "%s ne sait pas pourquoi il se bat."},
+}
+## Motivations des héros secrets (cahier, profils des héros secrets).
+const SECRET_MOTIVATIONS := {"Han": "survie", "Jenna": "camaraderie", "Aaron": "famille", "Hansen": "camaraderie",
+	"Zid": "camaraderie", "Shei": "devoir", "Yvolka": "reconnaissance", "Edith": "camaraderie"}
+## Parmi les héros secrets, ceux qui arrivent déboussolés.
+const SECRET_DISORIENTED := ["Aaron"]
+
+
+## À l'invocation (summon.gd, _new_hero) : la motivation, et l'état Déboussolé d'un 1-2 étoiles.
+func start_arrival(hero: Dictionary, secret: bool) -> void:
+	hero["motivation"] = SECRET_MOTIVATIONS.get(hero["name"], "") if secret else ""
+	if hero["motivation"] == "":
+		hero["motivation"] = roll_motivation()
+	hero["motivation_known"] = false
+	var disoriented: bool = hero["name"] in SECRET_DISORIENTED if secret else hero["rarity"] <= 2
+	hero["arc"] = "deboussole" if disoriented else "resigne"
+	hero["arrived_at"] = Time.get_unix_time_from_system()
+
+
+## Une motivation au hasard (« aucune » un peu moins souvent que les autres).
+func roll_motivation() -> String:
+	var ids := MOTIVATIONS.keys().filter(func(id): return id != "aucune")
+	return "aucune" if randf() < 0.1 else ids.pick_random()
+
+
+func is_disoriented(hero: Dictionary) -> bool:
+	return hero.get("arc", "") == "deboussole"
+
+
+## Ce que la fiche montre de sa motivation (« ? » tant qu'il n'en a pas parlé, sauf en mode dev).
+func motivation_text(hero: Dictionary) -> String:
+	var id: String = hero.get("motivation", "")
+	if id == "":
+		return "?"
+	if hero.get("motivation_known", false) or Settings.dev_mode:
+		return MOTIVATIONS[id]["name"]
+	return "?"
+
+
+## Le facteur de ses pertes de santé mentale dû à sa motivation.
+func motivation_factor(hero: Dictionary) -> float:
+	var id: String = hero.get("motivation", "aucune")
+	return MOTIVATION_STRESS_FACTOR if id != "aucune" and id != "" else 1.0
+
+
+## Heures réelles avant qu'il sorte de lui-même de l'état Déboussolé.
+func disoriented_hours(hero: Dictionary) -> float:
+	var tiers := PersonalityEngine.tier(hero, "STA") + PersonalityEngine.tier(hero, "CUR")
+	return clampf(DISORIENTED_HOURS - tiers * DISORIENTED_HOURS_PER_TIER, DISORIENTED_HOURS_MIN, DISORIENTED_HOURS_MAX)
+
+
+## Il sort de l'état Déboussolé (« why » : ce qui l'a décidé). Renvoie les lignes de la notification (vide s'il ne
+## l'était pas) ; il parle alors de sa motivation. Ne sauvegarde pas.
+func end_disorientation(hero: Dictionary, why: String) -> Array[String]:
+	var lines: Array[String] = []
+	if not is_disoriented(hero):
+		return lines
+	hero["arc"] = "resigne"
+	lines.append("%s a cessé de chercher une sortie%s." % [hero["name"], why])
+	if not hero.get("motivation_known", false):
+		hero["motivation_known"] = true
+		lines.append(MOTIVATIONS[hero.get("motivation", "aucune")]["talk"] % hero["name"])
+	return lines
+
+
+## Les héros déboussolés depuis assez longtemps s'en remettent (appelée avec update_requests, toutes les 5 s).
+func update_arrivals() -> void:
+	var now := Time.get_unix_time_from_system()
+	var lines: Array[String] = []
+	for hero in alive_heroes():
+		if is_disoriented(hero) and now - float(hero.get("arrived_at", now)) >= disoriented_hours(hero) * 3600.0:
+			lines.append_array(end_disorientation(hero, ""))
+	if not lines.is_empty():
+		system_notice.emit.call_deferred("Notification", lines)
+		save_game()
+
+
+## Après une épreuve partagée (un combat survécu, une synthèse vue) : les déboussolés concernés s'en remettent.
+func end_disorientation_all(heroes: Array, why: String) -> void:
+	var lines: Array[String] = []
+	for hero in heroes:
+		if hero["alive"]:
+			lines.append_array(end_disorientation(hero, why))
+	if not lines.is_empty():
+		system_notice.emit.call_deferred("Notification", lines)

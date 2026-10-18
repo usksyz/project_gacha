@@ -149,6 +149,8 @@ func activity_text(hero: Dictionary) -> String:
 		return "Terrain d'entraînement"
 	if is_broken(hero):
 		return "En rupture (repos forcé)"
+	if is_disoriented(hero):
+		return "Erre dans la cité (déboussolé)"  # (octobre 2026)
 	return "Au repos"
 
 

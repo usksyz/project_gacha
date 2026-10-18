@@ -136,6 +136,10 @@ func set_training(hero: Dictionary, skill_name: String) -> bool:
 		return false
 	if skill_name != "" and not already and not accepts_work(hero):
 		return false
+	if skill_name != "" and not already and is_disoriented(hero):
+		# (octobre 2026) cahier : « Déboussolé : erre, cherche une sortie, refuse l'entraînement »
+		last_refusal = "%s erre dans la cité à la recherche d'une sortie : il refuse de s'entraîner." % hero["name"]
+		return false
 	update_training()  # les séances déjà faites dans l'ancien programme sont comptées
 	hero["training"] = skill_name
 	hero.erase("training_auto")  # (étape A, remplacé à l'étape D : c'est le héros qui choisit son programme)

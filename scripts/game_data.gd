@@ -42,12 +42,14 @@ func _ready() -> void:
 	timer.wait_time = 5.0
 	update_quarrels()
 	update_requests()
+	update_arrivals()  # (octobre 2026) arrivée déboussolée
 	timer.timeout.connect(func():
 		update_expedition()
 		update_training()
 		update_mental()
 		update_quarrels()
-		update_requests())  # (prompt 4) demandes des héros
+		update_requests()  # (prompt 4) demandes des héros
+		update_arrivals())  # (octobre 2026) arrivée déboussolée
 	add_child(timer)
 	timer.start()
 

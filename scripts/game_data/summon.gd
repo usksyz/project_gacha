@@ -323,6 +323,7 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"revealed_traits": [],  # traits que le Maître a découverts (cachés au début)
 	}
 	next_hero_id += 1
+	start_arrival(hero, secret)  # (octobre 2026) motivation cachée, arrivée déboussolée (personality.gd)
 	return hero
 
 

@@ -62,7 +62,7 @@ func _mind(unit: Dictionary) -> float:
 func _stress(fighter: Dictionary, amount: float, type := "", context := {}) -> void:
 	if not fighter["is_hero"] or fighter["hp"] <= 0 or amount <= 0.0 or quest.get("duel", false):
 		return  # (un duel compte à part, voir GameData.finish_duel)
-	var loss := PersonalityEngine.stress(fighter["source"], type, amount, context)
+	var loss := PersonalityEngine.stress(fighter["source"], type, amount, context) * GameData.motivation_factor(fighter["source"])
 	# Plancher : certains héros ne tombent jamais à 0 (Stabilité 90, Maîtrise 90 : pas de rupture).
 	var floor_value := PersonalityEngine.modified("mental_floor", fighter["source"], 0.0)
 	fighter["mental"] = maxf(minf(floor_value, fighter["mental"]), fighter["mental"] - loss * (1.0 - GameData.mental_guard(fighter["skills"])))

@@ -103,6 +103,13 @@ func load_game() -> bool:
 	teams = file.get_value("partie", "equipes", _empty_teams())
 	while teams.size() < TEAM_COUNT:
 		teams.append([])
+	# (octobre 2026) héros d'avant la motivation cachée : on la tire (cachée), pas d'arrivée déboussolée.
+	for hero in roster:
+		if not hero.has("motivation"):
+			hero["motivation"] = SECRET_MOTIVATIONS.get(hero["name"], "") if hero.get("secret", false) else ""
+			if hero["motivation"] == "":
+				hero["motivation"] = roll_motivation()
+			hero["motivation_known"] = false
 	team_info = file.get_value("partie", "equipes_infos", _empty_team_info())  # (phase 1.3)
 	while team_info.size() < TEAM_COUNT:
 		team_info.append({"name": "", "leader": -1})

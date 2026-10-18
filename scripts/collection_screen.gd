@@ -685,6 +685,13 @@ func _show_detail(hero: Dictionary, notice: Array = [], notice_title := "Promoti
 			content.add_child(malus)
 	# Traits de caractère : « ? » tant qu'ils ne se sont pas révélés en jouant.
 	content.add_child(UI.make_label("Caractère : %s" % GameData.traits_text(hero), 22))
+	# (octobre 2026) Motivation cachée : « ? » tant qu'il n'en a pas parlé ; l'état Déboussolé de l'arrivée.
+	content.add_child(UI.make_label("Raison de se battre : %s" % GameData.motivation_text(hero), 22))
+	if GameData.is_disoriented(hero):
+		var lost := UI.make_label("Déboussolé : il erre et cherche une sortie.", 18)
+		lost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lost.add_theme_color_override("font_color", Color("e0a052"))
+		content.add_child(lost)
 	for t in GameData.hero_traits(hero):
 		if t["known"]:
 			var trait_info := UI.make_label("%s : %s" % [t["name"], GameData.TRAITS.get(t["name"], "")], 18)

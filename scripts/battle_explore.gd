@@ -376,6 +376,8 @@ func _role_of(hero: Dictionary) -> String:
 	if not hero["person"]:
 		return "suit"
 	var source: Dictionary = hero["source"]
+	if GameData.is_disoriented(source):
+		return "prudent"  # (octobre 2026) déboussolé : il reste en retrait (l'œuvre, Aaron au début)
 	var audacity: int = PersonalityEngine.axis(source, "AUD")
 	if PersonalityEngine.axis(source, "LOY") <= -GameData.LONER_LOY \
 			or (audacity >= GameData.LONER_AUD and PersonalityEngine.axis(source, "EMP") <= 0):

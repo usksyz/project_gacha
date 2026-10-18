@@ -1150,6 +1150,8 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 			% [battle.potions_used, material_count(POTION)]
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
 	complete_daily_mission("combat")  # (octobre 2026) mission du jour, victoire ou défaite
+	# (octobre 2026) un déboussolé qui a survécu à un combat décide de survivre (personality.gd)
+	end_disorientation_all(battle.heroes.map(func(fighter): return fighter["source"]), " : il a survécu à un combat")
 	return report
 
 
