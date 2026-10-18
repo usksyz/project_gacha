@@ -27,6 +27,7 @@ func _run() -> void:
 	_check_corpses()
 	_check_sound()
 	_check_sneak()
+	_check_terrain()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -250,6 +251,27 @@ func _check_sneak() -> void:
 	_check(battle._side(hero) == BattleMap.SIDE_SNEAK, "un héros qui se faufile prend les chemins discrets")
 	hero["stealth"] = 1.0
 	_check(battle._side(hero) == BattleMap.SIDE_HEROES, "à découvert : les chemins de toujours")
+
+
+func _check_terrain() -> void:
+	print("Annotation tactique des cartes")
+	var map := BattleMap.new(12, 12)
+	map.fill(Rect2i(0, 5, 5, 1), BattleMap.Kind.BLOCK, 2)  # un mur percé d'un passage d'une case (x = 5)
+	map.fill(Rect2i(6, 5, 6, 1), BattleMap.Kind.BLOCK, 2)
+	map.fill(Rect2i(9, 9, 1, 1), BattleMap.Kind.ROOF, 1)  # une petite hauteur
+	map.fill(Rect2i(1, 10, 2, 1), BattleMap.Kind.GRASS, 0)
+	map.build_graph()
+	var terrain = load("res://scripts/battle_terrain.gd").new(map)  # (pas le nom de la classe : GameData pas encore là à la compilation)
+	_check(terrain.is_choke(Vector2i(5, 5)) and not terrain.is_choke(Vector2i(5, 8)), "le passage dans le mur est un goulet, pas le champ")
+	_check(terrain.is_high(Vector2i(9, 9)), "la petite hauteur est un point haut")
+	_check(terrain.is_hide(Vector2i(1, 10)) and terrain.is_hide(Vector2i(2, 4)) and not terrain.is_hide(Vector2i(8, 8)),
+		"herbes hautes et pied du mur : cachettes ; le champ : non")
+	_check(terrain.nearest("choke", Vector2(5.5, 7.5), 3.0) == Vector2i(5, 5), "le goulet le plus proche est trouvé")
+	# Sur une vraie carte : des annotations, et un piège posé dans un goulet quand il y en a un tout près.
+	var scene := _scene(4.0)
+	var counts: Dictionary = scene["battle"].terrain.summary()
+	print("    étage 3, graine 21 : %s" % counts)
+	_check(counts["cachettes"] > 0, "une carte générée a des cachettes")
 
 
 func _check(ok: bool, text: String) -> void:
