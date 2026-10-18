@@ -33,6 +33,7 @@ func _run() -> void:
 	_check_formation()
 	_check_camp()
 	_check_replay()
+	_check_director()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -478,6 +479,25 @@ func _check_replay() -> void:
 	_check(same and live.order_log.size() == 1, "le combat revu est identique (%.1f s, %d lignes de journal, 1 ordre)" \
 		% [replay.time, replay.events.size()])
 	_check(team[0]["level"] == game.last_fight["team"][0]["level"], "revoir ne change rien à l'équipe")
+
+
+func _check_director() -> void:
+	print("Directeur d'IA (la tension, mesurée)")
+	var team := _team(game.floor_enemy_level(3) + 2)
+	var layout: Dictionary = load("res://scripts/map_generator.gd").generate(3, game.floor_quest(3), 21)
+	var battle = load("res://scripts/battle.gd").new(team, layout["enemies"].duplicate(true), game.floor_quest(3))
+	battle.map_data = layout["map"]
+	battle.start()
+	var calm_start := -1.0
+	while not battle.finished:
+		battle.step()
+		if battle.time >= 3.0 and calm_start < 0.0:
+			calm_start = battle.director.tension
+	var top := 0.0
+	for value in battle.director.history:
+		top = maxf(top, value)
+	_check(battle.director.history.size() >= int(battle.time) - 1, "une valeur par seconde (%d)" % battle.director.history.size())
+	_check(calm_start < game.DIRECTOR_TENSE and top > calm_start, "calme au départ (%.2f), plus tendu ensuite (%.2f au plus)" % [calm_start, top])
 
 
 func _check(ok: bool, text: String) -> void:
