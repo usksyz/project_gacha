@@ -30,6 +30,7 @@ func _run() -> void:
 	_check_terrain()
 	_check_search()
 	_check_coordination()
+	_check_formation()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -391,6 +392,43 @@ func _check_coordination() -> void:
 	explore._strike_now(lead)
 	fight.time += game.SYNC_WAIT + 0.1
 	_check(explore._strike_now(lead), "sans nouvelles de l'équipier, il frappe seul au bout de %.0f s" % game.SYNC_WAIT)
+
+
+func _check_formation() -> void:
+	print("Formations et bonds d'abri en abri")
+	var scene := _scene(4.0)
+	var battle = scene["battle"]
+	var hero: Dictionary = scene["hero"]
+	var explore = battle.explore
+	var map = battle.map
+	# À découvert : en éventail.
+	hero["pos"] = Vector2(10.5, 12.5)
+	explore._pick_formation(hero)
+	var open_formation: String = explore.formation
+	# Dans un passage d'une case entre deux murs : en file.
+	map.fill(Rect2i(0, 12, 10, 1), BattleMap.Kind.BLOCK, 2)
+	map.fill(Rect2i(11, 12, 13, 1), BattleMap.Kind.BLOCK, 2)
+	map.fill(Rect2i(0, 13, 10, 1), BattleMap.Kind.BLOCK, 2)
+	map.fill(Rect2i(11, 13, 13, 1), BattleMap.Kind.BLOCK, 2)
+	map.build_graph()
+	explore._pick_formation(hero)
+	_check(open_formation == "coin" and explore.formation == "colonne", "à découvert en éventail, dans un passage étroit en file (%s, %s)" \
+		% [open_formation, explore.formation])
+	# D'abri en abri : des herbes hautes sur le chemin du but, le meneur y va d'abord.
+	var flat := _scene(4.0)
+	var leader: Dictionary = flat["hero"]
+	var fexplore = flat["battle"].explore
+	var fmap = flat["battle"].map
+	leader["pos"] = Vector2(10.5, 18.5)
+	fexplore.goal = Vector2(10.5, 10.5)
+	fmap.fill(Rect2i(10, 16, 1, 1), BattleMap.Kind.GRASS, 0)
+	fmap.build_graph()
+	flat["battle"].terrain = load("res://scripts/battle_terrain.gd").new(fmap)
+	var first: Vector2 = fexplore._bound(leader)
+	_check(first == BattleMap.center(Vector2i(10, 16)), "le meneur va d'abord à l'abri sur son chemin (%s)" % first)
+	leader["pos"] = first
+	var pause: Vector2 = fexplore._bound(leader)
+	_check(pause == leader["pos"] and fexplore.counts["bonds_abri"] == 1, "arrivé à l'abri, il marque une pause")
 
 
 func _check(ok: bool, text: String) -> void:
