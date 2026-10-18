@@ -802,6 +802,16 @@ func _draw_overlay() -> void:
 		var big := BOSS_SCALE if unit["boss"] else 1.0
 		heads[unit["id"]] = project(feet + Vector3(0, (BODY_HEIGHT + HEAD_RADIUS * 2.2) * big, 0))
 		bodies[unit["id"]] = project(feet + Vector3(0, BODY_HEIGHT * 0.5 * big, 0))
+	# (étape E, point 3) les pièges des héros : une croix brune sur le dessus de la case
+	for trap in battle.traps:
+		var c := BattleMap.center(trap["cell"])
+		var top := _surface_at(c) + 0.03
+		var a := project(Vector3(c.x - 0.25, top, c.y - 0.25))
+		var b := project(Vector3(c.x + 0.25, top, c.y + 0.25))
+		var d := project(Vector3(c.x + 0.25, top, c.y - 0.25))
+		var e := project(Vector3(c.x - 0.25, top, c.y + 0.25))
+		overlay.draw_line(a, b, BattleView.TRAP_COLOR, 2.5 * k)
+		overlay.draw_line(d, e, BattleView.TRAP_COLOR, 2.5 * k)
 	_draw_orders(bodies, k)
 	_draw_rays()
 	for unit in battle.units:

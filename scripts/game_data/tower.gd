@@ -372,6 +372,41 @@ const PRUDENT_AUD := 30
 # d'attente. Un solitaire n'attend personne.
 const GATHER_RADIUS := 3.0
 const GATHER_MAX := 10.0
+# Étape E, point 3 : infiltration, assassinat, pièges (ajout du projet ; demande du porteur du projet : « une tactique
+# pourrait permettre l'assassinat », « préparent des pièges », « l'infiltration et l'assassinat augmenteraient la
+# survie »).
+# Discrétion : un héros qui avance prudemment (exploration, ralliement) n'est remarqué par les monstres qu'à
+# STEALTH_FACTOR de leur vue et de leur ouïe ; un infiltrateur à INFILTRATOR_STEALTH ; Mouvement souple : -STEALTH_PER_DODGE
+# par niveau (STEALTH_MIN au plus bas).
+const STEALTH_FACTOR := 0.75
+const INFILTRATOR_STEALTH := 0.5
+const STEALTH_PER_DODGE := 0.03
+const STEALTH_MIN := 0.3
+# Assassinat : un coup porté par un héros à un monstre qui ne se doute de rien (pas en alerte) et qui ne voit pas venir
+# le coup : force x ASSASSINATE_POWER (tir : ASSASSINATE_RANGED_POWER ; dague ou Assassin : ASSASSINATE_BLADE_POWER et
+# coup critique). S'il le tue, c'est sans un bruit (ni cri ni bruit de combat).
+const ASSASSINATE_POWER := 2.0
+const ASSASSINATE_RANGED_POWER := 1.5
+const ASSASSINATE_BLADE_POWER := 3.0
+# Et au moins cette part de la vie maximum de la cible (un chef : moitié) : une lame dans le dos d'un monstre qui dort
+# le tue ; un autre coup en retire la moitié, un tir le tiers.
+const ASSASSINATE_HP_SHARE := {"lame": 1.0, "coup": 0.5, "tir": 0.35}
+# Infiltrateur (Assassin, dague, accès « Éclaireur », ou rusé et pas craintif : Honnêteté <= -INFILTRATOR_HON et Audace
+# >= 0) : pendant le ralliement, il n'attend pas : il se glisse vers un monstre qui ne l'a pas vu (un guetteur d'abord,
+# puis le plus isolé) pour l'assassiner. Tant qu'il n'est pas repéré, l'équipe l'attend jusqu'à GATHER_MAX +
+# INFILTRATE_EXTRA secondes.
+const INFILTRATOR_HON := 30
+const INFILTRATE_EXTRA := 12.0
+# Pièges : un poseur (accès « Tacticien », ou Vigilance >= TRAPPER_VIGILANCE) pose TRAPS_PER_HERO piège pendant le
+# ralliement, TRAP_DISTANCE cases devant le point de ralliement vers l'ennemi (pas en horde : essayé en survie, à la sortie
+# des ruelles, la horde arrive en 3 s environ, avant que le piège soit posé). Il lui faut TRAP_SECONDS sur place. Un monstre qui marche dessus : force TRAP_POWER x l'attaque du
+# poseur (moins la moitié de sa défense), immobilisé TRAP_HOLD secondes (un chef : moitié des dégâts, pas immobilisé).
+const TRAPPER_VIGILANCE := 30
+const TRAPS_PER_HERO := 1
+const TRAP_DISTANCE := 2.0
+const TRAP_SECONDS := 3.0
+const TRAP_POWER := 1.6
+const TRAP_HOLD := 2.5
 
 
 ## Chance que l'arme reste plantée dans un héros mis à l'agonie par ce coup (« kind » : "hit" ou "arrow" ;

@@ -700,12 +700,26 @@ func _draw_arena() -> void:
 		if unit["present"]:
 			positions[unit["id"]] = unit["prev_pos"].lerp(unit["pos"], weight)
 
+	_draw_traps(origin, cell)
 	_draw_orders(positions, cell)
 	_draw_rays(positions)
 	for id in positions:
 		_draw_unit(battle.units[id], _to_screen(positions[id]), cell)
 	_draw_names(positions, cell)
 	_draw_effects(positions, cell)
+
+
+## Étape E, point 3 : les pièges posés par les héros (le Maître les voit : ses héros savent où ils sont), une croix brune.
+const TRAP_COLOR := Color("c08040")
+
+
+func _draw_traps(origin: Vector2, cell: float) -> void:
+	for trap in battle.traps:
+		var center: Vector2 = origin + (Vector2(trap["cell"]) + Vector2(0.5, 0.5)) * cell
+		var r := cell * 0.25
+		arena.draw_line(center - Vector2(r, r), center + Vector2(r, r), TRAP_COLOR, 2.5)
+		arena.draw_line(center - Vector2(r, -r), center + Vector2(r, -r), TRAP_COLOR, 2.5)
+		arena.draw_arc(center, r * 1.3, 0, TAU, 16, TRAP_COLOR, 1.5)
 
 
 ## La carte « 3D sur grille » vue du dessus (Combat v2, C1) : chaque case dans la couleur de son type, plus

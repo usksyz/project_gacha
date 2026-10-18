@@ -29,6 +29,8 @@ func _attack_time(unit: Dictionary) -> float:
 
 
 func _move_speed(unit: Dictionary) -> float:
+	if time < unit["trapped_until"]:
+		return 0.0  # (étape E) pris dans un piège : il ne peut plus bouger un moment
 	var speed: float = BASE_SPEED + unit["spd"] * _fear(unit) * SPEED_PER_DEX
 	if unit["exhausted"]:
 		speed *= GameData.STAMINA_EXHAUSTED_SPEED

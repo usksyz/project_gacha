@@ -428,6 +428,10 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		"search": Vector2.ZERO,
 		"search_until": -1.0,
 		"alert_t": -100.0,
+		# Étape E, point 3 : sa discrétion (1 : normal ; les monstres le remarquent à cette part de leur vue et de leur
+		# ouïe, voir BattleExplore.stealth_of), et pris dans un piège jusqu'à ce moment.
+		"stealth": 1.0,
+		"trapped_until": 0.0,
 	}
 
 
@@ -479,6 +483,7 @@ func _step() -> void:
 			_think(unit)
 		if _check_end():
 			return
+	_check_traps()
 	_separate()
 	_land()
 
@@ -560,6 +565,7 @@ func _think(unit: Dictionary) -> void:
 	# en mémoire). Les ordres du Maître, eux, peuvent viser n'importe quel ennemi (le Maître voit tout l'écran).
 	var known := foes if not perception_on else foes.filter(func(foe): return perception.knows(unit, foe))
 	unit["pace"] = 1.0
+	unit["stealth"] = 1.0
 
 	# Étape E : un monstre qui ne chasse pas encore (au repos, endormi, de garde, en ronde, embusqué...) : voir
 	# BattleAlert. Une fois en alerte, il se bat comme avant.
@@ -740,6 +746,58 @@ func _surprise(attacker: Dictionary, target: Dictionary) -> bool:
 	return perception_on and not quest.get("duel", false) and target["present"] and not perception.sees(target, attacker)
 
 
+## Étape E, point 3 : assassinat. Un héros frappe un monstre qui ne se doute de rien (pas en alerte, l'alarme n'est pas
+## donnée) et qui ne voit pas venir le coup : la force du coup est multipliée (voir GameData, tower.gd). Renvoie le
+## multiplicateur (1 : pas d'assassinat). Pas les sorts (ils touchent toute une zone).
+func _assassination(attacker: Dictionary, target: Dictionary, kind: String, surprise: bool) -> float:
+	if not surprise or not attacker["is_hero"] or target["is_hero"] or alert.alarm or target["state"] == "alerte":
+		return 1.0
+	if kind == "arrow":
+		return GameData.ASSASSINATE_RANGED_POWER
+	if kind != "hit":
+		return 1.0
+	if attacker["weapon"] == "Dague" or attacker["class"] == "Assassin":
+		return GameData.ASSASSINATE_BLADE_POWER
+	return GameData.ASSASSINATE_POWER
+
+
+## Étape E, point 3 : un héros pose un piège sur une case (voir BattleExplore._work_trap).
+func place_trap(hero: Dictionary, cell: Vector2i) -> void:
+	traps.append({"cell": cell, "by": hero["name"], "atk": hero["atk"], "id": hero["id"]})
+	traps_placed += 1
+	_log("%s pose un piège." % hero["name"])
+
+
+## Un monstre qui marche sur un piège le déclenche : dégâts, immobilisé un moment (pas un chef), et ça s'entend.
+func _check_traps() -> void:
+	for trap in traps.duplicate():
+		for monster in _alive(enemies):
+			if _cell_of(monster["pos"]) == trap["cell"]:
+				_trigger_trap(trap, monster)
+				break
+
+
+func _trigger_trap(trap: Dictionary, monster: Dictionary) -> void:
+	traps.erase(trap)
+	traps_sprung += 1
+	var factor := 0.5 if monster["boss"] else 1.0
+	var amount := mini(maxi(1, roundi((trap["atk"] * GameData.TRAP_POWER - monster["def"] * 0.5) * factor)), monster["hp"])
+	monster["hp"] -= amount
+	if not monster["boss"]:
+		monster["trapped_until"] = time + GameData.TRAP_HOLD
+	_start_clock()
+	_effect("bleed", monster, monster, "piège ! -%d" % amount, true)
+	_log("%s tombe dans le piège de %s !" % [monster["name"], trap["by"]], "reinforce")
+	var trapper: Dictionary = units[trap["id"]]
+	if monster["hp"] <= 0:
+		_announce_fall(monster, "pris au piège de %s" % trap["by"])
+		trapper["kills"].append({"name": monster["base_name"], "boss": monster["boss"]})
+		trapper["journal_counts"]["kills"] += 1
+	else:
+		alert.raise(monster, {})
+	alert.noise(monster["pos"], GameData.NOISE_FIGHT)
+
+
 ## Portée d'un combattant, pour les formations (voir GameData, tower.gd, RANGE_COVER_BONUS) :
 ## "longue" (arc, magie), "moyenne" (lance, fouet) ou "courte" (épée, dague, sans arme).
 func range_band(unit: Dictionary) -> String:
@@ -903,7 +961,28 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 	var vigilance := GameData.exclusive_effect(target["skills"], "Vigilance") if surprise else 0.0
 	if vigilance > 0.0 and randf() < vigilance:
 		surprise = false
+	# (étape E, point 3) Un monstre qui ne se doute de rien : assassinat (voir _assassination).
+	var assassinate := _assassination(attacker, target, kind, surprise)
+	if assassinate > 1.0:
+		power *= assassinate
+		critical = critical or assassinate >= GameData.ASSASSINATE_BLADE_POWER
 	var amount := _damage(attacker, target, power, critical, kind, surprise)
+	var silent := false
+	if assassinate > 1.0 and amount >= 0:
+		# Au moins une part de sa vie (voir GameData.ASSASSINATE_HP_SHARE).
+		var share: float = GameData.ASSASSINATE_HP_SHARE["tir" if kind == "arrow" else \
+			("lame" if assassinate >= GameData.ASSASSINATE_BLADE_POWER else "coup")] * (0.5 if target["boss"] else 1.0)
+		var extra := mini(target["hp"], roundi(target["max_hp"] * share) - amount)
+		if extra > 0:
+			target["hp"] -= extra
+			attacker["contribution"] += extra
+			amount += extra
+		assassinations += 1
+		attacker["journal_counts"]["assassinations"] = attacker["journal_counts"].get("assassinations", 0) + 1
+		silent = target["hp"] <= 0
+		if silent:
+			_log(("%s abat %s d'une flèche avant qu'il ne comprenne." if kind == "arrow" else "%s égorge %s sans un bruit.") \
+				% [attacker["name"], target["name"]], "awaken")
 	# Événements qui peuvent éveiller une exclusive en fin de combat (P2g) : surpris, premier coup du combat.
 	if surprise and amount >= 0 and target["is_hero"]:
 		target["exclusive_events"]["surprised"] = true
@@ -922,7 +1001,7 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 	_note_practice(attacker, target, amount, kind)  # (étape D) ce que le héros vit, sans tirage
 	var text := "esquive !" if amount == -1 else ("paré !" if amount == -3 else ("couvert !" if amount < 0 else "-%d" % amount))
 	if surprise and amount >= 0:
-		text = "surprise ! " + text
+		text = ("assassinat ! " if assassinate > 1.0 else "surprise ! ") + text
 		surprises["heroes" if target["is_hero"] else "enemies"] += 1
 		if target["is_hero"]:
 			target["journal_counts"]["surprised"] = target["journal_counts"].get("surprised", 0) + 1
@@ -939,7 +1018,8 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 			attacker["kills"].append({"name": target["base_name"], "boss": target["boss"]})
 			attacker["journal_counts"]["kills"] += 1
 			_journal(attacker, "kill", {"with": target["base_name"], "boss": target["boss"]})
-	alert.on_hit(attacker, target)  # (étape E) le coup s'entend ; un monstre frappé passe en alerte
+	if not silent:
+		alert.on_hit(attacker, target)  # (étape E) le coup s'entend ; un monstre frappé passe en alerte
 
 
 ## Étape D : un allié éclaboussé par le sort d'un mage de son équipe : FRIENDLY_SPLASH de l'attaque du mage, moins sa

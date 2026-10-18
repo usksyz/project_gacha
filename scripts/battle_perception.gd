@@ -171,7 +171,7 @@ func _look(unit: Dictionary) -> void:
 		var foe: Dictionary = entry[0]
 		if battle.alert != null and battle.alert.hidden(foe) and entry[1].length() > unit["spot_hidden"]:
 			continue  # (un embusqué immobile ne fait pas de bruit)
-		if entry[1].length() <= hearing and absi(battle.height_of(foe) - battle.height_of(unit)) <= 1:
+		if entry[1].length() <= hearing * foe["stealth"] and absi(battle.height_of(foe) - battle.height_of(unit)) <= 1:
 			hears[foe["id"]] = true
 	unit["hears"] = hears
 
@@ -234,6 +234,8 @@ func _cast(unit: Dictionary, direction: Vector2, length: float, rays: PackedVect
 			continue
 		if battle.alert != null and battle.alert.hidden(foe) and along > unit["spot_hidden"]:
 			continue  # (étape E) embusqué : trop loin pour le remarquer
+		if along > stop * foe["stealth"] + 0.5:
+			continue  # (étape E, point 3) un héros discret : remarqué de moins loin
 		if map.line_of_sight(origin, z, foe["pos"], battle.height_of(foe)):
 			sees[foe["id"]] = true
 

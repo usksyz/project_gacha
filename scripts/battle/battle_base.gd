@@ -262,6 +262,12 @@ var tactics_context := ""
 var alert: BattleAlert
 var explore: BattleExplore
 var forced_disposition := ""
+## Étape E, point 3 : les pièges posés par les héros ({"cell", "by": nom du poseur, "atk": son attaque, "id": son
+## numéro}), et les assassinats de ce combat (mesures).
+var traps: Array[Dictionary] = []
+var assassinations := 0
+var traps_placed := 0
+var traps_sprung := 0
 
 
 ## Survie (terrain à ruelles), au début du combat : un héros Meneur (ni effrayé ni en panique) forme
