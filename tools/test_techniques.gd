@@ -31,6 +31,7 @@ func _run() -> void:
 	_check_search()
 	_check_coordination()
 	_check_formation()
+	_check_camp()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -429,6 +430,26 @@ func _check_formation() -> void:
 	leader["pos"] = first
 	var pause: Vector2 = fexplore._bound(leader)
 	_check(pause == leader["pos"] and fexplore.counts["bonds_abri"] == 1, "arrivé à l'abri, il marque une pause")
+
+
+func _check_camp() -> void:
+	print("Camps et nuit")
+	var quest: Dictionary = game.floor_quest(3)
+	var results := {}
+	for dispo in ["camp", "endormis", "patrouilles"]:
+		var layout: Dictionary = load("res://scripts/map_generator.gd").generate(3, quest, 21)
+		var battle = load("res://scripts/battle.gd").new(_team(game.floor_enemy_level(3) + 2), layout["enemies"], quest)
+		battle.map_data = layout["map"]
+		battle.forced_disposition = dispo
+		battle.start()
+		results[dispo] = battle
+	var camp = results["camp"]
+	var blocked: bool = camp.alert.tents.all(func(c): return camp.map.kind_at(c) == BattleMap.Kind.BLOCK)
+	_check(camp.alert.tents.size() >= 2 and blocked and camp.alert.fire.x >= 0,
+		"un camp : un feu et %d tentes (des obstacles)" % camp.alert.tents.size())
+	_check(not camp.is_night() and results["endormis"].is_night() and not results["patrouilles"].is_night(),
+		"le camp endormi se passe la nuit, les autres de jour")
+	_check(results["patrouilles"].alert.tents.is_empty(), "des patrouilles : pas de camp")
 
 
 func _check(ok: bool, text: String) -> void:
