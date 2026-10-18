@@ -1,0 +1,32 @@
+# Lance les bancs de test (tools/lancer_tests.sh) à chaque push sur une autre branche que main et sur chaque pull
+# request (ajout d'octobre 2026). Sur main, c'est deploy-web.yml qui les lance avant de publier.
+name: Bancs de test
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer Godot
+        working-directory: ${{ runner.temp }}
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+
+      - name: Lancer les bancs
+        run: tools/lancer_tests.sh ${{ runner.temp }}/godot

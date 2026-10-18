@@ -159,7 +159,8 @@ func change_mental(hero: Dictionary, amount: float) -> void:
 ## au type d'événement « type », accoutumance), puis moins ce que Calme protège. Renvoie la perte réelle.
 func mental_loss(hero: Dictionary, amount: float, type := "", context := {}) -> float:
 	var before := mental(hero)
-	change_mental(hero, -PersonalityEngine.stress(hero, type, amount, context) * (1.0 - mental_guard(hero["skills"])))
+	change_mental(hero, -PersonalityEngine.stress(hero, type, amount, context) * (1.0 - mental_guard(hero["skills"]))
+		* motivation_factor(hero))  # (octobre 2026) une motivation aide à tenir
 	return before - mental(hero)
 
 
@@ -350,6 +351,11 @@ const QUARREL_CHANCE_PER_HOUR := 0.1
 const QUARREL_MAX_HOURS := 24
 ## Deux hostiles dans la même équipe de combat : chacun perd ceci au début du combat.
 const MENTAL_LOSS_HOSTILE := 5.0
+## (phase 1.3, feuille de route v2 : « un écart de niveau important dans une équipe fait monter le stress des plus
+## faibles ») Un héros qui a LEVEL_GAP_STRESS niveaux ou plus de moins que le plus fort de l'équipe perd ceci au
+## début du combat (type de stress « level_gap »). Chiffres provisoires.
+const LEVEL_GAP_STRESS := 5
+const MENTAL_LOSS_LEVEL_GAP := 3.0
 
 
 ## « Han (★) » : le nom suivi des étoiles, comme dans les fenêtres système.
@@ -796,6 +802,8 @@ func mental_after_synthesis(sacrifice_count: int) -> String:
 		mental_loss(hero, MENTAL_LOSS_SYNTHESIS * sacrifice_count, "synthesis")
 		if mental(hero) > 0.0:
 			PersonalityEngine.habituate(hero, "synthesis")
+	# (octobre 2026) l'œuvre : Aaron décide de survivre en voyant une synthèse
+	end_disorientation_all(alive_heroes(), " après avoir vu la synthèse : il a décidé de survivre")
 	return "Tes héros ont vu la synthèse : leur santé mentale baisse (chacun le vit à sa façon ; moins avec Calme)."
 
 
@@ -902,9 +910,13 @@ func chatter(hero: Dictionary, nearby: Array) -> Dictionary:
 #   l'équipe N (qui a de la place) ;
 # - « X demande un jour de repos » : un héros qui s'entraîne ou tient un poste, fatigué (santé mentale sous 60),
 #   peu persévérant ou peu vif.
-# Répondre change la confiance envers le Maître (REQUEST_TRUST). Le jour de repos accordé : ni entraînement ni
-# poste pendant REST_SECONDS (le temps du lobby ira plus tard 3 fois plus vite), et un peu de santé mentale.
+# - (phase 1.3) « Le héros X vous suggère une formation ! » : un héros vieux de plusieurs étages (chef d'équipe,
+#   Meneur ou qui a confiance en le Maître) propose une composition (tower.gd, « Suggestions de formation »).
+# Répondre change la confiance envers le Maître (REQUEST_TRUST ; une formation refusée : FORMATION_REFUSED_TRUST,
+# « la baisse un peu »). Le jour de repos accordé : ni entraînement ni poste pendant REST_SECONDS (le temps du lobby
+# ira plus tard 3 fois plus vite), et un peu de santé mentale.
 const REQUEST_CHANCE_PER_HOUR := 0.1
+const FORMATION_REFUSED_TRUST := 2.0
 const REQUESTS_MAX := 3
 const REQUEST_TRUST := 5.0
 const REST_SECONDS := 6 * 3600
@@ -962,6 +974,9 @@ func roll_request() -> Dictionary:
 				options.append([weight, {"kind": "rest", "hero": hero["id"],
 					"reason": "veut du repos : santé mentale %d, Persévérance %+d, Vitalité %+d" % [roundi(mental(hero)),
 						per * 10, vit * 10]}])
+	var formation := _formation_request()  # (phase 1.3) [poids, demande], ou []
+	if not formation.is_empty():
+		options.append(formation)
 	var total := 0.0
 	for option in options:
 		total += option[0]
@@ -973,8 +988,13 @@ func roll_request() -> Dictionary:
 	return {}
 
 
+## (vraie fonction : tower.gd, « Suggestions de formation ») [poids, demande « formation »] ou [].
+func _formation_request() -> Array:
+	return []
+
+
 ## La prochaine demande encore valable (les autres sont oubliées) : la demande, avec « hero » (le héros) et
-## « text » (la carte), ou {}.
+## « text » (la carte), ou {} ; une formation a aussi « members » (les héros proposés).
 func next_request() -> Dictionary:
 	while not pending_requests.is_empty():
 		var entry: Dictionary = pending_requests[0]
@@ -984,11 +1004,27 @@ func next_request() -> Dictionary:
 			valid = teams[entry["team"]].size() < TEAM_SIZE and not teams.any(func(team): return hero["id"] in team)
 		if valid and entry["kind"] == "rest":
 			valid = not is_resting(hero)
+		var members: Array[Dictionary] = []
+		if valid and entry["kind"] == "formation":
+			for id in entry["ids"]:
+				var member := hero_by_id(id)
+				if member.is_empty() or not member["alive"]:
+					valid = false
+				else:
+					members.append(member)
 		if valid:
 			var result := entry.duplicate()
 			result["hero"] = hero
-			result["text"] = "%s souhaite rejoindre l'équipe %d." % [hero["name"], entry["team"] + 1] \
-				if entry["kind"] == "join" else "%s demande un jour de repos." % hero["name"]
+			match entry["kind"]:
+				"join":
+					result["text"] = "%s souhaite rejoindre l'équipe « %s ». L'autorisez-vous ?" % [hero["name"],
+						team_name(entry["team"])]
+				"rest":
+					result["text"] = "%s demande un jour de repos." % hero["name"]
+				"formation":
+					result["text"] = "Le héros %s vous suggère une formation ! (équipe « %s »)" % [hero["name"],
+						team_name(entry["team"])]
+					result["members"] = members
 			return result
 		pending_requests.pop_front()
 	return {}
@@ -998,13 +1034,22 @@ func next_request() -> Dictionary:
 func answer_request(request: Dictionary, accept: bool) -> Array[String]:
 	var hero: Dictionary = request["hero"]
 	pending_requests = pending_requests.filter(func(r): return not (r["hero"] == hero["id"] and r["kind"] == request["kind"]))
-	PersonalityEngine.add_trust(hero, REQUEST_TRUST if accept else -REQUEST_TRUST)
+	var refused_trust := FORMATION_REFUSED_TRUST if request["kind"] == "formation" else REQUEST_TRUST
+	PersonalityEngine.add_trust(hero, REQUEST_TRUST if accept else -refused_trust)
 	var lines: Array[String] = []
 	match request["kind"]:
+		"formation":
+			if accept:
+				set_team(request["team"], request["ids"])
+				lines.append("%s hoche la tête : l'équipe « %s » est formée comme il l'a proposé." % [hero["name"],
+					team_name(request["team"])])
+			else:
+				lines.append("%s range sa proposition sans insister." % hero["name"])
 		"join":
 			if accept:
 				teams[request["team"]].append(hero["id"])
-				lines.append("%s rejoint l'équipe %d. Il a l'air fier." % [hero["name"], request["team"] + 1])
+				hero["volunteer_team"] = request["team"]  # (phase 1.3) volontaire : bonus de combat dans cette équipe
+				lines.append("%s rejoint l'équipe « %s ». Il a l'air fier." % [hero["name"], team_name(request["team"])])
 			else:
 				lines.append("%s baisse les yeux et s'éloigne." % hero["name"])
 		"rest":
@@ -1111,3 +1156,124 @@ func synthesis_hints(sacrifices: Array) -> Array:
 					"reason": "aptitude %d en %s" % [PersonalityEngine.aptitude(hero, domain), domain]})
 				break
 	return hints
+
+
+# ---------------------------------------------------------------------------
+# Arrivée déboussolée et motivation cachée (octobre 2026)
+# ---------------------------------------------------------------------------
+# Cahier, onglet « Améliorations combat, classes, entraînement », lot C (étape 1 : « arrivée déboussolée,
+# motivation cachée ») et document de référence (« Arrivée déboussolée | Stabilité, Curiosité, étoiles | Les 1-2
+# étoiles commencent Déboussolés ; durée selon Stabilité et Curiosité ») ; l'œuvre : « choc, panique, chercher une
+# sortie, puis décider de survivre » (Aaron, Dolph).
+# - hero["arc"] : "deboussole" à l'arrivée d'un 1-2 étoiles (parmi les héros secrets, seul Aaron : « commence
+#   Déboussolé ») ; ensuite "resigne". Les autres étapes (Engagé, Forgé, Brisé) viendront avec le prompt 5.3.
+#   Un héros sans « arc » (ancienne sauvegarde) n'est pas déboussolé.
+# - Déboussolé : il refuse l'entraînement (training.gd, set_training), ferme la marche en combat (rôle « prudent »,
+#   battle_explore.gd) et erre dans la cité. Il en sort en survivant à un combat, en voyant une synthèse, ou après
+#   DISORIENTED_HOURS heures réelles (moins avec Stabilité et Curiosité hautes : DISORIENTED_HOURS_PER_TIER par
+#   palier, entre DISORIENTED_HOURS_MIN et DISORIENTED_HOURS_MAX). Une notification le dit, et il parle alors de sa motivation.
+# - hero["motivation"] : sa raison de se battre (valeur principale du document de référence), tirée à l'invocation
+#   (fixe pour les héros secrets), cachée (« ? » sur la fiche) jusqu'à ce qu'il en parle (hero["motivation_known"]).
+#   Effet (ajout du projet, chiffre provisoire ; l'œuvre : « elle résiste à la rupture ») : un héros qui a une
+#   motivation perd MOTIVATION_STRESS_FACTOR fois la santé mentale prévue ; « aucune » (les plus fragiles) : rien.
+# Écart signalé au porteur du projet : l'onglet « Améliorations » donne une autre liste (un proche, prouver sa
+# valeur, protéger son groupe, liberté, aucune) ; on suit celle du document de référence, plus « aucune ».
+const DISORIENTED_HOURS := 24.0
+const DISORIENTED_HOURS_PER_TIER := 3.0
+const DISORIENTED_HOURS_MIN := 6.0
+const DISORIENTED_HOURS_MAX := 48.0
+const MOTIVATION_STRESS_FACTOR := 0.9
+const MOTIVATIONS := {
+	"famille": {"name": "La famille", "talk": "%s a parlé de quelqu'un qui l'attend chez lui."},
+	"liberte": {"name": "La liberté", "talk": "%s a dit qu'un jour, il sortirait d'ici."},
+	"justice": {"name": "La justice", "talk": "%s a dit qu'il ne supportait pas de voir les faibles écrasés."},
+	"reconnaissance": {"name": "La reconnaissance", "talk": "%s a dit qu'il voulait qu'on se souvienne de son nom."},
+	"survie": {"name": "La survie", "talk": "%s a dit qu'il ne mourrait pas ici."},
+	"devoir": {"name": "Le devoir", "talk": "%s a dit qu'on lui avait confié une tâche et qu'il irait au bout."},
+	"camaraderie": {"name": "La camaraderie", "talk": "%s a dit qu'il se battait pour ceux qui sont à côté de lui."},
+	"aucune": {"name": "Aucune", "talk": "%s ne sait pas pourquoi il se bat."},
+}
+## Motivations des héros secrets (cahier, profils des héros secrets).
+const SECRET_MOTIVATIONS := {"Han": "survie", "Jenna": "camaraderie", "Aaron": "famille", "Hansen": "camaraderie",
+	"Zid": "camaraderie", "Shei": "devoir", "Yvolka": "reconnaissance", "Edith": "camaraderie"}
+## Parmi les héros secrets, ceux qui arrivent déboussolés.
+const SECRET_DISORIENTED := ["Aaron"]
+
+
+## À l'invocation (summon.gd, _new_hero) : la motivation, et l'état Déboussolé d'un 1-2 étoiles.
+func start_arrival(hero: Dictionary, secret: bool) -> void:
+	hero["motivation"] = SECRET_MOTIVATIONS.get(hero["name"], "") if secret else ""
+	if hero["motivation"] == "":
+		hero["motivation"] = roll_motivation()
+	hero["motivation_known"] = false
+	var disoriented: bool = hero["name"] in SECRET_DISORIENTED if secret else hero["rarity"] <= 2
+	hero["arc"] = "deboussole" if disoriented else "resigne"
+	hero["arrived_at"] = Time.get_unix_time_from_system()
+
+
+## Une motivation au hasard (« aucune » un peu moins souvent que les autres).
+func roll_motivation() -> String:
+	var ids := MOTIVATIONS.keys().filter(func(id): return id != "aucune")
+	return "aucune" if randf() < 0.1 else ids.pick_random()
+
+
+func is_disoriented(hero: Dictionary) -> bool:
+	return hero.get("arc", "") == "deboussole"
+
+
+## Ce que la fiche montre de sa motivation (« ? » tant qu'il n'en a pas parlé, sauf en mode dev).
+func motivation_text(hero: Dictionary) -> String:
+	var id: String = hero.get("motivation", "")
+	if id == "":
+		return "?"
+	if hero.get("motivation_known", false) or Settings.dev_mode:
+		return MOTIVATIONS[id]["name"]
+	return "?"
+
+
+## Le facteur de ses pertes de santé mentale dû à sa motivation.
+func motivation_factor(hero: Dictionary) -> float:
+	var id: String = hero.get("motivation", "aucune")
+	return MOTIVATION_STRESS_FACTOR if id != "aucune" and id != "" else 1.0
+
+
+## Heures réelles avant qu'il sorte de lui-même de l'état Déboussolé.
+func disoriented_hours(hero: Dictionary) -> float:
+	var tiers := PersonalityEngine.tier(hero, "STA") + PersonalityEngine.tier(hero, "CUR")
+	return clampf(DISORIENTED_HOURS - tiers * DISORIENTED_HOURS_PER_TIER, DISORIENTED_HOURS_MIN, DISORIENTED_HOURS_MAX)
+
+
+## Il sort de l'état Déboussolé (« why » : ce qui l'a décidé). Renvoie les lignes de la notification (vide s'il ne
+## l'était pas) ; il parle alors de sa motivation. Ne sauvegarde pas.
+func end_disorientation(hero: Dictionary, why: String) -> Array[String]:
+	var lines: Array[String] = []
+	if not is_disoriented(hero):
+		return lines
+	hero["arc"] = "resigne"
+	lines.append("%s a cessé de chercher une sortie%s." % [hero["name"], why])
+	if not hero.get("motivation_known", false):
+		hero["motivation_known"] = true
+		lines.append(MOTIVATIONS[hero.get("motivation", "aucune")]["talk"] % hero["name"])
+	return lines
+
+
+## Les héros déboussolés depuis assez longtemps s'en remettent (appelée avec update_requests, toutes les 5 s).
+func update_arrivals() -> void:
+	var now := Time.get_unix_time_from_system()
+	var lines: Array[String] = []
+	for hero in alive_heroes():
+		if is_disoriented(hero) and now - float(hero.get("arrived_at", now)) >= disoriented_hours(hero) * 3600.0:
+			lines.append_array(end_disorientation(hero, ""))
+	if not lines.is_empty():
+		system_notice.emit.call_deferred("Notification", lines)
+		save_game()
+
+
+## Après une épreuve partagée (un combat survécu, une synthèse vue) : les déboussolés concernés s'en remettent.
+func end_disorientation_all(heroes: Array, why: String) -> void:
+	var lines: Array[String] = []
+	for hero in heroes:
+		if hero["alive"]:
+			lines.append_array(end_disorientation(hero, why))
+	if not lines.is_empty():
+		system_notice.emit.call_deferred("Notification", lines)

@@ -74,7 +74,7 @@ const PLACES := {
 }
 ## Bâtiment (lieu de la cité) de chaque poste d'assistant (hero["post"]).
 const POST_PLACES := {"synthese": "synthese", "forge": "forge", "atelier_magie": "atelier_magie",
-	"laboratoire": "lab", "bibliotheque": "bibliotheque"}
+	"laboratoire": "lab", "bibliotheque": "bibliotheque", "instructeur": "training", "administrateur": "plaza"}
 ## Où les héros sans occupation vont se promener (la place et les rues reviennent plus souvent).
 const IDLE_PLACES := ["plaza", "plaza", "streets", "streets", "streets", "center"]
 
@@ -725,7 +725,7 @@ func _activity_of(hero: Dictionary) -> String:
 	if hero.get("training", "") != "" and GameData.training_unlocked():
 		return "train"
 	var post: String = hero.get("post", "")
-	if post != "" and post in GameData.buildings and POST_PLACES.has(post):
+	if post != "" and GameData.post_open(post) and POST_PLACES.has(post):
 		return "post:" + post
 	return "idle"
 

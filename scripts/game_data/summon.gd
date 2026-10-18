@@ -142,6 +142,7 @@ func summon(summon_type: String, count: int) -> Array[Dictionary]:
 	roll_linked_group(results)  # certains se connaissent peut-être déjà (voir personality.gd)
 	save_game()
 	advance_tutorial("invocation")  # (tutoriel) étape suivante : composer une équipe
+	complete_daily_mission("invocation")
 	return results
 
 
@@ -168,6 +169,7 @@ func free_summon() -> Array[Dictionary]:
 	results.append(hero)
 	roll_linked_group(results)  # (un seul héros : jamais de groupe, mais l'annonce précédente est effacée)
 	save_game()
+	complete_daily_mission("invocation")
 	return results
 
 
@@ -321,6 +323,7 @@ func _new_hero(hero_name: String, rarity: int, hero_class: String, growth: int, 
 		"revealed_traits": [],  # traits que le Maître a découverts (cachés au début)
 	}
 	next_hero_id += 1
+	start_arrival(hero, secret)  # (octobre 2026) motivation cachée, arrivée déboussolée (personality.gd)
 	return hero
 
 

@@ -263,7 +263,8 @@ func _glances(unit: Dictionary) -> bool:
 # ---------------------------------------------------------------------------
 
 ## Ce qu'il sait maintenant : ce qu'il voit et entend, ce que voient les alliés à portée de voix (toute l'équipe
-## s'il y a un Meneur debout), et ce dont il se souvient encore.
+## s'il y a un Meneur debout ; un héros qui se bat crie, on l'entend à HERO_SHOUT_RANGE cases), et ce dont il se
+## souvient encore.
 func _learn(unit: Dictionary) -> void:
 	var knows: Dictionary = unit["knows"]
 	var now: float = battle.time
@@ -274,8 +275,11 @@ func _learn(unit: Dictionary) -> void:
 		for ally in allies:
 			if ally["id"] == unit["id"] or battle.panicking(ally):
 				continue
-			if leader or ally["pos"].distance_to(unit["pos"]) <= GameData.VOICE_RANGE:
+			var distance: float = ally["pos"].distance_to(unit["pos"])
+			if leader or distance <= GameData.VOICE_RANGE:
 				sources.append(ally)
+			elif unit["is_hero"] and distance <= GameData.HERO_SHOUT_RANGE and battle._in_contact(ally):
+				sources.append(ally)  # (il se bat : il crie)
 	for who in sources:
 		for id in who["sees"]:
 			knows[id] = {"pos": battle.units[id]["pos"], "t": now}

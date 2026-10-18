@@ -65,6 +65,21 @@ func start() -> void:
 	if quest.get("warnings", 0) > 0:
 		for hero in heroes:
 			_stress(hero, GameData.MENTAL_LOSS_WARNINGS, "warnings")
+	# (phase 1.3) L'équipe composée à l'avance : son chef mène l'exploration (battle_explore.gd), ses volontaires
+	# acceptés se battent mieux (_formation_attack). Un héros bien plus faible que les autres est stressé.
+	team_index = GameData.team_index_of(heroes.map(func(h): return h["source"].get("id", -1)))
+	var leader: Dictionary = GameData.team_leader(team_index) if team_index >= 0 else {}
+	var top_level := 0
+	for hero in heroes:
+		top_level = maxi(top_level, hero["level"])
+		hero["volunteer"] = team_index >= 0 and hero["source"].get("volunteer_team", -1) == team_index
+		if not leader.is_empty() and hero["source"].get("id", -1) == leader["id"]:
+			team_leader_id = hero["id"]
+	if not quest.get("duel", false):
+		for hero in heroes:
+			if top_level - hero["level"] >= GameData.LEVEL_GAP_STRESS:
+				_log("%s se sent bien faible à côté des autres." % hero["name"], "disobey")
+				_stress(hero, GameData.MENTAL_LOSS_LEVEL_GAP, "level_gap")
 	# Deux hostiles dans la même équipe : l'ambiance est tendue, chacun en perd de la santé mentale.
 	for i in heroes.size():
 		for j in range(i + 1, heroes.size()):
@@ -337,6 +352,12 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# Compétences exclusives (P2g) : événements vécus qui peuvent les éveiller en fin de combat ; Premier sang.
 		"exclusive_events": {},
 		"first_blood_used": false,
+		# Compétences de l'œuvre (octobre 2026) : Mouvement secret (jusqu'à quand il attire les ennemis, quand il
+		# pourra recommencer), Trouver les faiblesses (coups portés à chaque ennemi), critiques portés (éveil).
+		"secret_move_until": 0.0,
+		"secret_move_ready": 0.0,
+		"studied": {},
+		"crits": 0,
 		"skill_news": [],          # compétences apprises ou améliorées, pour l'écran de fin
 		"shots": 0,                # flèches tirées (font progresser Maîtrise de l'arc)
 		# Usure de l'arme (voir GameData, tower.gd, WEAR_PER_HIT) : coups portés au contact pendant ce combat.
@@ -481,6 +502,7 @@ func _step() -> void:
 			_lead(unit)
 		if unit["person"] and unit["hp"] > 0:
 			_berserk_think(unit)
+			_secret_move_think(unit)  # (octobre 2026) Mouvement secret
 			if perception_on:
 				perception.hawk_eye_think(unit)
 		if unit["hp"] > 0:
@@ -714,6 +736,11 @@ func _think(unit: Dictionary) -> void:
 ## Le choix de la cible, selon la classe. Sinon : l'adversaire le plus proche,
 ## en évitant ceux que plusieurs alliés attaquent déjà (pour ne pas tous s'agglutiner).
 func _choose_target(unit: Dictionary, foes: Array, allies: Array) -> Dictionary:
+	# (octobre 2026) Mouvement secret : un héros tout près attire sur lui les coups des monstres.
+	if not unit["is_hero"]:
+		for foe in foes:
+			if time < foe["secret_move_until"] and unit["pos"].distance_to(foe["pos"]) <= GameData.SECRET_MOVE_RADIUS:
+				return foe
 	if unit["class"] == "Assassin":
 		return _weakest(foes)
 	# Un chevalier proche attire les coups.
@@ -855,7 +882,8 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 			if attacker["ranged"]:
 				# Un tir (arc). Les archers visent mieux : +25 % de critiques, et leurs critiques font x2.
 				var archer: bool = attacker["class"] == "Archer"
-				var critical: bool = randf() < attacker["crit"] * _fear(attacker) + (0.25 if archer else 0.0) + surprise_crit
+				var critical: bool = randf() < attacker["crit"] * _fear(attacker) + (0.25 if archer else 0.0) + surprise_crit \
+					+ _weakness_crit(attacker, target)
 				var power := (2.0 if archer else 1.5) if critical else 1.0
 				_hit(attacker, target, power * attacker["weapon_power"], critical, "arrow")
 				if attacker["is_hero"]:
@@ -871,10 +899,12 @@ func _try_attack(attacker: Dictionary, target: Dictionary, foes: Array) -> void:
 					"Assassin":
 						pass
 					_:
-						critical = randf() < attacker["crit"] * _fear(attacker) + surprise_crit
+						critical = randf() < attacker["crit"] * _fear(attacker) + surprise_crit + _weakness_crit(attacker, target)
 						power = 1.5 if critical else 1.0
-				# (Guerrier, Assassin : pas de critique d'ordinaire ; par surprise, oui.)
-				if surprise_crit > 0.0 and attacker["class"] in ["Guerrier", "Assassin"] and randf() < surprise_crit:
+				# (Guerrier, Assassin : pas de critique d'ordinaire ; par surprise, oui. Octobre 2026 : en ayant trouvé
+				# les faiblesses de la cible aussi.)
+				var special_crit: float = surprise_crit + _weakness_crit(attacker, target)
+				if special_crit > 0.0 and attacker["class"] in ["Guerrier", "Assassin"] and randf() < special_crit:
 					critical = true
 					power *= 1.5
 				_hit(attacker, target, power * attacker["weapon_power"] * _wear(attacker), critical, "hit")
@@ -1004,6 +1034,14 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 	if attacker["is_hero"] and amount >= 0 and not _first_blood_given:
 		_first_blood_given = true
 		attacker["exclusive_events"]["first_blood"] = true
+	# (octobre 2026) Trouver les faiblesses : il étudie l'ennemi qu'il frappe ; ses critiques peuvent l'éveiller.
+	# Sauvagerie : frapper gravement blessé peut l'éveiller.
+	if attacker["is_hero"] and amount >= 0 and kind in ["hit", "arrow"]:
+		attacker["studied"][target["id"]] = attacker["studied"].get(target["id"], 0) + 1
+		if critical:
+			attacker["crits"] += 1
+		if attacker["hp"] < attacker["max_hp"] * GameData.SAVAGERY_EVENT_HP:
+			attacker["exclusive_events"]["fought_wounded"] = true
 	attacker["engaged"] = true  # il a pris part au combat (expérience méritée)
 	target["engaged"] = true
 	# Activité (croissance) : l'esquive exerce la Dextérité ; le coup porté, la stat de l'attaque ;
@@ -1083,7 +1121,8 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Mouvement souple : une chance d'éviter complètement le coup (moins face à la précision
 	# d'Analyse froide, et à celle d'Œil de faucon pour les flèches et les sorts). Pas face à une attaque surprise.
 	var dodge: float = GameData.skill_level(target["skills"], "Mouvement souple") * DODGE_PER_LEVEL \
-		- GameData.skill_level(attacker["skills"], "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL
+		- GameData.skill_level(attacker["skills"], "Analyse froide") * GameData.COLD_ANALYSIS_PER_LEVEL \
+		+ (GameData.SECRET_MOVE_DODGE if time < target["secret_move_until"] else 0.0)  # (octobre 2026)
 	if kind != "hit":
 		dodge -= GameData.skill_level(attacker["skills"], "Œil de faucon") * GameData.HAWK_EYE_PRECISION_PER_LEVEL
 	if not surprise and randf() < dodge:
@@ -1113,6 +1152,7 @@ func _damage(attacker: Dictionary, target: Dictionary, power: float, critical :=
 	# Esprit combatif : sous la moitié de sa vie, l'attaquant frappe plus fort.
 	if attacker["hp"] * 2 < attacker["max_hp"]:
 		power *= 1.0 + GameData.skill_level(attacker["skills"], "Esprit combatif") * GameData.FIGHTING_SPIRIT_PER_LEVEL
+	power *= 1.0 + _savagery(attacker)  # (octobre 2026) Sauvagerie
 	# Migraine (après une rage Berserk) : l'attaquant frappe moins fort.
 	if has_migraine(attacker):
 		power *= GameData.MIGRAINE_DAMAGE_FACTOR
@@ -1220,6 +1260,7 @@ func _after_fight() -> void:
 				for exclusive in PersonalityEngine.exclusives_for_event(fighter["source"], event):
 					if randf() < exclusive["chance"]:
 						_improve_skill(fighter, exclusive["skill"], exclusive["how"])
+			_learn_work_skills(fighter)  # (octobre 2026) Mouvement secret, Trouver les faiblesses
 	for fighter in heroes:
 		if not fighter["has_bled"] or (fighter["hp"] <= 0 and not fighter["immortal"]):
 			continue
@@ -1255,3 +1296,70 @@ func _duel_yields(unit: Dictionary) -> bool:
 	_log("%s pose un genou à terre : %s remporte le duel !" % [unit["name"], winner["name"]], "awaken")
 	_finish()
 	return true
+
+
+# ---------------------------------------------------------------------------
+# Compétences de l'œuvre (octobre 2026, ajout du projet d'après l'analyse : des compétences qu'on voit en combat ;
+# voir GameData.SKILLS et heroes.gd, « Compétences de l'œuvre »)
+# ---------------------------------------------------------------------------
+
+## Mouvement secret (active ponctuelle, Han) : un allié tout près en danger (peu de vie, un ennemi au contact) ; il
+## attire sur lui les ennemis autour (voir _choose_target) et esquive mieux, quelques secondes. Pas s'il a peur.
+func _secret_move_think(unit: Dictionary) -> void:
+	if not unit["is_hero"] or time < unit["secret_move_ready"] or afraid(unit) or panicking(unit):
+		return
+	var level := GameData.skill_level(unit["skills"], "Mouvement secret")
+	if level <= 0:
+		return
+	for ally in _alive(heroes):
+		if ally["id"] == unit["id"] or ally["pos"].distance_to(unit["pos"]) > GameData.SECRET_MOVE_RANGE:
+			continue
+		if float(ally["hp"]) / ally["max_hp"] >= GameData.SECRET_MOVE_ALLY_HP or not _in_contact(ally):
+			continue
+		unit["secret_move_until"] = time + GameData.SECRET_MOVE_SECONDS + GameData.SECRET_MOVE_PER_LEVEL * (level - 1)
+		unit["secret_move_ready"] = time + GameData.SECRET_MOVE_COOLDOWN
+		_log("%s attire les ennemis sur lui pour couvrir %s (Mouvement secret) !" % [_name_with_stars(unit), ally["name"]],
+			"awaken")
+		return
+
+
+## Trouver les faiblesses (Jenna) : critiques en plus contre un ennemi déjà frappé WEAKNESS_HITS fois.
+func _weakness_crit(attacker: Dictionary, target: Dictionary) -> float:
+	if not attacker["is_hero"] or attacker["studied"].get(target["id"], 0) < GameData.WEAKNESS_HITS:
+		return 0.0
+	var level := GameData.skill_level(attacker["skills"], "Trouver les faiblesses")
+	if level <= 0:
+		return 0.0
+	return GameData.WEAKNESS_CRIT + GameData.WEAKNESS_PER_LEVEL * (level - 1)
+
+
+## Sauvagerie (Belquist) : dégâts en plus, de 0 à la moitié de sa vie jusqu'au maximum près de 0 ; plus s'il saigne.
+func _savagery(attacker: Dictionary) -> float:
+	if not attacker["is_hero"]:
+		return 0.0
+	var level := GameData.skill_level(attacker["skills"], "Sauvagerie")
+	if level <= 0:
+		return 0.0
+	var ratio: float = float(attacker["hp"]) / attacker["max_hp"]
+	var bonus := 0.0
+	if ratio < 0.5:
+		bonus = (GameData.SAVAGERY_MAX + GameData.SAVAGERY_PER_LEVEL * (level - 1)) * (0.5 - ratio) / 0.5
+	if attacker["bleed"]["ticks"] > 0:
+		bonus += GameData.SAVAGERY_BLEED
+	return bonus
+
+
+## Fin du combat, un héros debout : couvrir un allié peut éveiller Mouvement secret, trois critiques Trouver les
+## faiblesses (ou les monter d'un niveau), s'il en a l'affinité (PersonalityEngine.can_learn).
+func _learn_work_skills(fighter: Dictionary) -> void:
+	var tries := []
+	if fighter["exclusive_events"].has("covered"):
+		tries.append(["Mouvement secret", GameData.SECRET_MOVE_LEARN_CHANCE, "a couvert un allié"])
+	if fighter["crits"] >= GameData.WEAKNESS_LEARN_CRITS:
+		tries.append(["Trouver les faiblesses", GameData.WEAKNESS_LEARN_CHANCE, "a vu les faiblesses de ses ennemis"])
+	for entry in tries:
+		var known := GameData.skill_level(fighter["skills"], entry[0]) > 0
+		if not known and not PersonalityEngine.can_learn(fighter["source"], entry[0], fighter["skills"]):
+			continue
+		if randf() < entry[1]:
+			_improve_skill(fighter, entry[0], entry[2])

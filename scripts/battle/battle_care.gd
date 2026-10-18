@@ -200,6 +200,11 @@ func _assign_helpers() -> void:
 	for patient in patients:
 		if _helpers.values().has(patient["id"]):
 			continue
+		# (octobre 2026, cohésion) on ne court pas relever un allié encore entouré d'ennemis : on s'y ferait tuer
+		# sans pouvoir le soigner (il faut être libre de tout contact à son côté).
+		if GameData.AGONY_SAFE_RADIUS > 0.0 and _alive(enemies).any(func(foe): \
+				return foe["pos"].distance_to(patient["pos"]) <= GameData.AGONY_SAFE_RADIUS):
+			continue
 		var best: Dictionary = {}
 		var best_distance := GameData.AGONY_HELP_RANGE if patient["agony"] else GameData.CARE_HELP_RANGE
 		for ally in _alive(heroes):

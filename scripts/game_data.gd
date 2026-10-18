@@ -42,12 +42,16 @@ func _ready() -> void:
 	timer.wait_time = 5.0
 	update_quarrels()
 	update_requests()
+	update_arrivals()  # (octobre 2026) arrivée déboussolée
 	timer.timeout.connect(func():
+		hold_saves()  # (octobre 2026) une seule sauvegarde pour tout le tour des 5 s
 		update_expedition()
 		update_training()
 		update_mental()
 		update_quarrels()
-		update_requests())  # (prompt 4) demandes des héros
+		update_requests()  # (prompt 4) demandes des héros
+		update_arrivals()  # (octobre 2026) arrivée déboussolée
+		release_saves())
 	add_child(timer)
 	timer.start()
 
@@ -82,6 +86,24 @@ func dev_force_request() -> String:
 	return "Demande ajoutée (%s)." % request["reason"]
 
 
+## (phase 1.3) Une suggestion de formation tout de suite : celle de _formation_request, sinon (personne d'assez
+## ancien) celle du héros le plus haut niveau pour l'équipe 1.
+func dev_formation_request() -> String:
+	var formation := _formation_request()
+	var request: Dictionary = formation[1] if not formation.is_empty() else {}
+	if request.is_empty():
+		var heroes := alive_heroes().filter(func(h): return not is_away(h))
+		if heroes.size() < 2:
+			return "Il faut au moins deux héros présents."
+		heroes.sort_custom(func(a, b): return a["level"] > b["level"])
+		request = {"kind": "formation", "hero": heroes[0]["id"], "team": 0, "ids": suggest_formation(heroes[0], 0),
+			"reason": "mode dev : %s, le plus haut niveau" % heroes[0]["name"]}
+	pending_requests.push_front(request)
+	save_game()
+	requests_changed.emit()
+	return "Suggestion de formation ajoutée (%s)." % request["reason"]
+
+
 ## (prompt 4) Le rapport du jour de la fée sera de nouveau montré.
 func dev_reset_daily_report() -> void:
 	daily_report_day = ""
@@ -92,6 +114,12 @@ func dev_reset_daily_report() -> void:
 ## Rend l'invocation gratuite du jour (comme si elle n'avait pas encore été prise).
 func dev_reset_free_summon() -> void:
 	free_summon_day = ""
+	save_game()
+
+
+## Les missions du jour sont de nouveau à faire (comme un nouveau jour).
+func dev_reset_daily_missions() -> void:
+	daily_missions = {"day": "", "done": []}
 	save_game()
 
 

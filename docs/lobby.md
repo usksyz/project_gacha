@@ -101,3 +101,16 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   combat, il change de programme (annoncé). Le Maître : « Envoyer au terrain » (`send_to_training`), « Repos »,
   « Envoyer au terrain les héros qui ne font rien » (`auto_fill_training` : ceux qui ont le plus envie d'abord).
   11 programmes : les maîtrises, l'esquive, Parade des projectiles, les trois résistances. Banc `tools/test_etapeD.gd`.
+- Reconversion (octobre 2026, analyse du projet ; ajout du projet : un héros qui se bat mal sert autrement qu'en
+  synthèse). Deux postes qui ne sont pas des bâtiments, choisis dans la fenêtre des affectations comme les postes
+  d'assistant (`hero["post"]`) : constantes et effets dans `training.gd` (« Reconversion » : `ROLE_POSTS`,
+  `role_workers`, `instructor_factor`, `admin_gold_factor`), noms et ouverture dans `lobby.gd` (`post_name`,
+  `post_slots`, `post_open`).
+  - Instructeur (2 postes, une fois le terrain d'entraînement ouvert) : +15 % aux progrès de chaque élève par
+    instructeur présent, +15 % de plus s'il maîtrise mieux que l'élève la compétence travaillée ; il transmet aussi
+    les compétences de l'œuvre (`TEACHABLE_SKILLS`) qu'il connaît mieux que l'élève, si l'élève a l'affinité
+    (`teachable_from_instructors`, `TEACH_POINTS_PER_SESSION` points par séance).
+  - Administrateur (1 poste, après le tutoriel) : l'or des victoires dans la Tour x (1 + 5 % + 0,5 % par point
+    d'Intelligence).
+  Un héros parti, au repos ou en rupture ne compte pas. Sur la carte de la cité : l'instructeur au terrain,
+  l'administrateur sur la place. Banc : `tools/test_ameliorations.gd`.

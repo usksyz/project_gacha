@@ -40,6 +40,9 @@ const SAVE_VERSION := 10
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.
 func save_game() -> void:
+	if _saves_held > 0:
+		_save_wanted = true  # (octobre 2026) sauvegarde groupée : une seule à release_saves()
+		return
 	check_auto_buildings()  # un changement peut remplir la condition d'un bâtiment (nouveau mage...)
 	update_mental()  # la santé mentale regagnée au lobby depuis la dernière fois
 	var file := ConfigFile.new()
@@ -49,11 +52,13 @@ func save_game() -> void:
 	file.set_value("partie", "pity", pity_counter)
 	file.set_value("partie", "pity4", pity4_counter)
 	file.set_value("partie", "invocation_gratuite", free_summon_day)
+	file.set_value("partie", "missions_du_jour", daily_missions)
 	file.set_value("partie", "etage", tower_floor)
 	file.set_value("partie", "prochain_id", next_hero_id)
 	file.set_value("partie", "codes_utilises", used_codes)
 	file.set_value("partie", "heros", roster)
 	file.set_value("partie", "equipes", teams)
+	file.set_value("partie", "equipes_infos", team_info)
 	file.set_value("partie", "combat_en_cours", pending_battle)
 	file.set_value("partie", "nouvelles_entrainement", training_news)
 	file.set_value("partie", "arsenal", arsenal)
@@ -92,6 +97,7 @@ func load_game() -> bool:
 	pity_counter = mini(file.get_value("partie", "pity", 0), PITY5_LIMIT - 1)
 	pity4_counter = mini(file.get_value("partie", "pity4", 0), PITY4_LIMIT - 1)
 	free_summon_day = file.get_value("partie", "invocation_gratuite", "")  # absente : celle du jour est à prendre
+	daily_missions = file.get_value("partie", "missions_du_jour", {"day": "", "done": []})  # (octobre 2026)
 	tower_floor = file.get_value("partie", "etage", 1)
 	next_hero_id = file.get_value("partie", "prochain_id", 1)
 	# « assign » recopie la liste lue dans nos listes typées (Array[String], Array[Dictionary]).
@@ -100,6 +106,16 @@ func load_game() -> bool:
 	teams = file.get_value("partie", "equipes", _empty_teams())
 	while teams.size() < TEAM_COUNT:
 		teams.append([])
+	# (octobre 2026) héros d'avant la motivation cachée : on la tire (cachée), pas d'arrivée déboussolée.
+	for hero in roster:
+		if not hero.has("motivation"):
+			hero["motivation"] = SECRET_MOTIVATIONS.get(hero["name"], "") if hero.get("secret", false) else ""
+			if hero["motivation"] == "":
+				hero["motivation"] = roll_motivation()
+			hero["motivation_known"] = false
+	team_info = file.get_value("partie", "equipes_infos", _empty_team_info())  # (phase 1.3)
+	while team_info.size() < TEAM_COUNT:
+		team_info.append({"name": "", "leader": -1})
 	pending_battle = file.get_value("partie", "combat_en_cours", {})
 	training_news = file.get_value("partie", "nouvelles_entrainement", [])
 	arsenal = file.get_value("partie", "arsenal", [])
@@ -182,11 +198,13 @@ func _new_game() -> void:
 	pity_counter = 0
 	pity4_counter = 0
 	free_summon_day = ""
+	daily_missions = {"day": "", "done": []}
 	tower_floor = 1
 	roster.clear()
 	next_hero_id = 1
 	used_codes.clear()
 	teams = _empty_teams()
+	team_info = _empty_team_info()
 	pending_battle = {}
 	absence_report = {}
 	training_news = []

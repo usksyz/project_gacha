@@ -144,6 +144,8 @@ func _on_hero_pressed(hero: Dictionary) -> void:
 	var doing := "se promène dans la cité"
 	if hero.get("training", "") != "" and GameData.training_unlocked():
 		doing = "s'entraîne au terrain (%s)" % hero["training"]
+	elif GameData.ROLE_POSTS.has(hero.get("post", "")):
+		doing = "travaille comme %s" % GameData.post_name(hero["post"]).to_lower()
 	elif hero.get("post", "") != "" and GameData.BUILDINGS.has(hero["post"]):
 		doing = "travaille comme assistant : %s" % GameData.BUILDINGS[hero["post"]]["name"]
 	info_label.text = "%s (%s, %s, niv. %d) %s." % [hero["name"], "★".repeat(hero["rarity"]),

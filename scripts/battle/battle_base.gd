@@ -234,6 +234,9 @@ var _wave_announced := 0
 ## Formations (voir _update_formations) : l'équipe couvre-t-elle les trois portées ? Le mur de boucliers
 ## a-t-il déjà été annoncé ?
 var ranges_covered := false
+## (phase 1.3) L'équipe composée à l'avance qui combat (-1 : un groupe choisi au moment), le pion de son chef (-1).
+var team_index := -1
+var team_leader_id := -1
 var _wall_announced := false
 ## Déplacements (voir « Déplacements » plus bas) : qui se tient immobile dans chaque case ({indice: numéro}),
 ## les cases où se tient quelqu'un ({indice: vrai}), les cases d'attaque réservées ({indice: numéro}), les champs

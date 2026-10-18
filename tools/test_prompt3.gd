@@ -80,8 +80,11 @@ func _check_placement() -> void:
 		battle.start()
 		var view = await _open_screen(load("res://scripts/battle_view.gd").new())
 		view.play(battle, "Exploration")
+		# (octobre 2026, bancs sur GitHub) sur une machine rapide, 10 images peuvent durer moins d'un pas du combat :
+		# on attend aussi un peu de vrai temps.
 		for i in 10:
 			await process_frame
+		await create_timer(0.5).timeout
 		_check(view.pause_button.visible and battle.time > 0.0, "le combat avance tout de suite (%s)" % ("3D" if use_3d else "dessus"))
 		await _capture("exploration_" + ("3d" if use_3d else "dessus"))
 		view.get_parent().queue_free()

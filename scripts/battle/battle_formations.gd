@@ -180,12 +180,15 @@ func _behind_shield(unit: Dictionary, target: Dictionary) -> bool:
 
 ## Formations : ce que l'attaque d'un héros gagne (trois portées couvertes).
 func _formation_attack(unit: Dictionary) -> float:
-	return 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
+	var factor := 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
+	if unit.get("volunteer", false):
+		factor *= 1.0 + GameData.VOLUNTEER_BONUS  # (phase 1.3) volontaire accepté dans cette équipe
+	return factor
 
 
 ## Formations : ce que la défense d'un héros gagne (trois portées couvertes, mur de boucliers).
 func _formation_defense(unit: Dictionary) -> float:
-	var factor := _formation_attack(unit)
+	var factor := 1.0 + GameData.RANGE_COVER_BONUS if unit["is_hero"] and ranges_covered else 1.0
 	return factor * (1.0 + _wall_allies(unit).size() * GameData.SHIELD_WALL_DEFENSE_PER_ALLY)
 
 
@@ -245,6 +248,7 @@ func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
 	_effect("hit", guardian, guardian, "-%d" % share, false)
 	if ties != null:
 		ties.covered(guardian, ward)  # (étape E, point 4) noté pour les liens après le combat
+	guardian["exclusive_events"]["covered"] = true  # (octobre 2026) peut éveiller Mouvement secret
 	if not guardian.get("covered", {}).has(ward["id"]) and GameData.has_trait(guardian["source"], "Protecteur"):
 		guardian["covered"] = guardian.get("covered", {})
 		guardian["covered"][ward["id"]] = true

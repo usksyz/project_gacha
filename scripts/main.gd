@@ -114,6 +114,7 @@ func _ready() -> void:
 	if not GameData.absence_report.is_empty():
 		_show_absence_report()
 	GameData.facility_completed.connect(_show_facility_completed)
+	GameData.system_notice.connect(func(title, lines): _show_facility_completed(title, lines, false))
 	GameData.relations_changed.connect(_show_relation_news)
 	_show_relation_news()
 	GameData.tip_requested.connect(_queue_tip)
@@ -239,7 +240,7 @@ func _check_held_windows() -> void:
 		return
 	if not held_facilities.is_empty():
 		var held: Array = held_facilities.pop_front()
-		_show_facility_completed(held[0], held[1])
+		_show_facility_completed(held[0], held[1], held[2] if held.size() > 2 else true)
 		return
 	if not GameData.relation_news.is_empty():
 		_show_relation_news()
@@ -285,6 +286,15 @@ func _show_request(request: Dictionary) -> void:
 			PersonalityEngine.trust(request["hero"])])
 	var card := UI.make_system_window("Demande", lines)
 	box.add_child(card)
+	# (phase 1.3) Une suggestion de formation : les cartes des héros proposés.
+	if request.has("members"):
+		var cards := HFlowContainer.new()  # (passe à la ligne si les cartes ne tiennent pas)
+		cards.alignment = FlowContainer.ALIGNMENT_CENTER
+		cards.add_theme_constant_override("h_separation", 6)
+		cards.add_theme_constant_override("v_separation", 6)
+		for member in request["members"]:
+			cards.add_child(UI.make_card(member, 96))
+		card.get_child(0).add_child(cards)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 16)
 	box.add_child(buttons)
@@ -375,10 +385,11 @@ func _show_next_challenge() -> void:
 
 
 ## Un bâtiment s'est construit tout seul (condition remplie) : une fenêtre l'annonce. Pendant qu'elle
-## est ouverte, le hub 3D garde son animation de construction pour après.
-func _show_facility_completed(title: String, lines: Array) -> void:
+## est ouverte, le hub 3D garde son animation de construction pour après. « building » faux (GameData.system_notice,
+## mission du jour...) : la même fenêtre, avec un seul bouton « OK ».
+func _show_facility_completed(title: String, lines: Array, building := true) -> void:
 	if _in_battle():
-		held_facilities.append([title, lines])  # (étape C) montrée après le combat
+		held_facilities.append([title, lines, building])  # (étape C) montrée après le combat
 		return
 	Settings.vibrate(150)
 	HubCity3D.paused = true
@@ -401,6 +412,11 @@ func _show_facility_completed(title: String, lines: Array) -> void:
 		if go_to_hub and GameData.tutorial_step == "":  # pas pendant le tutoriel (onglets fermés)
 			show_screen("hub")
 		_show_next_tip()  # un conseil attendait peut-être la fermeture (premier bâtiment)
+	if not building:
+		var ok := UI.make_button("OK", func(): close.call(false), 24)
+		ok.custom_minimum_size.y = 80
+		box.add_child(ok)
+		return
 	var see := UI.make_button("Voir dans la cité", func(): close.call(true), 24)
 	see.custom_minimum_size.y = 80
 	box.add_child(see)

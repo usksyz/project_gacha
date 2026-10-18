@@ -310,6 +310,8 @@ func _replan() -> void:
 		var score: float = PersonalityEngine.axis(hero["source"], "AUD") + hero["level"] * 0.1
 		if GameData.has_trait(hero["source"], "Meneur"):
 			score += 1000.0
+		if hero["id"] == battle.team_leader_id:
+			score += 2000.0  # (phase 1.3) le chef désigné par le Maître mène, s'il tient debout
 		if roles.get(hero["id"], "") == "solitaire":
 			score -= 500.0
 		if score > best_score:
@@ -374,6 +376,8 @@ func _role_of(hero: Dictionary) -> String:
 	if not hero["person"]:
 		return "suit"
 	var source: Dictionary = hero["source"]
+	if GameData.is_disoriented(source):
+		return "prudent"  # (octobre 2026) déboussolé : il reste en retrait (l'œuvre, Aaron au début)
 	var audacity: int = PersonalityEngine.axis(source, "AUD")
 	if PersonalityEngine.axis(source, "LOY") <= -GameData.LONER_LOY \
 			or (audacity >= GameData.LONER_AUD and PersonalityEngine.axis(source, "EMP") <= 0):

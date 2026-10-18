@@ -110,7 +110,10 @@ const TIER_BONUS_LEVELS := 2
 ## {étage: [monstres au moins, sortes de monstres au moins]}. Étage 1 : gobelins et loups noirs ; dès
 ## l'étage 2, les archers squelettes. Avant : 2 gobelins à l'étage 1. À partir de l'étage 5, la formule
 ## normale (déjà assez dure). Chiffres réglés par simulation (voir CLAUDE.md, « Tour »).
-const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [6, 3], 3: [6, 3], 4: [6, 3]}
+## (octobre 2026, analyse du projet : une équipe réaliste perdait 1 combat sur 3 dès l'étage 2) étages 2 à 4 : 5
+## monstres au lieu de 6 (équipe réaliste 71 / 62 / 68 % → 90 / 74 / 74 % ; sans archers à l'étage 2 : 100 %,
+## trop facile). Voir docs/mesures.md, « Octobre 2026 ».
+const EARLY_FLOOR_ENEMIES := {1: [5, 2], 2: [5, 3], 3: [5, 3], 4: [5, 3]}
 
 ## Les ennemis prennent des forces à chaque niveau (0.08 = +8 % par niveau).
 const ENEMY_BONUS_PER_LEVEL := 0.08
@@ -229,7 +232,8 @@ const BARRAGE_STAMINA_COST := 10.0
 # emporte jusqu'à POTIONS_PER_MISSION de l'entrepôt (POTION, items.gd) et rend celles qu'elle n'a pas bues.
 # Un immortel du mode dev passe aussi par l'agonie, mais reste « à terre » au lieu de mourir.
 const AGONY_SECONDS := 8.0
-const AGONY_HELP_RANGE := 8.0
+const AGONY_HELP_RANGE := 12.0
+const AGONY_SAFE_RADIUS := 2.5
 const AGONY_ALLY_RANGE := 1.5
 const AGONY_RESCUE_SECONDS := 3.0
 # Arme plantée (œuvre, ch. 11 : Jenna laisse la lame dans la plaie de Zid, qui se viderait de son sang si on
@@ -252,6 +256,19 @@ const POTIONS_PER_MISSION := 3
 # (Un héros à l'agonie passe avant.)
 const CARE_SECONDS := 3.0
 const CARE_HELP_RANGE := 6.0
+
+# --- Cohésion de l'équipe (ajout du projet, demande du porteur du projet, octobre 2026 : « un héros part au combat,
+# personne ne va l'aider, il tombe et personne pour le réanimer » ; avant, AGONY_HELP_RANGE valait 8 cases) ---
+# Un héros au contact d'un ennemi crie : les alliés à moins de HERO_SHOUT_RANGE cases apprennent ce qu'il voit (en plus de
+# la voix ordinaire, VOICE_RANGE). Un allié qui se bat sans personne à moins de COHESION_NEAR cases de lui : un héros
+# libre à moins de LONELY_HELP_RANGE cases va l'aider, même si l'ennemi est loin de lui (BattleTactics). Un héros
+# (pas solitaire) qui se retrouve sans allié debout à moins de COHESION_LEASH cases, sans ennemi au contact, rejoint
+# l'allié le plus proche (attitude « regrouper »). Un héros à l'agonie appelle : l'allié libre le plus proche, à
+# moins de AGONY_HELP_RANGE cases, court le relever.
+const HERO_SHOUT_RANGE := 10.0
+const COHESION_NEAR := 5.0
+const LONELY_HELP_RANGE := 12.0
+const COHESION_LEASH := 7.0
 
 # --- Perception en bâtonnets (cahier, « Combat v2 », section 4 ; étape C3) ---
 # Chaque combattant voit par un éventail de SIGHT_RAYS bâtonnets (rayons) sur SIGHT_ANGLE degrés vers l'avant,
@@ -992,6 +1009,14 @@ func learn_from_battle(hero: Dictionary, fighter: Dictionary, battle: Battle) ->
 ## - un étage déjà conquis (rejoué pour entraîner une équipe) donne moins d'expérience et d'or,
 ##   pas de gemmes, et ne fait pas monter dans la Tour.
 func finish_tower_battle(battle: Battle) -> Dictionary:
+	# (octobre 2026) sauvegarde plus légère : les sauvegardes de la fin du combat (4 environ) n'en font plus qu'une.
+	hold_saves()
+	var report := _finish_tower_battle(battle)
+	release_saves()
+	return report
+
+
+func _finish_tower_battle(battle: Battle) -> Dictionary:
 	var floor_number: int = pending_battle.get("floor", tower_floor)
 	var replay := floor_number < tower_floor
 	pending_battle = {}  # le combat est terminé (la sauvegarde est réécrite plus bas)
@@ -1055,6 +1080,9 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 				report["items"].append({"name": PROMOTION_STONE, "grade": "F", "count": BOSS_STONES})
 			for item in report["items"]:
 				add_material(item["name"], item["grade"], item["count"])
+		# (octobre 2026) l'administrateur (reconversion, training.gd) fait rentrer plus d'or
+		rewards["gold"] = roundi(rewards["gold"] * admin_gold_factor())
+		report["gold"] = rewards["gold"]
 		add_gold(rewards["gold"])
 		add_gems(rewards["gems"])
 	else:
@@ -1132,6 +1160,9 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 		report["potions"] = "Potions de soin utilisées : %d (il en reste %d dans l'entrepôt)." \
 			% [battle.potions_used, material_count(POTION)]
 	tidy_arsenal()  # armes des morts perdues, les autres reposent les leurs (et la partie est sauvegardée)
+	complete_daily_mission("combat")  # (octobre 2026) mission du jour, victoire ou défaite
+	# (octobre 2026) un déboussolé qui a survécu à un combat décide de survivre (personality.gd)
+	end_disorientation_all(battle.heroes.map(func(fighter): return fighter["source"]), " : il a survécu à un combat")
 	return report
 
 
@@ -1146,3 +1177,95 @@ func berserk_preview(hero: Dictionary) -> Array:
 		var base: int = hero["stats"][stat]
 		rows.append([STAT_NAMES[stat], maxi(1, base + changes[stat]), base])
 	return rows
+
+
+# ---------------------------------------------------------------------------
+# Suggestions de formation (phase 1.3)
+# ---------------------------------------------------------------------------
+# Feuille de route v2 : « un héros peut suggérer une formation » ; fenêtre de l'œuvre « Le héros X vous suggère
+# une formation ! » avec les cartes des équipes proposées, Oui / Non. Ici (tower.gd, pour lire les armes) : un héros
+# qui a fait au moins FORMATION_MIN_FIGHTS combats et qui est chef d'équipe, Meneur, ou a assez confiance en le
+# Maître (FORMATION_MIN_TRUST) propose une composition pour son équipe (celle qu'il mène, sinon la sienne, sinon la
+# première) : lui, puis de quoi couvrir les trois portées, puis les plus forts, en évitant ses hostiles et en
+# préférant ses amis. Seuls les héros sans équipe ou déjà dans celle-ci sont proposés (on ne défait pas les autres).
+# La demande passe par les demandes des héros (personality.gd). Chiffres provisoires.
+const FORMATION_MIN_FIGHTS := 8
+const FORMATION_MIN_TRUST := 10.0
+
+
+## La portée d'un héros d'après son arme : « courte », « moyenne » ou « longue » (comme Battle.range_band).
+func hero_band(hero: Dictionary) -> String:
+	if uses_magic(hero):
+		return "longue"
+	var weapon := fighting_weapon(hero)
+	return WEAPON_TYPES.get(weapon.get("type", ""), {}).get("band", "courte")
+
+
+## La composition qu'un héros proposerait pour l'équipe « index » (numéros des héros, lui en premier).
+func suggest_formation(hero: Dictionary, index: int) -> Array:
+	var candidates: Array[Dictionary] = []
+	for other in alive_heroes():
+		if other["id"] == hero["id"] or is_away(other) or bond_level(hero, other) == BOND_HOSTILE:
+			continue
+		var elsewhere := false
+		for i in TEAM_COUNT:
+			if i != index and other["id"] in teams[i]:
+				elsewhere = true
+		if not elsewhere:
+			candidates.append(other)
+	var score := func(other: Dictionary) -> float:
+		return other["level"] + other["rarity"] * 2.0 + (3.0 if bond_level(hero, other) >= BOND_FRIEND else 0.0)
+	candidates.sort_custom(func(a, b): return score.call(a) > score.call(b))
+	var chosen: Array[Dictionary] = [hero]
+	for band in ["courte", "longue", "moyenne"]:
+		if chosen.size() >= TEAM_SIZE or chosen.any(func(h): return hero_band(h) == band):
+			continue
+		for other in candidates:
+			if not other in chosen and hero_band(other) == band:
+				chosen.append(other)
+				break
+	for other in candidates:
+		if chosen.size() >= TEAM_SIZE:
+			break
+		if not other in chosen:
+			chosen.append(other)
+	return chosen.map(func(h): return h["id"])
+
+
+## (remplace celle de personality.gd) Une suggestion de formation à ajouter aux demandes possibles : [poids, demande].
+func _formation_request() -> Array:
+	var best: Dictionary = {}
+	var best_score := 0.0
+	var best_team := 0
+	for hero in alive_heroes():
+		if is_away(hero) or hero.get("fights", 0) < FORMATION_MIN_FIGHTS \
+				or pending_requests.any(func(r): return r["hero"] == hero["id"]):
+			continue
+		var led := -1
+		var own := -1
+		for index in TEAM_COUNT:
+			if team_leader(index).get("id", -1) == hero["id"]:
+				led = index
+			if hero["id"] in teams[index] and own < 0:
+				own = index
+		var hero_score := 0.0
+		if led >= 0:
+			hero_score += 3.0
+		if has_trait(hero, "Meneur"):
+			hero_score += 2.0
+		if PersonalityEngine.trust(hero) >= FORMATION_MIN_TRUST:
+			hero_score += 1.0
+		if hero_score > best_score:
+			best = hero
+			best_score = hero_score
+			best_team = led if led >= 0 else (own if own >= 0 else 0)
+	if best.is_empty():
+		return []
+	var ids := suggest_formation(best, best_team)
+	var current: Array = teams[best_team].duplicate()
+	if ids.size() < 2 or (ids.size() == current.size() and ids.all(func(id): return id in current)):
+		return []  # rien à proposer de neuf
+	return [best_score * 0.3, {"kind": "formation", "hero": best["id"], "team": best_team, "ids": ids,
+		"reason": "suggère une formation : %d combats, chef %s, Meneur %s, confiance %+.0f" % [best.get("fights", 0),
+			"oui" if team_leader(best_team).get("id", -1) == best["id"] else "non",
+			"oui" if has_trait(best, "Meneur") else "non", PersonalityEngine.trust(best)]}]

@@ -116,3 +116,15 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Reste plus tard : autres fusions (Âme de l'épée...), rangs de compétence, formations entraînées par une
   IA dans la salle d'opération.
   Mesures (rage d'éveil) : copiées dans `docs/mesures.md` (« Héros »).
+- Trois compétences de l'œuvre (octobre 2026, analyse du projet ; mécaniques de Pick Me Up, chiffres provisoires dans
+  `heroes.gd`, conditions de caractère dans `personality_data.gd`). Acquisition et usage séparés :
+  - Mouvement secret (provocation, active ponctuelle) : s'acquiert en combat en couvrant un allié (formation
+    « couvrir », chance `SECRET_MOVE_LEARN_CHANCE`), avec Empathie, Loyauté ou Sens du devoir à 3 ou plus ; s'utilise
+    quand un allié à moins de 5 cases tombe sous 40 % de ses PV : les monstres à moins de 4 cases le visent pendant
+    4 s (+0,5 s par niveau), +10 % d'esquive, puis 20 s d'attente. Un Guerrier la perd en changeant de classe (comme Han).
+  - Trouver les faiblesses (passive conditionnelle) : s'acquiert après 3 coups critiques dans un combat (chance 15 %),
+    Acuité 2 ou plus, ou Foi -2 ou moins ; après 2 coups sur la même cible, +15 % de critiques contre elle (+2 % par
+    niveau). Jenna arrive avec.
+  - Sauvagerie (passive) : compétence exclusive, s'acquiert en se battant sous 35 % de ses PV (chance 20 %), Colère 5
+    ou plus ; dégâts +30 % au plus à mesure que ses PV baissent (+3 % par niveau), +10 % de plus s'il saigne.
+  Un instructeur peut transmettre Mouvement secret et Trouver les faiblesses (voir `docs/lobby.md`, « Reconversion »).

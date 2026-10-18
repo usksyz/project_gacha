@@ -482,3 +482,31 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   zone d'un mage HÉROS éclabousse les alliés près de sa cible (`_splash` : `FRIENDLY_SPLASH` 25 % de son attaque, moins
   la résistance, jamais mis à terre ; ajout du projet) ; la dague de secours d'un archer profite de Maîtrise de la dague,
   qui progresse coup par coup (`dagger_hits`, 50 par niveau). Sans mage héros, combats identiques (sim_tower, 8 séries).
+- Cohésion de l'équipe (octobre 2026, demande du porteur du projet : « les héros explorent puis restent figés au
+  départ, un seul part au combat, personne ne va l'aider, il tombe et personne ne le réanime » ; ajouts du projet,
+  réglages dans `tower.gd`, bloc « Cohésion de l'équipe ») :
+  - cri : un héros au contact d'un ennemi fait savoir ce qu'il voit aux alliés à moins de `HERO_SHOUT_RANGE` (10)
+    cases (`battle_perception.gd`, `_learn`) ;
+  - aide : un héros libre va aider un allié au contact à moins de `LONELY_HELP_RANGE` (12) cases, d'abord celui qui se
+    bat seul (personne à moins de `COHESION_NEAR` cases), même si l'ennemi est loin de lui (`battle_tactics.gd`,
+    `_lonely_fight`) ; avant, « trop loin : attendre » passait avant l'aide ; un solitaire n'y va pas ;
+  - regroupement : un héros (pas solitaire) sans allié debout à moins de `COHESION_LEASH` (7) cases et sans ennemi
+    connu rejoint l'allié le plus proche (attitude « regrouper », « rejoint l'équipe ») ;
+  - secours : un héros à l'agonie est relevé de plus loin (`AGONY_HELP_RANGE` 8 → 12 cases), mais pas sous les coups :
+    personne n'y va tant qu'un ennemi debout est à moins de `AGONY_SAFE_RADIUS` (2,5) cases de lui
+    (`battle_care.gd`, `_assign_helpers` ; sans cette règle, les sauveteurs couraient dans la mêlée : -20 points de
+    victoires à l'étage 2).
+  Écartés après mesure (`docs/mesures.md`, « Octobre 2026 ») : une vue plus longue (6 → 8,5 cases : moins de
+  victoires, les héros s'éparpillent davantage) ; une carte plus grande (rangées écrites à la main, et plus de place
+  veut dire plus d'isolement) ; le relief existe déjà dès l'étage 3. Mesure `sim_tower` « cohesion » : secondes par
+  combat où un héros est isolé, spectateur (ennemi connu, rien à faire), à l'agonie sans allié à portée.
+- Phase 1.3, équipes (octobre 2026 ; feuille de route v2, prompt 1.3) : de 1 à 5 héros (déjà le cas) ; nom modifiable
+  et chef désigné par le Maître (page « Composition des équipes » ; `team_info`, `heroes.gd`, « Chefs et noms
+  d'équipe » ; fenêtre « X a été sélectionné comme chef d'équipe. ») ; en combat, `Battle.team_index` (l'équipe qui
+  correspond aux héros engagés, `team_index_of`) et `team_leader_id` : le chef mène l'exploration. Suggestion de
+  formation (`tower.gd`, « Suggestions de formation ») : une demande « Le héros X vous suggère une formation ! » avec
+  les cartes des héros proposés (voir `docs/personnalite.md`, demandes) ; accepter : +5 de confiance, refuser : -2.
+  Volontaire accepté (« X souhaite rejoindre l'équipe ») : `hero["volunteer_team"]`, +5 % d'attaque dans cette équipe
+  (`VOLUNTEER_BONUS`, `_formation_attack`). Écart de niveau : un héros à `LEVEL_GAP_STRESS` (5) niveaux ou plus sous
+  le plus fort de l'équipe perd `MENTAL_LOSS_LEVEL_GAP` (3) de santé mentale au début du combat (stress « level_gap »).
+  Mode dev : « Suggestion de formation » (Vie de la cité). Banc : `tools/test_ameliorations.gd`.

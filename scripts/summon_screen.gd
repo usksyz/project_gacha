@@ -22,6 +22,8 @@ var roster_label: Label
 ## « Invocation gratuite » : une invocation normale x1 offerte par jour (GameData.free_summon), visible tant
 ## qu'elle n'est pas prise.
 var free_button: Button
+## (octobre 2026) Les missions du jour et leurs gemmes (GameData.daily_mission_list), cochées une fois faites.
+var missions_label: Label
 var results_grid: GridContainer
 var group_box: VBoxContainer
 ## Boutons d'invocation : [sorte, nombre, bouton], pour les griser quand on ne peut pas payer.
@@ -116,6 +118,11 @@ func _refresh_labels() -> void:
 	if GameData.free_hero_slots() == 0:
 		roster_label.text += " — résidences pleines"
 	free_button.visible = GameData.free_summon_available()
+	var mission_lines := ["Missions du jour (+%d gemmes si toutes faites) :" % GameData.DAILY_MISSIONS_BONUS]
+	for mission in GameData.daily_mission_list():
+		mission_lines.append("%s %s : %d gemmes" % ["[fait]" if mission["done"] else "[à faire]", mission["text"], mission["gems"]])
+	missions_label.text = "\n".join(mission_lines)
+	missions_label.visible = GameData.tutorial_step == ""
 	free_button.disabled = GameData.free_hero_slots() < 1
 	for entry in summon_buttons:
 		# On ne peut invoquer que si l'on peut payer ET s'il reste assez de place dans les résidences.
@@ -183,6 +190,10 @@ func _build_ui() -> void:
 	free_button = UI.make_button("Invocation gratuite (une par jour)", _on_free_summon, 24)
 	free_button.custom_minimum_size.y = 72
 	layout.add_child(free_button)
+
+	missions_label = UI.make_label("", 18)
+	missions_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	layout.add_child(missions_label)
 
 	if Settings.new_visuals:
 		_add_illustrated_summons(layout)

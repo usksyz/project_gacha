@@ -79,10 +79,14 @@ func _ready() -> void:
 		GameData.dev_reset_free_summon()
 		if GameData.tutorial_step != "":
 			return "L'invocation gratuite du jour est rendue (elle n'apparaît qu'après le tutoriel)."
-		return "L'invocation gratuite du jour est rendue (écran Invocation)."]])
+		return "L'invocation gratuite du jour est rendue (écran Invocation)."],
+		["Missions du jour à refaire", func():
+			GameData.dev_reset_daily_missions()
+			return "Les missions du jour sont de nouveau à faire (combat, invocation ou armes, entraînement)."]])
 
 	_add_section(content, "Vie de la cité")
 	_add_row(content, [["Une demande maintenant", func(): return GameData.dev_force_request()],
+		["Suggestion de formation", func(): return GameData.dev_formation_request()],
 		["Rapport du jour à revoir", func():
 			GameData.dev_reset_daily_report()
 			return "Le rapport de la fée s'affichera (fenêtre à la fermeture des outils)."]])
