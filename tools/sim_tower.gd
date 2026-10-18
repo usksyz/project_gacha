@@ -3,9 +3,16 @@ extends Node
 ## Lancer (la scène charge GameData, donc la sauvegarde locale : en faire une copie avant, et la remettre
 ## après, car GameData peut la réécrire au lancement) :
 ##   Godot --headless --path . res://tools/sim_tower.tscn -- etages=1,2,3,4 combats=200 equipe=brute graine=1
-## « equipe » : brute (équipe du tutoriel, 3★ + 2★ + 3 x 1★, au niveau des monstres de l'étage) ou preparee
-## (2 niveaux de plus, épée et bouclier de grade D, arc D pour les archers).
-## « niveau » : niveau imposé à toute l'équipe (sinon celui des monstres, +2 pour la préparée).
+## « equipe » (toujours 3★ + 2★ + 3 x 1★, l'équipe du tutoriel) :
+##   brute : au niveau des monstres de l'étage, sans arme ;
+##   preparee : 2 niveaux de plus, épée et bouclier de grade D, arc D pour les archers (ancienne référence) ;
+##   (ajouts du projet, définitions du Sommaire du cahier des charges, voir docs/mesures.md « Équipes de référence ») :
+##   non_preparee : 2 niveaux sous les monstres, épée et bouclier ou arc F ;
+##   cahier : au niveau des monstres, épée et bouclier ou arc D (« préparée » au sens du Sommaire) ;
+##   realiste : ce qu'un joueur a vraiment en arrivant à l'étage (estimation) : l'expérience des étages d'avant
+##     gagnés une fois, plus REALISTIC_REPLAYS rejoués (à moitié prix), le tirage x10 du tutoriel et un tirage
+##     d'arme par WEAPON_DRAW_COST d'or gagné, armes rangées comme en jeu (GameData.gear_up).
+## « niveau » : niveau imposé à toute l'équipe (sinon celui de l'équipe choisie).
 ## « meneur » : libre (traits du tirage), avec (un héros de l'équipe est Meneur, les autres non) ou sans
 ## (aucun Meneur) : pour comparer à équipe égale ce que fait le Meneur.
 ## « maitre » : non (aucun ordre) ou oui (Maître simulé, simpliste : au début, chaque tireur monte sur la
@@ -33,11 +40,23 @@ const BLOCK_SECONDS := 2.0
 ## « cobaye » : la place du héros testé dans l'équipe (0 : 3 étoiles, 1 : 2 étoiles, 2 à 4 : 1 étoile).
 const COBAYE_SLOT := 2
 const BLOCK_DISTANCE := 0.3
+## Équipe « realiste » : étages rejoués (à REPLAY_XP_RATE de l'expérience) pour chaque étage gagné, en moyenne.
+const REALISTIC_REPLAYS := 1.0
+## Équipes de référence : écart de niveau avec les monstres et grade des armes (vide : sans arme).
+const TEAM_KINDS := {"brute": [0, ""], "preparee": [2, "D"], "non_preparee": [-2, "F"], "cahier": [0, "D"],
+	"realiste": [0, ""]}
 
 var _args := {}
 var _generator = null  # MapGenerator (code C1 et après), sinon null
 ## Numéro → dernier moment où il attendait derrière quelqu'un d'immobile (code C1 et après).
 var _waited := {}
+## Cohésion de l'équipe (demande du porteur du projet : héros figés pendant qu'un allié se bat seul, personne pour le
+## relever), en secondes cumulées sur tous les combats d'un étage : « isole » (un héros au contact d'un ennemi sans
+## aucun allié debout à moins de COHESION_NEAR cases), « spectateur » (un héros debout, libre, sans bouger ni frapper
+## alors qu'un allié se bat), « agonie_seul » (un héros à l'agonie sans allié debout à moins de AGONY_HELP_RANGE).
+var _cohesion := {"isole": 0.0, "spectateur": 0.0, "agonie_seul": 0.0, "morts_agonie": 0}
+var _last_pos := {}
+const COHESION_NEAR := 5.0
 ## « diag=oui » : pas passés dans chaque attitude de l'IA tactique (héros debout), tous combats d'un étage.
 var _diag := {}
 
@@ -58,7 +77,11 @@ func _ready() -> void:
 		PersonalityEngine.effects_on = false
 	Settings.dev_mode = false  # (pas enregistré)
 	GameData.roster.clear()    # lobby vide : le tirage diversifiant ne compare pas les héros à ceux de la sauvegarde
-	var prepared: bool = args["equipe"] == "preparee"
+	var team_kind: String = args["equipe"]
+	if not TEAM_KINDS.has(team_kind):
+		push_error("equipe inconnue : %s (%s)" % [team_kind, ", ".join(TEAM_KINDS.keys())])
+		get_tree().quit(1)
+		return
 	var master: bool = args["maitre"] == "oui"
 	for floor_text in args["etages"].split(","):
 		var floor_number := int(floor_text)
@@ -82,7 +105,10 @@ func _ready() -> void:
 			GameData.warehouse = {}
 			if int(args["potions"]) > 0:
 				GameData.warehouse[GameData.POTION] = {"F": int(args["potions"])}
-			var team := _make_team(floor_number, prepared, args["meneur"])
+			var team := _make_team(floor_number, team_kind, args["meneur"])
+			if i == 0:
+				print("EQUIPE %s etage=%d niveaux=%s monstres=%d" % [team_kind, floor_number,
+					str(team.map(func(h): return h["level"])), GameData.floor_enemy_level(floor_number)])
 			var present := {}
 			for hero in team:
 				for trait_name in TRAIT_NAMES:
@@ -167,6 +193,15 @@ func _ready() -> void:
 			stealth[2] / float(count)])
 		print("  liens par combat : ami couvert %.2f, appât %.2f, abandon %.2f, coups à revers %.2f" % [ties["couvert"] / float(count),
 			ties["appat"] / float(count), ties["abandon"] / float(count), ties["revers"] / float(count)])
+		print("  cohesion par combat : isole %.1f s, spectateur %.1f s, agonie sans allie a portee %.1f s, morts d'agonie %.2f" % [
+			_cohesion["isole"] / count, _cohesion["spectateur"] / count, _cohesion["agonie_seul"] / count,
+			_cohesion["morts_agonie"] / float(count)])
+		var detail := []
+		for key in _cohesion:
+			if key.begins_with("isole_") or key.begins_with("spect_"):
+				detail.append("%s %.1f" % [key, _cohesion[key] / count])
+		print("  cohesion detail : " + ", ".join(detail))
+		_cohesion = {"isole": 0.0, "spectateur": 0.0, "agonie_seul": 0.0, "morts_agonie": 0}
 		for dispo in by_dispo:
 			var entry: Array = by_dispo[dispo]
 			print("  disposition %s : %d combats, victoires %.1f%%, alarme générale %.0f%%, durée moyenne %.0f s" % [dispo, entry[0],
@@ -205,6 +240,7 @@ func _play(battle: Battle, master: bool, number := 0) -> Dictionary:
 	var stuck := {}     # numéro → vrai pendant un blocage déjà compté
 	var swapped := {}   # numéro → moment du dernier échange ordonné
 	_waited.clear()
+	_last_pos.clear()
 	var result := {"blocked": {"sans raison": 0, "foule": 0, "escalade": 0}, "examples": []}
 	if master:
 		_master_heights(battle)
@@ -216,6 +252,7 @@ func _play(battle: Battle, master: bool, number := 0) -> Dictionary:
 			timers[unit["id"]] = unit["path_timer"]
 		battle.step()
 		_trace(battle, number)
+		_measure_cohesion(battle)
 		# « diag=oui » (C3) : part du temps de chaque attitude de l'IA tactique, pour les héros debout.
 		if _args.get("diag", "") == "oui":
 			for hero in battle.heroes:
@@ -293,9 +330,13 @@ func _is_dead(fighter: Dictionary) -> bool:
 	return fighter.get("killer", "") != "" and not fighter["immortal"]
 
 
-func _make_team(floor_number: int, prepared: bool, leader := "libre") -> Array:
+func _make_team(floor_number: int, team_kind: String, leader := "libre") -> Array:
 	var team := []
-	var level := GameData.floor_enemy_level(floor_number) + (2 if prepared else 0)
+	var level: int = GameData.floor_enemy_level(floor_number) + TEAM_KINDS[team_kind][0]
+	var grade: String = TEAM_KINDS[team_kind][1]
+	var realistic := team_kind == "realiste"
+	if realistic:
+		level = _realistic_level(floor_number)
 	if _args.get("niveau", "") != "":
 		level = int(_args["niveau"])  # niveau imposé (les 1 étoile s'arrêtent au niveau 10)
 	var leader_slot := randi() % 5  # « avec » : la place du Meneur dans l'équipe, au hasard
@@ -318,18 +359,53 @@ func _make_team(floor_number: int, prepared: bool, leader := "libre") -> Array:
 			PersonalityEngine.set_tier(hero, "AUD", -6 if smart else 6)
 			PersonalityEngine.set_tier(hero, "MAI", 6 if smart else -6)
 			hero["cobaye"] = true
-		if prepared and not GameData.uses_magic(hero):
+		if grade != "" and not GameData.uses_magic(hero):
 			if hero["class"] == "Archer":
-				_give(hero, "Arc")
+				_give(hero, "Arc", grade)
 			else:
-				_give(hero, "Épée")
-				_give(hero, "Bouclier")
+				_give(hero, "Épée", grade)
+				_give(hero, "Bouclier", grade)
+		# (octobre 2026) Au-delà de l'étage 1, les héros ont déjà survécu à un combat : plus déboussolés.
+		if floor_number > 1:
+			GameData.end_disorientation(hero, "")
 		team.append(hero)
+	if realistic:
+		_realistic_weapons(floor_number)
+		GameData.gear_up(team)
 	return team
 
 
-func _give(hero: Dictionary, type: String) -> void:
-	GameData.arsenal.append({"id": GameData.arsenal.size() + 1, "type": type, "grade": "D", "owner": hero["id"]})
+func _give(hero: Dictionary, type: String, grade := "D") -> void:
+	GameData.arsenal.append({"id": GameData.arsenal.size() + 1, "type": type, "grade": grade, "owner": hero["id"]})
+
+
+## Équipe « realiste » : le niveau qu'auraient des héros du tutoriel (niveau 1) avec l'expérience des étages
+## 1 à floor_number - 1, chacun gagné une fois et rejoué REALISTIC_REPLAYS fois (synthèse et entraînement non
+## comptés : c'est une estimation basse, voir docs/mesures.md).
+func _realistic_level(floor_number: int) -> int:
+	var xp := 0.0
+	for f in range(1, floor_number):
+		xp += GameData.tower_rewards(f)["xp"] * (1.0 + REALISTIC_REPLAYS * GameData.REPLAY_XP_RATE)
+	var level := 1
+	while xp >= GameData.xp_to_next(level):
+		xp -= GameData.xp_to_next(level)
+		level += 1
+	return level
+
+
+## Équipe « realiste » : le tirage x10 du tutoriel (épée, bouclier et arc garantis) et un tirage par
+## WEAPON_DRAW_COST d'or des étages gagnés (tout l'or passe dans les armes), rangés dans l'arsenal (sans porteur).
+func _realistic_weapons(floor_number: int) -> void:
+	var gold := 0
+	for f in range(1, floor_number):
+		gold += GameData.tower_rewards(f)["gold"]
+	var types: Array = GameData.TUTORIAL_WEAPON_TYPES.duplicate()
+	var count := 10 + gold / GameData.WEAPON_DRAW_COST
+	while types.size() < count:
+		types.append(GameData.WEAPON_TYPES.keys().pick_random())
+	for type in types:
+		GameData.arsenal.append({"id": GameData.arsenal.size() + 1, "type": type, "grade": GameData._roll_grade(),
+			"owner": 0})
 
 
 ## Il escalade (un muret, un rocher, une échelle) : il avance, mais lentement (code C1 et après seulement).
@@ -371,6 +447,33 @@ func _crowded(battle: Battle, unit: Dictionary) -> bool:
 
 ## « suivre=12:Gobelin_C de=15 a=20 » : à chaque pas du combat 12 entre 15 et 20 s, l'état de Gobelin C (pour
 ## comprendre un blocage).
+## Cohésion (voir _cohesion), mesurée après chaque pas.
+func _measure_cohesion(battle: Battle) -> void:
+	var standing: Array = battle._alive(battle.heroes)
+	var fighting: Array = standing.filter(func(h): return battle._in_contact(h))
+	for hero in battle.heroes:
+		if hero.get("agony", false):
+			if not standing.any(func(h): return h["pos"].distance_to(hero["pos"]) <= GameData.AGONY_HELP_RANGE):
+				_cohesion["agonie_seul"] += Battle.TICK
+		elif hero["hp"] <= 0 and hero.get("agony_cause", "") != "" and not hero.has("_compte_mort"):
+			hero["_compte_mort"] = true
+			_cohesion["morts_agonie"] += 1
+	for hero in standing:
+		var moved: bool = _last_pos.get(hero["id"], hero["pos"]).distance_to(hero["pos"]) > 0.005
+		_last_pos[hero["id"]] = hero["pos"]
+		if fighting.has(hero):
+			if not standing.any(func(h): return h["id"] != hero["id"] and h["pos"].distance_to(hero["pos"]) <= COHESION_NEAR):
+				_cohesion["isole"] += Battle.TICK
+				var role: String = "isole_" + battle.explore.roles.get(hero["id"], "?")
+				_cohesion[role] = _cohesion.get(role, 0.0) + Battle.TICK
+		elif not fighting.is_empty() and not moved and hero["order"].is_empty() and not hero.get("resting", false) \
+				and hero["cooldown"] <= 0.0 and not battle.panicking(hero):
+			_cohesion["spectateur"] += Battle.TICK
+			var plan: Dictionary = hero.get("tactic", {})
+			var why: String = "spect_" + (plan.get("attitude", "?") if not plan.is_empty() else "ignore")
+			_cohesion[why] = _cohesion.get(why, 0.0) + Battle.TICK
+
+
 func _trace(battle: Battle, number: int) -> void:
 	var wanted: String = _args.get("suivre", "")
 	if wanted == "" or not wanted.begins_with("%d:" % number):
