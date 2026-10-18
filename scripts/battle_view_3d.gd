@@ -93,6 +93,13 @@ const UNSEEN_COLOR := Color("5c5c66")
 const STRIKE_TIME := 0.25
 const FLOAT_TIME := 0.9
 const BUBBLE_TIME := 1.5
+## Brouillard de guerre (cartes, étape 4 ; demande du porteur du projet : « noir là où les héros n'ont jamais vu, puis
+## sombre si ce n'est plus dans leur champ de vision ») : lumière des cases jamais vues et déjà vues, rafraîchie
+## toutes les FOG_REFRESH secondes ; autour d'un héros (FOG_AROUND cases), on voit toujours.
+const FOG_UNSEEN := 0.12
+const FOG_REMEMBERED := 0.5
+const FOG_REFRESH := 0.2
+const FOG_AROUND := 1.6
 
 ## Les formes de base (une MultiMesh opaque et une transparente pour chacune).
 enum Shape {BOX, SPHERE, PRISM, CYLINDER, RAMP}
@@ -124,6 +131,12 @@ var fade_timer := 0.0
 var units_root: Node3D
 var unit_nodes := {}    # numéro → {"root", "body", "head", "shadow", "ring", "halo", "body_mat", "head_mat"}
 var display_y := {}     # numéro → hauteur affichée (glisse vers la vraie quand il monte ou descend)
+## Brouillard de guerre (cartes, étape 4) : la lumière de chaque case (1 : vue en ce moment, FOG_REMEMBERED : déjà vue,
+## FOG_UNSEEN : jamais vue), les cases déjà vues, et le prochain calcul. Pas de brouillard en duel.
+var fog := PackedFloat32Array()
+var seen_ever := PackedByteArray()
+var fog_timer := 0.0
+var fog_on := true
 
 # Gestes.
 var pressing := false
@@ -205,6 +218,14 @@ func _init() -> void:
 func setup(owner_view: BattleView) -> void:
 	view = owner_view
 	battle = owner_view.battle
+	fog_on = not battle.quest.get("duel", false)
+	fog = PackedFloat32Array()
+	fog.resize(battle.map.kinds.size())
+	fog.fill(FOG_UNSEEN if fog_on else 1.0)
+	seen_ever = PackedByteArray()
+	seen_ever.resize(battle.map.kinds.size())
+	seen_ever.fill(0)
+	fog_timer = 0.0
 	_build_map()
 	_build_units()
 	cam_target = Vector3(Battle.GRID_W / 2.0, LEVEL * 0.5, Battle.GRID_H / 2.0)
@@ -543,7 +564,7 @@ func _fill(node: MultiMeshInstance3D, list: Array) -> void:
 	node.multimesh.instance_count = list.size()
 	for i in list.size():
 		node.multimesh.set_instance_transform(i, list[i]["xf"])
-		node.multimesh.set_instance_color(i, list[i]["color"])
+		node.multimesh.set_instance_color(i, _fogged_color(list[i]))
 
 
 # ---------------------------------------------------------------------------
@@ -649,7 +670,8 @@ func _update_units(delta: float) -> void:
 	for unit in battle.units:
 		var nodes: Dictionary = unit_nodes[unit["id"]]
 		var root: Node3D = nodes["root"]
-		var shown: bool = unit["present"] and (unit["hp"] > 0 or unit["is_hero"])
+		# (cartes, étape 4) un monstre que personne ne voit est caché par le brouillard
+		var shown: bool = unit["present"] and (unit["hp"] > 0 or unit["is_hero"]) and not fogged(unit)
 		root.visible = shown
 		nodes["shadow"].visible = shown
 		if not shown:
@@ -801,7 +823,7 @@ func unit_at_screen(view_point: Vector2) -> Dictionary:
 	var result := {}
 	var best := TAP_RADIUS_PX * ZOOM_DEFAULT / zoom
 	for unit in battle.units:
-		if not unit["present"] or unit["hp"] <= 0:
+		if not unit["present"] or unit["hp"] <= 0 or fogged(unit):
 			continue
 		var center := unit_feet(unit) + Vector3(0, BODY_HEIGHT * 0.6, 0)
 		var distance := project(center).distance_to(view_point)
@@ -876,6 +898,73 @@ func _update_fade(delta: float) -> void:
 
 
 # ---------------------------------------------------------------------------
+# Brouillard de guerre (cartes, étape 4)
+# ---------------------------------------------------------------------------
+
+## La lumière de chaque case : vue en ce moment (parcourue par un bâtonnet d'un héros à la dernière mise à jour de la
+## perception, voir BattleExplore.mark, ou tout près d'un héros), déjà vue, ou jamais vue. La lisière prend la lumière
+## de sa voisine la plus éclairée. Rien ne change dans le combat : ce n'est que l'écran.
+func _update_fog(delta: float) -> void:
+	if not fog_on or battle.explore == null or battle.perception == null:
+		return
+	fog_timer -= delta
+	if fog_timer > 0.0:
+		return
+	fog_timer = FOG_REFRESH
+	var map: BattleMap = battle.map
+	var explored: PackedFloat32Array = battle.explore.explored
+	var now: float = battle.perception.updated_at - 0.05
+	var heroes: Array = battle._alive(battle.heroes)
+	var next := PackedFloat32Array()
+	next.resize(fog.size())
+	for i in fog.size():
+		var cell := map.cell_at(i)
+		var visible: bool = explored[i] >= now
+		if not visible:
+			var center := BattleMap.center(cell)
+			visible = heroes.any(func(h): return h["pos"].distance_to(center) <= FOG_AROUND)
+		if visible:
+			seen_ever[i] = 1
+		next[i] = 1.0 if visible else (FOG_REMEMBERED if seen_ever[i] == 1 else FOG_UNSEEN)
+	if battle.map_data.get("version", 1) >= 2:
+		for i in fog.size():
+			var cell := map.cell_at(i)
+			if MapGenerator.inside(cell):
+				continue
+			var light := FOG_UNSEEN
+			for d in BattleMap.DIRECTIONS:
+				var other: Vector2i = cell + d
+				if map.in_bounds(other) and MapGenerator.inside(other):
+					light = maxf(light, next[map.index(other)])
+			next[i] = light
+	if next != fog:
+		fog = next
+		_fill_multimeshes()
+
+
+## La couleur d'une pièce du décor, assombrie par le brouillard de sa case.
+func _fogged_color(part: Dictionary) -> Color:
+	var color: Color = part["color"]
+	if fog.is_empty():
+		return color
+	var light: float = fog[battle.map.index(part["cell"])]
+	return Color(color.r * light, color.g * light, color.b * light, color.a)
+
+
+## Un monstre caché par le brouillard : aucun héros ne le voit ni ne l'entend (le mode dev le montre, grisé).
+func fogged(unit: Dictionary) -> bool:
+	return fog_on and not unit["is_hero"] and not Settings.dev_mode and view.unseen(unit)
+
+
+## Une case que les héros ont déjà vue (ou pas de brouillard).
+func seen_cell(pos: Vector2) -> bool:
+	if not fog_on or seen_ever.is_empty():
+		return true
+	var cell := battle.map.cell_of(pos)
+	return seen_ever[battle.map.index(cell)] == 1
+
+
+# ---------------------------------------------------------------------------
 # Chaque image
 # ---------------------------------------------------------------------------
 
@@ -890,6 +979,7 @@ func _process(delta: float) -> void:
 		_update_camera()
 	_update_units(delta)
 	_update_fade(delta)
+	_update_fog(delta)
 	# (mode dev ; l'option « Performances » des paramètres montre tout cela, et plus, sur tous les écrans)
 	fps_label.visible = Settings.dev_mode and not Settings.show_perf
 	if fps_label.visible:
@@ -908,7 +998,7 @@ func _draw_overlay() -> void:
 	var heads := {}   # numéro → point au-dessus de la tête, à l'écran
 	var bodies := {}  # numéro → milieu du corps, à l'écran
 	for unit in battle.units:
-		if not unit["present"]:
+		if not unit["present"] or fogged(unit):
 			continue
 		var feet := unit_feet(unit)
 		var big := BOSS_SCALE if unit["boss"] else 1.0
@@ -928,6 +1018,8 @@ func _draw_overlay() -> void:
 	if battle.alert != null:
 		for corpse in battle.alert.corpses:
 			var spot: Vector2 = corpse["pos"]
+			if not seen_cell(spot):
+				continue  # (dans le brouillard : jamais vu)
 			overlay.draw_circle(project(Vector3(spot.x, _surface_at(spot) + 0.03, spot.y)), 5.0 * k,
 				BattleView.CORPSE_FOUND_COLOR if corpse["found"] else BattleView.CORPSE_COLOR)
 	_draw_orders(bodies, k)

@@ -122,6 +122,7 @@ func _capture() -> void:
 		view.selected_id = battle.heroes[chosen]["id"]
 		view._update_hint()
 	view3d.fade_timer = 0.0
+	view3d.fog_timer = 0.0  # (cartes, étape 4 : le brouillard recalculé pour l'image)
 	# « cache=oui » : le héros choisi est posé d'office là où un bâtiment le cache à la caméra (pour voir les murs
 	# et toits devenir transparents).
 	await _frames(5)  # (l'écran 3D doit avoir pris sa taille avant de projeter quoi que ce soit)
