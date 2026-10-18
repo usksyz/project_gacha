@@ -76,6 +76,7 @@ func _ready() -> void:
 		var cobaye := [0, 0, 0.0]  # le héros testé : morts, mis à terre (agonie, mort), part de vie à la fin (total)
 		var by_dispo := {}  # (étape E) {disposition: [combats, victoires, alarmes générales, durée totale]}
 		var stealth := [0, 0, 0]  # (étape E, point 3) assassinats, pièges posés, pièges déclenchés
+		var ties := {"couvert": 0, "appat": 0, "abandon": 0, "revers": 0}  # (étape E, point 4)
 		for i in count:
 			GameData.arsenal = []
 			GameData.warehouse = {}
@@ -127,6 +128,9 @@ func _ready() -> void:
 				stealth[0] += battle.assassinations
 				stealth[1] += battle.traps_placed
 				stealth[2] += battle.traps_sprung
+			if battle.get("ties") != null:
+				for kind in ties:
+					ties[kind] += battle.ties.counts[kind]
 			usec += Time.get_ticks_usec() - started
 			for kind in blocked:
 				blocked[kind] += result["blocked"][kind]
@@ -161,6 +165,8 @@ func _ready() -> void:
 		print("  surprises par combat : subies par les héros %.1f, par les ennemis %.1f" % [surprised[0] / float(count), surprised[1] / float(count)])
 		print("  par combat : assassinats %.2f, pièges posés %.2f, déclenchés %.2f" % [stealth[0] / float(count), stealth[1] / float(count),
 			stealth[2] / float(count)])
+		print("  liens par combat : ami couvert %.2f, appât %.2f, abandon %.2f, coups à revers %.2f" % [ties["couvert"] / float(count),
+			ties["appat"] / float(count), ties["abandon"] / float(count), ties["revers"] / float(count)])
 		for dispo in by_dispo:
 			var entry: Array = by_dispo[dispo]
 			print("  disposition %s : %d combats, victoires %.1f%%, alarme générale %.0f%%, durée moyenne %.0f s" % [dispo, entry[0],

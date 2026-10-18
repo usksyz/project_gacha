@@ -25,6 +25,7 @@ func _run() -> void:
 	_check_trap()
 	_check_stealth()
 	_check_exploration()
+	_check_ties()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -164,6 +165,48 @@ func _check_exploration() -> void:
 	print("    victoires %d / 12, assassinats %d" % [wins, assassinations])
 	_check(explored_at_end >= 8, "l'équipe part explorer (%d combats sur 12 ; sinon elle voit l'ennemi dès le départ)" % explored_at_end)
 	_check(wins >= 6, "une équipe préparée gagne la plupart des combats (%d / 12)" % wins)
+
+
+## Point 4 : protéger un ami, à revers (l'appât), abandonner un allié ; et ce que ça change aux liens.
+func _check_ties() -> void:
+	print("Liens et caractère")
+	var battle = _battle(3, "camp", 26)
+	var guardian: Dictionary = battle.heroes[0]
+	var ward: Dictionary = battle.heroes[1]
+	var monster: Dictionary = battle.enemies.filter(func(e): return e["present"])[0]
+	battle.ties.traits[guardian["id"]]["guard"] = true
+	guardian["bonds"][ward["id"]] = game.BOND_FRIEND
+	ward["hp"] = int(ward["max_hp"] * 0.2)
+	ward["pos"] = Vector2(9.5, 14.5)
+	guardian["pos"] = Vector2(10.5, 14.5)
+	monster["pos"] = Vector2(9.5, 13.5)
+	_check(battle.ties.ward_of(guardian) == ward, "un ami en danger : il va le couvrir")
+	var guard_hp: int = guardian["hp"]
+	battle._damage(monster, ward, 1.0, false, "hit", true)
+	_check(guardian["hp"] < guard_hp and battle.ties.counts["couvert"] == 1, "il prend une part du coup à sa place")
+	# À revers : le monstre s'acharne sur l'allié, un autre héros frappe de l'autre côté.
+	var flanker: Dictionary = battle.heroes[2]
+	monster["target_id"] = ward["id"]
+	flanker["pos"] = monster["pos"] + (monster["pos"] - ward["pos"]).normalized()
+	_check(battle.ties.rear_factor(flanker, monster) == game.REAR_ATTACK_BONUS, "frapper à revers : plus fort")
+	flanker["pos"] = ward["pos"] + Vector2(0.5, 0)
+	_check(battle.ties.rear_factor(flanker, monster) == 1.0, "du même côté que l'allié : pas de bonus")
+	# Abandon : un égoïste lâche en danger pousse l'allié vers le monstre et se replie.
+	var coward: Dictionary = battle.heroes[3]
+	var victim: Dictionary = battle.heroes[4]
+	battle.ties.traits[coward["id"]]["abandoner"] = true
+	coward["hp"] = int(coward["max_hp"] * 0.2)
+	coward["pos"] = Vector2(5.5, 14.5)
+	victim["pos"] = Vector2(6.5, 14.5)
+	monster["pos"] = Vector2(5.5, 13.5)
+	var mental_before: float = victim["mental"]
+	_check(battle.ties.abandon(coward, [monster]), "il abandonne son allié")
+	_check(victim["mental"] < mental_before and monster["target_id"] == victim["id"], "l'allié perd de la santé mentale, le monstre s'en prend à lui")
+	_check(not battle.ties.abandon(coward, [monster]) or coward["abandon_until"] > battle.time, "une seule fois (puis il se replie)")
+	var news: Array = game.ties_after_battle(battle)
+	print("    ", " / ".join(news))
+	_check(game.bond_level(victim["source"], coward["source"]) == game.BOND_HOSTILE, "après le combat : ils sont hostiles")
+	_check(game.bond_points(guardian["source"], ward["source"]) >= game.BOND_POINTS_COVERED, "et le lien de l'ami qui a couvert se renforce")
 
 
 func _check(ok: bool, text: String) -> void:
