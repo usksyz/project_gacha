@@ -24,6 +24,8 @@ func _run() -> void:
 	_check_gauge()
 	_check_wary()
 	_check_freeze()
+	_check_corpses()
+	_check_sound()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -160,6 +162,60 @@ func _check_freeze() -> void:
 	for i in 20:
 		_tick(scene, false)
 	_check(monster["detect"] < before, "loin et immobile, la jauge redescend (%.2f → %.2f)" % [before, monster["detect"]])
+
+
+## Point 2 : un corps devant un monstre (le héros est loin derrière lui, ni vu ni entendu).
+func _corpse_scene(state: String, corpse_at: Vector2, squad := -1) -> Dictionary:
+	var scene := _scene(4.0, state)
+	scene["hero"]["pos"] = Vector2(6.5, 0.5)
+	scene["monster"]["squad"] = squad
+	scene["battle"].alert.corpses.append({"pos": corpse_at, "name": "Gobelin mort", "squad": squad, "t": 0.0,
+		"found": false, "missed": false})
+	return scene
+
+
+func _check_corpses() -> void:
+	print("Corps et compagnons disparus")
+	var scene := _corpse_scene("poste", Vector2(6.5, 7.5))
+	var monster: Dictionary = scene["monster"]
+	_tick(scene, false)
+	var alert = scene["battle"].alert
+	_check(alert.corpses[0]["found"] and monster["state"] == "fouille" and monster["wary"],
+		"un corps à 3 cases devant lui : découvert, il va fouiller, sur ses gardes (%s)" % monster["state"])
+	_check(not alert.alarm, "pas d'alarme générale (ce n'est pas un guetteur)")
+	var behind := _corpse_scene("poste", Vector2(6.5, 1.5))
+	_tick(behind, false)
+	_check(not behind["battle"].alert.corpses[0]["found"], "un corps dans son dos : pas vu")
+	var guard := _corpse_scene("guet", Vector2(6.5, 7.5))
+	guard["monster"]["home_facing"] = Vector2(0, 1)
+	_tick(guard, false)
+	_check(guard["battle"].alert.alarm, "un guetteur qui découvre un corps donne l'alarme")
+	# Un compagnon de patrouille tombé sans bruit, hors de sa vue : au bout de MISSING_SECONDS, il part le chercher.
+	var missing := _corpse_scene("ronde", Vector2(6.5, 1.5), 1)
+	missing["monster"]["route"] = [missing["monster"]["pos"]]
+	var steps := int(game.MISSING_SECONDS / missing["battle"].TICK) - 3
+	for i in steps:
+		_tick(missing, false)
+	var early: String = missing["monster"]["state"]
+	for i in 6:
+		_tick(missing, false)
+	_check(early == "ronde" and missing["monster"]["state"] == "fouille" and missing["battle"].alert.counts["disparus"] == 1,
+		"un compagnon disparu : au bout de %d s, il part le chercher (%s → %s)" % [game.MISSING_SECONDS, early, missing["monster"]["state"]])
+
+
+func _check_sound() -> void:
+	print("Son qui suit les passages")
+	var open := _scene(4.0)
+	open["hero"]["pos"] = Vector2(1.5, 0.5)
+	open["battle"].alert.noise(Vector2(6.5, 8.5), game.NOISE_FIGHT)
+	_check(open["monster"]["state"] == "fouille", "un coup à 4 cases, à découvert : entendu")
+	var walled := _scene(4.0)
+	walled["hero"]["pos"] = Vector2(1.5, 0.5)
+	var battle = walled["battle"]
+	battle.map.fill(Rect2i(0, 6, battle.GRID_W - 1, 1), BattleMap.Kind.BLOCK, 2)  # (un mur, ouvert tout au bout)
+	battle.map.build_graph()
+	battle.alert.noise(Vector2(6.5, 8.5), game.NOISE_FIGHT)
+	_check(walled["monster"]["state"] == "poste", "le même coup derrière un long mur : pas entendu (%s)" % walled["monster"]["state"])
 
 
 func _check(ok: bool, text: String) -> void:
