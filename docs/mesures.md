@@ -205,3 +205,20 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
 - Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 97,5 % (point 3 : 98 %) ; `test_tutoriel` : victoire au premier essai.
 - Bilan de l'étape E, préparée, étages 1 à 5 et 10 : avant (eee5e49) 100 / 90 / 86 / 84,7 / 64 / 40,7 → après
   99,7 / 90,3 / 84,7 / 77,7 / 67,7 / 39 ; brute 100 / 54,3 / 42,7 / 35,3 / 34,7 / 20,7 → 99,7 / 59 / 42,3 / 42,3 / 31,3 / 14,7.
+## Techniques (recensement « Techniques de programmation pour le combat »), points 1 à 3
+- `sim_tower ... combats=300 graine=7`, étages 1 à 4 (5 et 10 : horde, rien ne change), victoires % (morts par combat).
+  Avant (d73cf63, identique aux mesures du point 4 de l'étape E : le simulateur est bien déterministe) → après le point 1
+  (jauge de détection) → point 2 (corps, disparus, son) → point 3 (chemins discrets) :
+  brute : 99,7 (0,21) / 59 (2,47) / 42,3 (3,22) / 42,3 (3,25) → 99,7 (0,19) / 55 (2,63) / 44 (3,14) / 41,3 (3,23) →
+  99,7 (0,19) / 56 (2,59) / 43,3 (3,16) / 42,7 (3,25) → 99,7 (0,16) / 56,7 (2,47) / 40,3 (3,24) / 42,7 (3,14) ;
+  préparée : 99,7 (0,03) / 90,3 (0,75) / 84,7 (1,11) / 77,7 (1,43) → 100 (0,03) / 92,7 (0,60) / 86,7 (0,99) / 85,7 (1,07) →
+  100 (0,04) / 93 (0,61) / 86 (1,01) / 84,3 (1,14) → 100 (0,03) / 93 (0,57) / 82,7 (1,14) / 84,3 (1,10).
+  Écarts dans le bruit des séries de 300 combats (environ ±4 points), sauf préparée étage 4 : +6,6 (la jauge laisse le
+  temps de se figer et de finir le ralliement). Pas de rééquilibrage.
+- Par combat (après le point 3) : monstres méfiants 0,65 à 1,66 ; héros figés à temps 0,16 à 0,58 ; fausses alertes
+  0,01 à 0,04 (un monstre méfiant finit presque toujours par voir l'équipe : elle avance encore) ; corps découverts 0,19
+  à 0,35 (étages 1 et 2), 0,69 à 0,90 (étages 3 et 4) ; compagnons disparus remarqués 0 à 0,06 ; assassinats 0,14 à 0,56
+  (avant : 0,11 à 0,53).
+- Unités « bloquées sans raison » : 0 à 4 par série avant, jusqu'à 7 (étage 2 brute) au point 1, 0 à 2 au point 3 (des
+  loups qui hésitent entre deux cases, pas de blocage durable).
+- Tutoriel, étage 1 (`sim_tutoriel`, 200 parties) : 99 % (avant : 97,5 %). `capture_c2 mode=identique` : identique.

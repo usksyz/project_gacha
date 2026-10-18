@@ -336,7 +336,8 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   `SLEEP_HEARING_FACTOR`), repos (vue x0,6), guet (x1,35), ronde (au pas `PATROL_PACE`), poste, embusque, fouille (il va
   voir un bruit au pas `SEARCH_PACE`, regarde `SEARCH_SECONDS`, puis reprend sa place ; un dormeur réveillé passe au
   repos), alerte (il chasse, comme avant). Un monstre qui repère un héros réagit après `REACTION_SECONDS` (selon son
-  état : dormeur 2,5 s, repos 1,2 s...), puis crie (`raise`) : les monstres à moins de `SHOUT_RANGE` passent en alerte ;
+  état : dormeur 2,5 s, repos 1,2 s... ; remplacé depuis par la jauge de détection, voir « Recensement « Techniques » »
+  plus bas), puis crie (`raise`) : les monstres à moins de `SHOUT_RANGE` passent en alerte ;
   un guetteur donne l'alarme générale (`general_alarm` : tout le camp, fenêtre « Alarme ! », les renforts arrivent en
   courant) ; un embusqué fait bondir l'embuscade. Chaque coup s'entend à `NOISE_FIGHT` cases (`noise`) : les curieux
   viennent voir, un guetteur qui l'entend donne l'alarme ; un monstre frappé passe en alerte (`on_hit`). Sans contact au
@@ -403,6 +404,49 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   Après le combat (`GameData.ties_after_battle`, `tower.gd`, fenêtre « Liens ») : couvert par un ami, +`BOND_POINTS_COVERED`
   points de lien ; servi d'appât, opinion `OPINION_BAIT` ; abandonné, les deux deviennent hostiles (`make_hostile`) ;
   seulement entre héros encore vivants. Rien en duel. Simulateur : par combat, ami couvert, appât, abandon, coups à revers.
+- Recensement « Techniques de programmation pour le combat » (document Claude Docs
+  https://claude.ai/code/artifact/63bb7dd2-1f20-43b7-b955-b4d05529fa23, demandé par le porteur du projet ; sa feuille
+  de route, dans l'ordre ; ajouts du projet, chiffres provisoires dans `tower.gd`). Copies d'avant : `backups/avant-techniquesN/`.
+  1. Jauge de détection et niveaux d'alerte gradués (comme Splinter Cell Blacklist ; `BattleAlert._watch`, chiffres après
+  `ALARM_SECONDS`). Avant, un monstre qui voyait un héros (ou l'apprenait d'un voisin) le repérait au bout de
+  `REACTION_SECONDS`. Maintenant sa jauge (`fighter["detect"]`, 0 à 1) monte seulement de ce qu'il voit ou entend
+  lui-même : pleine en `REACTION_SECONDS[état]` à `DETECT_REF_DIST` cases, plus vite de près (`DETECT_REF_DIST` /
+  distance, entre `DETECT_PROX_MIN` et `DETECT_PROX_MAX`), moins vite sur les côtés de son regard (`DETECT_SIDE`), si le
+  héros est immobile (`DETECT_STILL`, vu d'un pas à l'autre, `BattleAlert.tick`) ou seulement entendu (`DETECT_HEARD`) ;
+  elle redescend de `DETECT_DECAY` par seconde ; à moins de `DETECT_INSTANT` cases, pleine d'un coup. Paliers : méfiant
+  (`DETECT_SUSPECT`, nouvel état « mefiant » : il s'arrête et regarde par là, « X s'arrête et regarde dans votre
+  direction... », « ? » jaune), il va voir (`DETECT_INVESTIGATE`, état « fouille » vers l'endroit entrevu, « X a cru
+  voir quelque chose : il s'approche pour vérifier. »), pleine : il a repéré le héros (alerte et cri, comme avant).
+  Vigilance accrue (`fighter["wary"]`) : un monstre redevenu calme après avoir été méfiant ou avoir fouillé (`_calm_down`)
+  reste sur ses gardes jusqu'à la fin du combat : vue x`WARY_SIGHT`, jauge x`WARY_RATE`, un guetteur balaie plus large
+  (`WARY_SWEEP`), un dormeur ne se rendort pas ; écran « sur ses gardes » ou « aux aguets ». L'embusqué garde son
+  fonctionnement (il guette déjà). Héros : un héros au ralliement ou qui s'infiltre et voit un monstre méfiant tourné
+  vers lui (`BattleAlert.watching`) se fige (`BattleExplore._hide`, « X se fige : Y regarde dans sa direction. ») ; si
+  le monstre vient voir, il recule hors de sa vue. Immobile et assez loin, la jauge du monstre redescend. Écran : la
+  jauge, du jaune au rouge, au-dessus de la vie d'un monstre vu (`BattleAlert.detect_level`, `BattleView.detect_color`,
+  deux vues). Aucun tirage au hasard. Simulateur : « vigilance par combat » (méfiants, fausses alertes, héros figés,
+  corps découverts, disparus remarqués). Banc : `tools/test_techniques.gd`. Mesures : `docs/mesures.md`, « Techniques ».
+  2. Indices dans le décor et son qui suit les passages (chiffres après `WARY_SWEEP`). Corps (`BattleAlert.corpses`,
+  `on_death`, appelé par `Battle._announce_fall`) : un monstre tué avant l'alarme laisse un corps (rond gris dans les
+  deux vues, rouge une fois découvert). Un monstre calme et éveillé qui le voit (`_look_for_corpses` : dans son regard,
+  ou à moins de `CORPSE_NEAR` cases, à portée de vue, sans obstacle) le découvre (`_discover`) : « X découvre le corps
+  de Y et pousse un cri ! » ; lui et les monstres à moins de `SHOUT_RANGE` deviennent vigilants et viennent fouiller
+  autour du corps (`_search_around`, à `CORPSE_SEARCH_SPREAD` cases les uns des autres) ; un guetteur qui le découvre
+  ou entend le cri donne l'alarme générale. Un assassinat reste donc silencieux, mais le corps sera trouvé par la ronde
+  suivante. Compagnon disparu (`_notice_missing`) : les monstres d'un même groupe (`fighter["squad"]` : le camp et le
+  poste, 0 ; chaque patrouille, son numéro ; pillage et embuscade, aucun) s'aperçoivent au bout de `MISSING_SECONDS`
+  qu'un compagnon tombé sans bruit ne revient pas : tous deviennent vigilants, le plus proche (pas un guetteur ni un
+  dormeur) part le chercher (« X ne voit pas revenir Y : il part à sa recherche. »). Son : `BattleAlert.noise` compte
+  la longueur du chemin à pied (`BattleMap.sound_field`, Dijkstra borné, dans les deux sens), ou la ligne droite
+  x`SOUND_WALL_FACTOR` à travers un mur ; un combat derrière une maison s'entend moins loin.
+  3. Carte de visibilité et chemins discrets (chiffres après `SOUND_WALL_FACTOR`). `BattleAlert.exposure` : pour chaque
+  case, combien de monstres la regardent, parmi ceux que les héros connaissent (pas les embusqués qu'on n'a pas vus) et
+  qui ne chassent ni ne dorment (dans leur regard, un guetteur balaie plus large ; à portée, sans obstacle ; moitié dans
+  les herbes hautes). Un troisième graphe de chemins (`BattleMap.SIDE_SNEAK`) a les coûts des héros plus
+  `SNEAK_EXPOSURE_COST` par regard (`SNEAK_EXPOSURE_MAX` au plus), recalculés avec les autres (`Battle._refresh_costs`).
+  Un héros qui se faufile (discrétion sous 1 : il explore, attend au ralliement ou s'infiltre) avant l'alarme l'utilise
+  (`Battle._side`) : il contourne ce que regardent les monstres. Écart avec le document : il visait les infiltrateurs
+  et les éclaireurs ; ici, tous les héros qui se faufilent (l'équipe qui explore aussi). Vide après l'alarme et en horde.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant

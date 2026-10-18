@@ -138,7 +138,7 @@ Le détail de chaque système est dans son fichier ; le lire avant d'y toucher, 
 - `docs/tutoriel.md` : conseils du Système, tutoriel obligatoire d'une partie neuve.
 - `docs/heros.md` : héros (poids de la mort, favoris, changement de classe, longues listes, progrès des compétences, phase 1 : stats, croissance, compétences, Berserk, fusions).
 - `docs/personnalite.md` : personnalité (santé mentale, traits, peur, liens, hostilités, duels), personnalité v2 (P1a, P1a-bis, P1b, P2) et la vie de la cité (prompt 4).
-- `docs/combat.md` : équipes, `battle.gd`, Combat v2 (C1, C2, C3), phases 1.1 et 1.2, préparer et comprendre un combat (prompt 3), étape E (vigilance des monstres, dispositions selon la mission, exploration des héros, infiltration et pièges, liens en combat : `battle_alert.gd`, `battle_explore.gd`, `battle_ties.gd`), la Tour (phase 2).
+- `docs/combat.md` : équipes, `battle.gd`, Combat v2 (C1, C2, C3), phases 1.1 et 1.2, préparer et comprendre un combat (prompt 3), recensement « Techniques » (jauge de détection, corps, chemins discrets), étape E (vigilance des monstres, dispositions selon la mission, exploration des héros, infiltration et pièges, liens en combat : `battle_alert.gd`, `battle_explore.gd`, `battle_ties.gd`), la Tour (phase 2).
 - `docs/economie.md` : armurerie et armes, gacha (phase 3), économie (prompt 1).
 - `docs/lobby.md` : hub 3D, terrain d'entraînement, affectations, donjon journalier, forge, chambre de synthèse (phases 4 à 6).
 - `docs/mesures.md` : outils de simulation et toutes les mesures (avant / après de chaque étape).
@@ -151,3 +151,4 @@ Le détail de chaque système est dans son fichier ; le lire avant d'y toucher, 
 - Personnalité v2 : P1a, P1a-bis, P1b, P2 faites, première tranche de P3 (prompt 4) (`docs/personnalite.md`).
 - Combat v2 : C1, C2 faites ; C3 en cours (`docs/combat.md`).
 - Étape E (exploration et combat autonome) : faite (vigilance des monstres, exploration ; plus de placement par le Maître ; infiltration, assassinat, pièges ; liens et caractère en combat : protéger un ami, appât, abandon, `battle_ties.gd`) (`docs/combat.md`).
+- Recensement « Techniques de programmation pour le combat » (https://claude.ai/code/artifact/63bb7dd2-1f20-43b7-b955-b4d05529fa23) : points 1 à 3 faits (jauge de détection et vigilance accrue, corps et compagnons disparus, son qui suit les passages, carte de visibilité et chemins discrets ; `tools/test_techniques.gd`) (`docs/combat.md`).
