@@ -44,6 +44,8 @@ func start() -> void:
 	alert.setup()
 	explore = BattleExplore.new(self)
 	explore.setup()
+	ties = BattleTies.new(self)
+	ties.setup()
 	if not alert.alarm:
 		clock_start = -1.0
 	# Les habitudes tactiques de chaque héros pour ce contexte (créées au premier combat, gardées sur le héros).
@@ -432,6 +434,9 @@ func _make_fighter(source: Dictionary, is_hero: bool) -> Dictionary:
 		# ouïe, voir BattleExplore.stealth_of), et pris dans un piège jusqu'à ce moment.
 		"stealth": 1.0,
 		"trapped_until": 0.0,
+		# Étape E, point 4 (voir BattleTies) : en repli après avoir abandonné un allié, jusqu'à ce moment ; l'a déjà fait.
+		"abandon_until": 0.0,
+		"abandoned": false,
 	}
 
 
@@ -586,6 +591,10 @@ func _think(unit: Dictionary) -> void:
 	if unit["is_hero"] and _follow_order(unit, foes):
 		return
 
+	# (étape E, point 4) Un égoïste lâche en danger abandonne un allié et se replie (voir BattleTies.abandon).
+	if unit["is_hero"] and ties.abandon(unit, foes):
+		return
+
 	# Un allié à l'agonie (ou en hémorragie) à secourir : il y va (voir _assign_helpers).
 	if unit["is_hero"] and _help(unit):
 		return
@@ -630,9 +639,10 @@ func _think(unit: Dictionary) -> void:
 				_approach(unit, nearest)
 			return
 
-	# Protecteur : un allié proche en danger passe avant l'ennemi ; il va se placer à son côté.
-	if unit["is_hero"] and not quest.get("duel", false) and GameData.has_trait(unit["source"], "Protecteur"):
-		var ward := _ward_of(unit)
+	# Protecteur : un allié proche en danger passe avant l'ennemi ; il va se placer à son côté. (Étape E, point 4 : sans
+	# le trait, un héros fait de même pour un ami ou un frère d'armes, voir BattleTies.ward_of.)
+	if unit["is_hero"] and not quest.get("duel", false):
+		var ward := ties.ward_of(unit)
 		if not ward.is_empty() and unit["pos"].distance_to(ward["pos"]) > GameData.PROTECT_GUARD_RANGE * 0.8:
 			_move_towards(unit, ward["pos"])
 			return
@@ -646,6 +656,9 @@ func _think(unit: Dictionary) -> void:
 			return
 		# (étape E) des monstres qui ne l'ont pas vu : l'équipe se rassemble avant d'attaquer (BattleExplore.stalk)
 		if explore.stalk(unit, known):
+			return
+		# (étape E, point 4) un opportuniste se sert d'un allié comme appât (voir BattleTies.flank)
+		if ties.flank(unit, known, foes):
 			return
 		if tactics.think(unit, known, foes, allies):
 			return
@@ -963,6 +976,8 @@ func _hit(attacker: Dictionary, target: Dictionary, power: float, critical: bool
 		surprise = false
 	# (étape E, point 3) Un monstre qui ne se doute de rien : assassinat (voir _assassination).
 	var assassinate := _assassination(attacker, target, kind, surprise)
+	if kind == "hit":
+		power *= ties.rear_factor(attacker, target)  # (étape E, point 4) à revers
 	if assassinate > 1.0:
 		power *= assassinate
 		critical = critical or assassinate >= GameData.ASSASSINATE_BLADE_POWER

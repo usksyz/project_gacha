@@ -265,6 +265,8 @@ var forced_disposition := ""
 ## Étape E, point 3 : les pièges posés par les héros ({"cell", "by": nom du poseur, "atk": son attaque, "id": son
 ## numéro}), et les assassinats de ce combat (mesures).
 var traps: Array[Dictionary] = []
+## Étape E, point 4 : les liens et le caractère en combat (protéger un ami, l'appât, abandonner ; voir BattleTies).
+var ties: BattleTies
 var assassinations := 0
 var traps_placed := 0
 var traps_sprung := 0

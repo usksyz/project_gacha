@@ -407,6 +407,33 @@ const TRAP_DISTANCE := 2.0
 const TRAP_SECONDS := 3.0
 const TRAP_POWER := 1.6
 const TRAP_HOLD := 2.5
+# Étape E, point 4 : les liens et le caractère en combat (ajout du projet ; demande du porteur du projet : « joue en
+# équipe ou se sépare, utilise les alliés en tant qu'appât ou les protège, les jette pour occuper l'ennemi et se
+# replier »). Lu par BattleTies (battle_ties.gd).
+# Protéger un ami : sans le trait Protecteur, un héros (Empathie >= FRIEND_GUARD_EMP) va couvrir un ami ou un frère d'armes
+# en danger (sous PROTECT_HP, à moins de PROTECT_RANGE) et encaisse PROTECT_SHARE de ses coups ; un Martyr (accès)
+# MARTYR_SHARE. Couvert par un allié : leur lien gagne BOND_POINTS_COVERED après le combat.
+const FRIEND_GUARD_EMP := 0
+const MARTYR_SHARE := 0.6
+const BOND_POINTS_COVERED := 8.0
+# À revers : frapper un monstre occupé par un autre héros, dans son dos (de l'autre côté : produit scalaire <=
+# REAR_ANGLE_DOT), force x REAR_ATTACK_BONUS. Un opportuniste (accès Prédateur, ou Honnêteté <= -OPPORTUNIST_HON et
+# Empathie <= -OPPORTUNIST_EMP) le cherche : il se sert de l'allié comme appât et contourne le monstre ; l'allié s'en
+# souvient (opinion OPINION_BAIT).
+const REAR_ATTACK_BONUS := 1.3
+const REAR_ANGLE_DOT := -0.3
+const OPPORTUNIST_HON := 30
+const OPPORTUNIST_EMP := 20
+const OPINION_BAIT := -10.0
+# Abandonner un allié : un égoïste lâche (accès Prédateur, ou Empathie <= -ABANDON_EMP et Courage <= -ABANDON_COURAGE),
+# sous ABANDON_HP de sa vie, un monstre au contact et un allié tout près, pousse l'allié vers le monstre et se replie
+# ABANDON_SECONDS (une fois par combat). L'allié perd ABANDON_MENTAL de santé mentale ; s'ils survivent, ils deviennent
+# hostiles.
+const ABANDON_EMP := 40
+const ABANDON_COURAGE := 20
+const ABANDON_HP := 0.3
+const ABANDON_SECONDS := 5.0
+const ABANDON_MENTAL := 10.0
 
 
 ## Chance que l'arme reste plantée dans un héros mis à l'agonie par ce coup (« kind » : "hit" ou "arrow" ;
@@ -812,6 +839,30 @@ func battle_debrief(battle: Battle) -> Dictionary:
 	return {"narrator": narrator["name"], "lines": lines}
 
 
+## Étape E, point 4 : ce qui s'est passé entre les héros pendant le combat (BattleTies.events) : couvert par un ami, le
+## lien se renforce (BOND_POINTS_COVERED) ; servi d'appât, il s'en souvient (opinion OPINION_BAIT) ; abandonné, ils
+## deviennent hostiles. Seulement entre héros encore vivants. Renvoie les annonces (fenêtre « Liens »).
+func ties_after_battle(battle: Battle) -> Array[String]:
+	var news: Array[String] = []
+	if battle.ties == null:
+		return news
+	for event in battle.ties.events:
+		var a: Dictionary = battle.units[event["a"]]["source"]
+		var b: Dictionary = battle.units[event["b"]]["source"]
+		if not a.get("alive", false) or not b.get("alive", false):
+			continue
+		match event["kind"]:
+			"couvert":
+				var line := add_bond_points(a, b, BOND_POINTS_COVERED)
+				news.append(line if line != "" else "%s n'oubliera pas que %s l'a couvert." % [b["name"], a["name"]])
+			"appat":
+				PersonalityEngine.add_opinion(b, a, OPINION_BAIT)
+				news.append("%s a compris que %s s'était servi de lui comme appât." % [b["name"], a["name"]])
+			"abandon":
+				news.append(make_hostile(b, a))
+	return news
+
+
 ## Une phrase du bilan, dite par le narrateur (« je » quand c'est lui). Aucun chiffre (niveaux enlevés des causes).
 func _debrief_line(who: Dictionary, event: Dictionary, narrator: Dictionary) -> String:
 	var me: bool = who["id"] == narrator["id"]
@@ -1058,6 +1109,7 @@ func finish_tower_battle(battle: Battle) -> Dictionary:
 	var hard: bool = is_boss_floor(floor_number) or not report["dead"].is_empty() \
 		or (max_hp > 0 and hp < max_hp * HARD_VICTORY_HP)
 	report["bonds"] = bonds_after_battle(survivors.map(func(fighter): return fighter["source"]), battle.victory, hard)
+	report["bonds"].append_array(ties_after_battle(battle))  # (étape E, point 4)
 	# Tutoriel : l'étage gagné ouvre la chambre de synthèse (cahier : « la synthèse, dont la porte s'ouvre à
 	# ce moment »), sans frais. Perdu : on recommence l'étage. Moins de 2 héros vivants : pas de synthèse
 	# possible, le tutoriel s'arrête là.

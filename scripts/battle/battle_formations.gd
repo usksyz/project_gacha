@@ -224,20 +224,28 @@ func _guardian_for(target: Dictionary) -> Dictionary:
 		if ally["id"] != target["id"] and not panicking(ally) and GameData.has_trait(ally["source"], "Protecteur") \
 				and ally["pos"].distance_to(target["pos"]) <= GameData.PROTECT_GUARD_RANGE:
 			return ally
+	# (étape E, point 4) sans le trait : un ami ou un frère d'armes tout près (voir BattleTies.guards)
+	if ties != null:
+		for ally in _alive(heroes):
+			if ties.guards(ally, target):
+				return ally
 	return {}
 
 
 ## Le Protecteur encaisse PROTECT_SHARE du coup destiné à « ward » (il peut tomber à sa place).
 ## Renvoie ce qui reste pour la cible.
 func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
-	var share := _hold_on(guardian, mini(roundi(amount * GameData.PROTECT_SHARE), guardian["hp"]))
+	var part: float = ties.share_of(guardian) if ties != null else GameData.PROTECT_SHARE  # (un Martyr : plus)
+	var share := _hold_on(guardian, mini(roundi(amount * part), guardian["hp"]))
 	if share <= 0:
 		return amount
 	guardian["hp"] -= share
 	guardian["engaged"] = true
 	guardian["acts"]["vit"] += 1  # encaisser exerce la Santé
 	_effect("hit", guardian, guardian, "-%d" % share, false)
-	if not guardian.get("covered", {}).has(ward["id"]):
+	if ties != null:
+		ties.covered(guardian, ward)  # (étape E, point 4) noté pour les liens après le combat
+	if not guardian.get("covered", {}).has(ward["id"]) and GameData.has_trait(guardian["source"], "Protecteur"):
 		guardian["covered"] = guardian.get("covered", {})
 		guardian["covered"][ward["id"]] = true
 		_log("%s se jette devant %s pour le protéger !" % [guardian["name"], ward["name"]], "awaken")
