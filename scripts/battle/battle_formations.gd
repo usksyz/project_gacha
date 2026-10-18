@@ -245,6 +245,7 @@ func _cover(guardian: Dictionary, ward: Dictionary, amount: int) -> int:
 	_effect("hit", guardian, guardian, "-%d" % share, false)
 	if ties != null:
 		ties.covered(guardian, ward)  # (étape E, point 4) noté pour les liens après le combat
+	guardian["exclusive_events"]["covered"] = true  # (octobre 2026) peut éveiller Mouvement secret
 	if not guardian.get("covered", {}).has(ward["id"]) and GameData.has_trait(guardian["source"], "Protecteur"):
 		guardian["covered"] = guardian.get("covered", {})
 		guardian["covered"][ward["id"]] = true

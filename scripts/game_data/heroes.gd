@@ -62,7 +62,8 @@ const SECRET_HEROES := {
 	"Zid": {"rarity": 1, "class": "Novice", "growth": 2, "code": "ZID", "skills": []},  # à confirmer
 	"Shei": {"rarity": 4, "class": "Novice", "growth": 6, "code": "SHEI", "skills": []},  # classe à confirmer
 	"Jenna": {"rarity": 1, "class": "Archer", "growth": 2, "code": "JENNA",  # étoiles à confirmer
-		"skills": [{"name": "Maîtrise de l'arc", "rank": "Débutant", "level": 1}]},
+		"skills": [{"name": "Maîtrise de l'arc", "rank": "Débutant", "level": 1},
+			{"name": "Trouver les faiblesses", "rank": "Débutant", "level": 1}]},  # (octobre 2026 : sa compétence dans l'œuvre)
 	"Aaron": {"rarity": 1, "class": "Novice", "growth": 2, "code": "AARON", "skills": []},  # à confirmer
 	# Yvolka Rivel Strachur, la magicienne 3 étoiles du manhwa (fiche du cahier : 7 / 31 / 8 / 7,
 	# « Magie de feu intermédiaire », pas encore une compétence du jeu : ici, la magie de feu).
@@ -122,6 +123,11 @@ const SKILLS := {
 	"Surpassement": "Fusion de Calme et Berserk (unique). Garde leurs effets ; en Berserk, bonus doublés et plus de saignement, mais il perd 2 % de sa vie et deux fois plus de santé mentale chaque seconde, et la migraine dure deux fois plus longtemps. Il en sort de lui-même sous 25 % de vie.",
 	"Épée et bouclier": "Fusion de Maîtrise de l'épée et Utilisation du bouclier. Garde leurs effets, et +2 % de dégâts à l'épée par niveau.",
 	"Forge": "Artisan : à la forge, une pièce du puzzle est placée d'office, et plus de malus « Pas d'artisan ». S'apprend en travaillant comme assistant de la forge.",
+	# Compétences de l'œuvre qui changent la façon de combattre (ajout d'octobre 2026, analyse du projet ; effets
+	# interprétés par le projet, chiffres provisoires : voir « Compétences de l'œuvre » plus bas).
+	"Mouvement secret": "Active ponctuelle (œuvre : Han). En combat, quand un allié tout près est en danger, il attire sur lui les ennemis qui l'entourent pendant 4 s (+0,5 s par niveau) et esquive mieux pendant ce temps (+10 %) ; 20 s avant de recommencer. S'éveille chez un héros attaché aux autres (Empathie, Loyauté ou Sensibilité +30) qui a couvert un allié ; un instructeur qui la connaît peut l'enseigner. Se perd en devenant Guerrier, comme Han.",
+	"Trouver les faiblesses": "Conditionnelle (œuvre : Jenna). Après deux coups portés à un même ennemi, il a vu ses faiblesses : +15 % de coups critiques contre lui (+2 % par niveau), même pour un guerrier ou un assassin. S'éveille chez un héros observateur (Acuité +20 ou Lucidité +20) qui a porté 3 coups critiques dans un combat ; un instructeur qui la connaît peut l'enseigner.",
+	"Sauvagerie": "Conditionnelle, exclusive (Colère +50 ; œuvre : Belquist). Plus il est blessé, plus il frappe fort : sous la moitié de sa vie, jusqu'à +30 % de dégâts (+3 % par niveau) quand sa vie approche de 0, et +10 % s'il saigne. S'éveille en continuant à se battre gravement blessé.",
 }
 
 ## Niveau maximum d'une compétence (les rangs au-delà de Débutant viendront plus tard).
@@ -207,6 +213,32 @@ const GOBLIN_SLAYER_PER_LEVEL := 0.1
 const GOBLIN_KILLS_PER_LEVEL := 50
 ## Esprit combatif : dégâts en plus par niveau, sous la moitié de sa vie.
 const FIGHTING_SPIRIT_PER_LEVEL := 0.05
+## Compétences de l'œuvre (octobre 2026, voir SKILLS) : Mouvement secret (durée, en plus par niveau, temps avant de
+## recommencer, allié en danger à moins de SECRET_MOVE_RANGE cases et sous SECRET_MOVE_ALLY_HP de sa vie, ennemis
+## attirés à moins de SECRET_MOVE_RADIUS cases de lui, esquive en plus, chance de l'éveiller en couvrant un allié) ;
+## Trouver les faiblesses (coups sur un même ennemi, critiques en plus, par niveau, critiques pour l'éveiller, chance) ;
+## Sauvagerie (dégâts en plus au plus près de 0 point de vie, par niveau, s'il saigne ; sous SAVAGERY_EVENT_HP de sa vie,
+## frapper peut l'éveiller). Un instructeur (reconversion) qui connaît une compétence de TEACHABLE_SKILLS mieux que
+## son élève lui en donne TEACH_POINTS_PER_SESSION points de progrès par séance.
+const SECRET_MOVE_SECONDS := 4.0
+const SECRET_MOVE_PER_LEVEL := 0.5
+const SECRET_MOVE_COOLDOWN := 20.0
+const SECRET_MOVE_RANGE := 5.0
+const SECRET_MOVE_ALLY_HP := 0.4
+const SECRET_MOVE_RADIUS := 4.0
+const SECRET_MOVE_DODGE := 0.1
+const SECRET_MOVE_LEARN_CHANCE := 0.25
+const WEAKNESS_HITS := 2
+const WEAKNESS_CRIT := 0.15
+const WEAKNESS_PER_LEVEL := 0.02
+const WEAKNESS_LEARN_CRITS := 3
+const WEAKNESS_LEARN_CHANCE := 0.15
+const SAVAGERY_MAX := 0.3
+const SAVAGERY_PER_LEVEL := 0.03
+const SAVAGERY_BLEED := 0.1
+const SAVAGERY_EVENT_HP := 0.35
+const TEACHABLE_SKILLS := ["Mouvement secret", "Trouver les faiblesses"]
+const TEACH_POINTS_PER_SESSION := 10
 ## Compétences exclusives (P2g, voir PersonalityData.EXCLUSIVE_SKILLS) : effets au niveau 1, puis par niveau.
 const VIGILANCE_CHANCE := 0.3
 const VIGILANCE_PER_LEVEL := 0.05
@@ -660,7 +692,7 @@ const CLASS_FINALS := {
 ## Compétences de débutant qui disparaissent en prenant cette classe (provisoire : le Mouvement souple
 ## d'un voleur ne va pas à un guerrier, comme le Mouvement secret de Han dans l'œuvre).
 const CLASS_LOST_SKILLS := {
-	"Guerrier": ["Mouvement souple"],
+	"Guerrier": ["Mouvement souple", "Mouvement secret"],  # (Mouvement secret : octobre 2026, comme Han)
 	"Chevalier": ["Mouvement souple"],
 }
 ## Les autres compétences de débutant évoluent : elles passent à ce rang (leurs effets ne changent pas).

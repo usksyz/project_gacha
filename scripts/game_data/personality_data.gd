@@ -711,6 +711,11 @@ const SKILL_CONDITIONS := {
 	"Vigilance": {"all": [["LOY", "<=", -5]], "text": "Méfiance +50 (exclusive)"},
 	"Premiers soins": {"all": [["EMP", ">=", 5]], "text": "Empathie +50 (exclusive)"},
 	"Premier sang": {"all": [["MAI", "<=", -5]], "text": "Impulsivité +50 (exclusive)"},
+	# Compétences de l'œuvre (octobre 2026, ajout du projet ; voir GameData.SKILLS).
+	"Mouvement secret": {"any": [["EMP", ">=", 3], ["LOY", ">=", 3], ["SEN", ">=", 3]],
+		"text": "Empathie +30, Loyauté +30 ou Sensibilité +30"},
+	"Trouver les faiblesses": {"any": [["ACU", ">=", 2], ["FOI", "<=", -2]], "text": "Acuité +20 ou Lucidité +20"},
+	"Sauvagerie": {"all": [["COL", ">=", 5]], "text": "Colère +50 (exclusive)"},
 }
 
 
@@ -735,6 +740,9 @@ const EXCLUSIVE_SKILLS := {
 		"how": "a sauvé un allié"},
 	"premier_sang": {"skill": "Premier sang", "event": "first_blood", "chance": 0.2,
 		"how": "a porté le premier coup"},
+	# (octobre 2026) l'exclusive du pôle Colère (palier 50), Belquist dans l'œuvre.
+	"sauvagerie": {"skill": "Sauvagerie", "event": "fought_wounded", "chance": 0.2,
+		"how": "s'est battu gravement blessé"},
 	"calme_exclusif": {"skill": "Calme", "event": ""},
 	"esprit_combatif_exclusif": {"skill": "Esprit combatif", "event": ""},
 }
