@@ -51,16 +51,19 @@ const SHADOWS := true
 const MSAA := Viewport.MSAA_2X
 const RENDER_SHRINK := 1
 
-## Couleurs par gabarit (MapGenerator.template_for) : sol, sol alterné, bloc (maison, arbre), toit, pente.
+## Couleurs par gabarit (MapGenerator.template_for) : sol, sol alterné, bloc, toit, pente, pierre ; murs des maisons
+## et route (cartes, étape 2 ; absents : le bloc, ROAD_COLOR).
 const PALETTES := {
 	"village": {"ground": Color("56683a"), "ground2": Color("4e6034"), "block": Color("8a6a4c"), "roof": Color("9a5038"),
-		"slope": Color("6a7a40"), "stone": Color("7a7468")},
+		"slope": Color("6a7a40"), "stone": Color("7a7468"), "wall": Color("d6c8a4"), "road": Color("8f7752")},
 	"prairie": {"ground": Color("5f8a3e"), "ground2": Color("578238"), "block": Color("3f6a2a"), "roof": Color("9a5038"),
-		"slope": Color("74963e"), "stone": Color("80807a")},
+		"slope": Color("74963e"), "stone": Color("80807a"), "wall": Color("cfc0a0")},
+	"foret": {"ground": Color("3f5a2e"), "ground2": Color("39532a"), "block": Color("3a5a28"), "roof": Color("8a4c36"),
+		"slope": Color("4c6634"), "stone": Color("6e6e66"), "road": Color("6e5a3c")},
 	"relief": {"ground": Color("6e6446"), "ground2": Color("665c40"), "block": Color("6a6258"), "roof": Color("8a4c36"),
 		"slope": Color("7c7050"), "stone": Color("7e7a72")},
 	"ville": {"ground": Color("5e5a54"), "ground2": Color("56524c"), "block": Color("5a4e46"), "roof": Color("8a4434"),
-		"slope": Color("6a645a"), "stone": Color("6e6a64")},
+		"slope": Color("6a645a"), "stone": Color("6e6a64"), "wall": Color("8a7e6e")},
 	"cite": {"ground": Color("66604e"), "ground2": Color("5e5848"), "block": Color("5a4128"), "roof": Color("8a4434"),
 		"slope": Color("7a7464"), "stone": Color("8a8e96")},
 	"arene": {"ground": Color("a08e64"), "ground2": Color("98865e"), "block": Color("7a6a4a"), "roof": Color("8a4434"),
@@ -71,6 +74,8 @@ const BELL_COLOR := Color("d8b04a")
 const GRASS_COLOR := Color("7ea84a")
 const FOLIAGE_COLOR := Color("355e26")
 const TRUNK_COLOR := Color("5a3e26")
+## (cartes, étape 2) La route de terre et le sentier.
+const ROAD_COLOR := Color("8a7350")
 const HERO_COLOR := Color("4caf6a")
 const ENEMY_COLOR := Color("e05252")
 const BOSS_COLOR := Color("8a3aa8")
@@ -90,7 +95,7 @@ const FLOAT_TIME := 0.9
 const BUBBLE_TIME := 1.5
 
 ## Les formes de base (une MultiMesh opaque et une transparente pour chacune).
-enum Shape {BOX, SPHERE, PRISM, CYLINDER}
+enum Shape {BOX, SPHERE, PRISM, CYLINDER, RAMP}
 
 var view: BattleView
 var battle: Battle
@@ -225,7 +230,7 @@ func _structures_by_cell() -> Dictionary:
 		var rect: Rect2i = structure["rect"]
 		for x in range(rect.position.x, rect.end.x):
 			for y in range(rect.position.y, rect.end.y):
-				result[Vector2i(x, y)] = structure["kind"]
+				result[Vector2i(x, y)] = structure
 	return result
 
 
@@ -254,47 +259,67 @@ func _build_map() -> void:
 	var map: BattleMap = battle.map
 	var palette := _palette()
 	var structures := _structures_by_cell()
+	var roads := {}
+	for cell in battle.map_data.get("roads", []):
+		roads[cell] = true
+	var round_map: bool = battle.map_data.get("version", 1) >= 2  # (cartes, étape 2 : la lisière hors du disque)
 	tops.resize(map.kinds.size())
 	for i in map.kinds.size():
 		var cell := map.cell_at(i)
 		var kind := map.kinds[i]
 		var h := map.heights[i]
 		var top := h * LEVEL
-		var structure: String = structures.get(cell, "")
+		var structure: Dictionary = structures.get(cell, {})
 		var ground: Color = palette["ground"] if (cell.x + cell.y) % 2 == 0 else palette["ground2"]
 		ground = _jitter(cell, ground)
+		if roads.has(cell):
+			ground = _jitter(cell, palette.get("road", ROAD_COLOR), 0.08)
 		tops[i] = top
+		if round_map and not MapGenerator.inside(cell):
+			_add_edge(cell, palette, i)
+			continue
 		match kind:
 			BattleMap.Kind.GROUND:
-				_add_column(cell, -BASE_DEPTH, 0.0, ground)
+				_add_column(cell, -BASE_DEPTH, top, ground)
 			BattleMap.Kind.GRASS:
-				_add_column(cell, -BASE_DEPTH, 0.0, ground.lerp(GRASS_COLOR, 0.25))
+				_add_column(cell, -BASE_DEPTH, top, ground.lerp(GRASS_COLOR, 0.25))
 				for k in 5:  # herbes hautes : des touffes
 					var offset := Vector3(0.18 + 0.16 * k, 0.0, 0.25 + 0.5 * float(k % 2))
-					_add_part(cell, Shape.BOX, Vector3(cell.x, 0.16, cell.y) + offset, Vector3(0.07, 0.32, 0.07),
+					_add_part(cell, Shape.BOX, Vector3(cell.x, top + 0.16, cell.y) + offset, Vector3(0.07, 0.32, 0.07),
 						_jitter(cell + Vector2i(k, 0), GRASS_COLOR, 0.15))
 			BattleMap.Kind.STAIRS:
-				_add_column(cell, -BASE_DEPTH, top, _jitter(cell, palette["slope"]))
-				if structure == "stairs":  # escalier du rempart : des marches
+				if structure.get("kind", "") == "stairs":  # escalier du rempart : des marches
+					_add_column(cell, -BASE_DEPTH, top, _jitter(cell, palette["slope"]))
 					for k in 3:
 						_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, top + 0.05, cell.y + 0.2 + 0.3 * k),
 							Vector3(0.9, 0.06, 0.08), palette["stone"].lightened(0.15))
+				else:
+					_add_slope(cell, top, roads.has(cell), ground, palette)
 			BattleMap.Kind.LADDER:
 				_add_column(cell, -BASE_DEPTH, top, ground)
 				_add_ladder(cell, top)
 			BattleMap.Kind.LOW_WALL:
-				# Muret, clôture, barricade : un mur bas et mince (on peut l'enjamber).
-				_add_column(cell, -BASE_DEPTH, 0.0, ground)
-				var wall_color: Color = TRUNK_COLOR.lightened(0.15) if structure == "fence" else palette["stone"]
-				_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, top / 2.0, cell.y + 0.5), Vector3(1.0, top, 0.35),
-					_jitter(cell, wall_color), true)
+				# Muret, clôture, barricade : un mur bas et mince (on peut l'enjamber), posé sur le terrain.
+				var base: float = structure.get("base", 0) * LEVEL
+				_add_column(cell, -BASE_DEPTH, base, ground)
+				var fence: bool = structure.get("kind", "") == "fence"
+				var wall_color: Color = TRUNK_COLOR.lightened(0.15) if fence else palette["stone"]
+				if fence:  # une clôture de bois : des piquets et deux lisses
+					for k in 2:
+						_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, base + 0.18 + 0.22 * k, cell.y + 0.5), Vector3(1.0, 0.06, 0.06),
+							_jitter(cell, wall_color), true)
+					_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, base + 0.25, cell.y + 0.5), Vector3(0.09, 0.5, 0.09), wall_color.darkened(0.15), true)
+				else:
+					_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, (base + top) / 2.0, cell.y + 0.5), Vector3(1.0, top - base, 0.35),
+						_jitter(cell, wall_color), true)
 			BattleMap.Kind.ROCK:
-				_add_column(cell, -BASE_DEPTH, top * 0.8, _jitter(cell, palette["stone"], 0.08))
-				_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, top * 0.8, cell.y + 0.5), Vector3(0.95, top * 0.45 + 0.05, 0.95),
-					_jitter(cell, palette["stone"].lightened(0.08), 0.08), true)
+				var base: float = maxf(0.0, top - LEVEL)
+				_add_column(cell, -BASE_DEPTH, base + (top - base) * 0.8, _jitter(cell, palette["stone"], 0.08))
+				_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, base + (top - base) * 0.8, cell.y + 0.5),
+					Vector3(0.95, (top - base) * 0.45 + 0.05, 0.95), _jitter(cell, palette["stone"].lightened(0.08), 0.08), true)
 			BattleMap.Kind.ROOF:
 				# Toit où l'on marche (grange, toits de la ville) : murs, puis le toit plat en tuiles.
-				_add_column(cell, -BASE_DEPTH, top - 0.08, _jitter(cell, palette["block"]), true)
+				_add_column(cell, -BASE_DEPTH, top - 0.08, _jitter(cell, palette.get("wall", palette["block"])), true)
 				_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, top - 0.04, cell.y + 0.5), Vector3(1.0, 0.08, 1.0),
 					_jitter(cell, palette["roof"], 0.08), true)
 			BattleMap.Kind.RAMPART:
@@ -318,27 +343,108 @@ func _build_map() -> void:
 	_build_multimeshes()
 
 
+## Une pente douce (cartes, étape 2) : le terrain du niveau d'en dessous, puis une rampe qui descend vers la voisine la
+## plus basse.
+func _add_slope(cell: Vector2i, top: float, road: bool, ground: Color, palette: Dictionary) -> void:
+	var map: BattleMap = battle.map
+	var down := Vector2i.ZERO
+	var lowest := map.height_at(cell)
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var next: Vector2i = cell + d
+		if map.in_bounds(next) and map.walkable(next) and map.height_at(next) < lowest:
+			lowest = map.height_at(next)
+			down = d
+	var color: Color = ground if road else _jitter(cell, palette["slope"])
+	if down == Vector2i.ZERO:
+		_add_column(cell, -BASE_DEPTH, top, color)
+		return
+	var bottom := top - LEVEL
+	_add_column(cell, -BASE_DEPTH, bottom, color)
+	# (PrismMesh coupé en biais : le côté haut à gauche (-X) ; on tourne pour que le bas regarde la voisine basse)
+	var basis := Basis(Vector3.UP, atan2(-float(down.y), float(down.x)))
+	_add_part(cell, Shape.RAMP, Vector3(cell.x + 0.5, bottom + LEVEL / 2.0, cell.y + 0.5), Vector3(1.0, LEVEL, 1.0), color, false, basis)
+
+
+## La lisière d'une carte ronde (cartes, étape 2 ; MapGenerator.inside) : selon « edge_style », des arbres serrés, des
+## rochers ou des pans de mur en ruine, sur un sol sombre. Infranchissable, plus basse au sud (vers la caméra) pour ne
+## pas cacher les héros.
+func _add_edge(cell: Vector2i, palette: Dictionary, index: int) -> void:
+	var near := false
+	for d in BattleMap.DIRECTIONS:
+		if battle.map.in_bounds(cell + d) and MapGenerator.inside(cell + d):
+			near = true
+	tops[index] = 0.0
+	if not near:
+		return  # (loin du terrain : rien, la carte paraît ronde)
+	_add_column(cell, -BASE_DEPTH, 0.0, _jitter(cell, palette["ground2"].darkened(0.35)))
+	var size := 0.8 + fposmod(float(cell.x * 7 + cell.y * 13), 5.0) * 0.08
+	match battle.map_data.get("edge_style", "trees"):
+		"rocks":
+			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, 0.35 * size, cell.y + 0.5), Vector3(1.15, 0.95 * size, 1.15),
+				_jitter(cell, palette["stone"].darkened(0.1), 0.12), true)
+			tops[index] = 0.8 * size
+		"ruins":
+			_add_part(cell, Shape.BOX, Vector3(cell.x + 0.5, 0.45 * size, cell.y + 0.5), Vector3(0.9, 0.9 * size, 0.4),
+				_jitter(cell, palette["stone"], 0.1), true)
+			tops[index] = 0.9 * size
+		_:
+			_add_part(cell, Shape.CYLINDER, Vector3(cell.x + 0.5, 0.45, cell.y + 0.5), Vector3(0.2, 0.9, 0.2), TRUNK_COLOR)
+			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, 1.15 * size, cell.y + 0.5), Vector3(1.25, 1.1 * size, 1.25),
+				_jitter(cell, FOLIAGE_COLOR.darkened(0.15), 0.12), true)
+			tops[index] = 1.7 * size
+
+
 ## Un obstacle (case où l'on ne marche pas) selon le décor : arbres, maisons fermées, puits, porte, rocher...
-func _add_block(cell: Vector2i, top: float, structure: String, palette: Dictionary, index: int) -> void:
-	match structure:
+func _add_block(cell: Vector2i, top: float, structure: Dictionary, palette: Dictionary, index: int) -> void:
+	var base: float = structure.get("base", 0) * LEVEL
+	var height := top - base
+	match structure.get("kind", ""):
 		"trees":
-			_add_column(cell, -BASE_DEPTH, 0.0, _jitter(cell, palette["ground2"]))
-			_add_part(cell, Shape.CYLINDER, Vector3(cell.x + 0.5, top * 0.3, cell.y + 0.5), Vector3(0.22, top * 0.6, 0.22), TRUNK_COLOR)
-			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, top * 0.75, cell.y + 0.5), Vector3(1.05, top * 0.65, 1.05),
-				_jitter(cell, FOLIAGE_COLOR, 0.12), true)
-			tops[index] = top * 1.07
+			# Un arbre : le tronc, puis un feuillage rond (une seconde boule, plus petite, sur les grands).
+			_add_column(cell, -BASE_DEPTH, base, _jitter(cell, palette["ground2"]))
+			var size := 0.85 + fposmod(float(cell.x * 31 + cell.y * 17), 7.0) * 0.05
+			_add_part(cell, Shape.CYLINDER, Vector3(cell.x + 0.5, base + height * 0.3, cell.y + 0.5), Vector3(0.2, height * 0.6, 0.2), TRUNK_COLOR)
+			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, base + height * 0.72, cell.y + 0.5), Vector3(1.1, height * 0.6, 1.1) * size,
+				_jitter(cell, FOLIAGE_COLOR, 0.14), true)
+			if size > 1.0:
+				_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.45, base + height * 1.0, cell.y + 0.55), Vector3(0.7, height * 0.35, 0.7),
+					_jitter(cell, FOLIAGE_COLOR.lightened(0.08), 0.14), true)
+			tops[index] = base + height * 1.1
+		"bush":
+			_add_column(cell, -BASE_DEPTH, base, _jitter(cell, palette["ground2"]))
+			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, base + 0.3, cell.y + 0.5), Vector3(0.95, 0.65, 0.95),
+				_jitter(cell, FOLIAGE_COLOR.lightened(0.05), 0.12), true)
+			tops[index] = base + 0.6
 		"house":
-			# Maison fermée : murs, et un toit à deux pans (on ne marche pas dessus).
-			_add_column(cell, -BASE_DEPTH, top, _jitter(cell, palette["block"]), true)
-			_add_part(cell, Shape.PRISM, Vector3(cell.x + 0.5, top + 0.25, cell.y + 0.5), Vector3(1.0, 0.5, 1.0),
-				_jitter(cell, palette["roof"], 0.08), true)
-			tops[index] = top + 0.5
+			# Maison fermée : murs crépis, une porte du côté de la route, et un toit à deux pans sur toute la maison.
+			_add_column(cell, -BASE_DEPTH, top, _jitter(cell, palette.get("wall", palette["block"]), 0.04), true)
+			var rect: Rect2i = structure["rect"]
+			var along_x := rect.size.x >= rect.size.y  # (le faîte du toit suit le grand côté)
+			if (along_x and cell.y == rect.position.y) or (not along_x and cell.x == rect.position.x):
+				var center := Vector3(cell.x + 0.5, top + 0.3, cell.y + 0.5)
+				var scale := Vector3(1.04, 0.6, rect.size.y + 0.1)
+				if along_x:
+					center.z = rect.position.y + rect.size.y / 2.0
+				else:
+					center.x = rect.position.x + rect.size.x / 2.0
+					scale = Vector3(rect.size.x + 0.1, 0.6, 1.04)
+				# (PrismMesh : le faîte suit Z ; une maison en long sur X le tourne d'un quart de tour)
+				var basis := Basis(Vector3.UP, PI / 2.0) if along_x else Basis.IDENTITY
+				_add_part(cell, Shape.PRISM, center, scale, _jitter(cell, palette["roof"], 0.06), true, basis)
+			var facing: Vector2i = structure.get("facing", Vector2i(0, 1))
+			var door_cell := Vector2i(rect.position.x + rect.size.x / 2, rect.position.y + rect.size.y / 2)
+			if cell == door_cell:
+				var door := Vector3(cell.x + 0.5, base + 0.3, cell.y + 0.5) + Vector3(facing.x, 0, facing.y) * 0.51
+				var door_scale := Vector3(0.05, 0.6, 0.4) if facing.x != 0 else Vector3(0.4, 0.6, 0.05)
+				_add_part(cell, Shape.BOX, door, door_scale, TRUNK_COLOR.darkened(0.2), true)
+			tops[index] = top + 0.6
 		"well":
-			_add_column(cell, -BASE_DEPTH, 0.0, _jitter(cell, palette["ground"]))
-			_add_part(cell, Shape.CYLINDER, Vector3(cell.x + 0.5, top / 2.0, cell.y + 0.5), Vector3(0.8, top, 0.8), palette["stone"], true)
+			_add_column(cell, -BASE_DEPTH, base, _jitter(cell, palette["ground"]))
+			_add_part(cell, Shape.CYLINDER, Vector3(cell.x + 0.5, base + height / 2.0, cell.y + 0.5), Vector3(0.8, height, 0.8), palette["stone"], true)
+			_add_part(cell, Shape.PRISM, Vector3(cell.x + 0.5, top + 0.35, cell.y + 0.5), Vector3(0.9, 0.3, 0.9), palette["roof"], true)
 		"boulder":
-			_add_column(cell, -BASE_DEPTH, 0.0, _jitter(cell, palette["ground"]))
-			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, top * 0.5, cell.y + 0.5), Vector3(1.1, top * 1.05, 1.1),
+			_add_column(cell, -BASE_DEPTH, base, _jitter(cell, palette["ground"]))
+			_add_part(cell, Shape.SPHERE, Vector3(cell.x + 0.5, base + height * 0.5, cell.y + 0.5), Vector3(1.1, height * 1.05, 1.1),
 				_jitter(cell, palette["stone"], 0.1), true)
 		_:
 			_add_column(cell, -BASE_DEPTH, top, _jitter(cell, palette["block"]), true)
@@ -378,6 +484,11 @@ func _mesh_for(shape: int) -> Mesh:
 			return sphere
 		Shape.PRISM:
 			return PrismMesh.new()
+		Shape.RAMP:
+			# (une rampe : le prisme coupé en biais, côté haut à gauche ; cartes, étape 2)
+			var ramp := PrismMesh.new()
+			ramp.left_to_right = 0.0
+			return ramp
 		Shape.CYLINDER:
 			var cylinder := CylinderMesh.new()
 			cylinder.top_radius = 0.5
