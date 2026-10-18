@@ -29,6 +29,7 @@ func _run() -> void:
 	_check_sneak()
 	_check_terrain()
 	_check_search()
+	_check_coordination()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
 	quit(1 if failures > 0 else 0)
@@ -323,6 +324,73 @@ func _check_search() -> void:
 	var flee: Vector2 = battle.search.flee_target(hero)
 	_check(flee.distance_to(monster["pos"]) > hero["pos"].distance_to(monster["pos"]) + 2.0,
 		"un héros qui s'enfuit court loin du monstre (%.1f cases de lui)" % flee.distance_to(monster["pos"]))
+
+
+func _check_coordination() -> void:
+	print("Coordination")
+	# Contournement : un second monstre prend la place à l'opposé du premier autour du héros.
+	var scene := _scene(3.0)
+	var battle = scene["battle"]
+	var hero: Dictionary = scene["hero"]
+	var first: Dictionary = scene["monster"]
+	var second: Dictionary = battle.enemies[1]
+	for m in [first, second]:
+		m["present"] = true
+		m["hp"] = maxi(1, m["hp"])
+		m["ranged"] = false
+		m["state"] = "alerte"
+		m["slot"] = -1
+	hero["pos"] = Vector2(10.5, 10.5)
+	first["pos"] = Vector2(10.5, 8.5)
+	second["pos"] = Vector2(10.5, 7.5)
+	var a: int = battle._attack_slot(first, hero)
+	var b: int = battle._attack_slot(second, hero)
+	var da: Vector2 = Vector2(battle.map.cell_at(a) - battle.map.cell_of(hero["pos"]))
+	var db: Vector2 = Vector2(battle.map.cell_at(b) - battle.map.cell_of(hero["pos"]))
+	_check(da.normalized().dot(db.normalized()) < 0.0, "deux monstres : le second contourne le héros (places %s et %s)" % [da, db])
+	# Assassinat synchronisé : un héros ami d'un infiltrateur devient son équipier ; à portée, ils s'attendent.
+	var team := _team(game.floor_enemy_level(3) + 2)
+	var assassin: Dictionary = game.dev_create_hero(3, "Assassin")
+	team[0] = assassin
+	var layout: Dictionary = load("res://scripts/map_generator.gd").generate(3, game.floor_quest(3), 21)
+	var fight = load("res://scripts/battle.gd").new(team, layout["enemies"], game.floor_quest(3))
+	fight.map_data = layout["map"]
+	fight.forced_disposition = "camp"
+	fight.start()
+	var lead: Dictionary = fight.heroes[0]
+	var explore = fight.explore
+	# (un équipier possible : au corps à corps ou tireur, assez audacieux ; on le fait ami de l'Assassin)
+	var engine = load("res://scripts/game_data/personality_engine.gd")
+	var mate: Dictionary = {}
+	for h in fight.heroes.slice(1):
+		if mate.is_empty() and not h["class"] in ["Mage", "Soigneur"] and engine.axis(h["source"], "AUD") >= -game.PRUDENT_AUD:
+			mate = h
+	if mate.is_empty():
+		mate = fight.heroes[1]
+		mate["class"] = "Guerrier"
+	for h in fight.heroes:
+		h["bonds"].clear()
+	lead["bonds"][mate["id"]] = game.BOND_FRIEND
+	mate["bonds"][lead["id"]] = game.BOND_FRIEND
+	explore.infiltrators.clear()
+	explore.infiltrators[lead["id"]] = true
+	explore.partners.clear()
+	explore.mates.clear()
+	explore.setup_partners()
+	_check(explore.partners.get(mate["id"], -1) == lead["id"], "l'ami de l'Assassin devient son équipier")
+	# À portée chacun de sa proie : le premier attend l'autre, puis ils frappent ensemble.
+	explore._infiltrating[lead["id"]] = fight.enemies[0]["id"]
+	explore._infiltrating[mate["id"]] = fight.enemies[1]["id"]
+	var waits: bool = not explore._strike_now(lead)
+	var together: bool = explore._strike_now(mate)
+	var after: bool = explore._strike_now(lead)
+	_check(waits and together and after and explore.counts["synchronises"] == 1,
+		"à portée, l'Assassin attend son équipier, puis ils frappent au même pas")
+	fight.time += game.SYNC_WAIT + 0.5
+	explore._ready.clear()
+	explore._strike_now(lead)
+	fight.time += game.SYNC_WAIT + 0.1
+	_check(explore._strike_now(lead), "sans nouvelles de l'équipier, il frappe seul au bout de %.0f s" % game.SYNC_WAIT)
 
 
 func _check(ok: bool, text: String) -> void:
