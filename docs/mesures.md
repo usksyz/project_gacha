@@ -269,3 +269,13 @@ Les mesures de chaque étape (avant / après), recopiées de l'ancien `CLAUDE.md
   59 (2,51) / 42 (3,20) / 45,3 (3,00) / 36,7 (3,43) / 25,7 (3,93) ; préparée 100 (0,05) / 92,3 (0,69) / 81 (1,27) / 82
   (1,18) / 67,7 (2,06) / 49,7 (2,92). Dans le bruit. Tutoriel : 99 %. `capture_c2 mode=identique` : identique.
 - Point 10 (la tension, mesurée) : ne tire aucun dé, ne change rien (mêmes combats qu'au point 9).
+
+## Cartes, étapes 5 et 6 (scènes de départ ; lidar)
+- `sim_tower ... combats=300 graine=7`, étages 1 à 4 (survie, défense : pas de scène), après le point 10 → scènes :
+  brute 99 / 59 / 42 / 45,3 → 100 (0,08) / 57 (2,49) / 43,7 (3,06) / 43,3 (3,09) ; préparée 100 / 92,3 / 81 / 82 →
+  99,7 (0,03) / 88,3 (0,84) / 81,7 (1,11) / 89,3 (0,72). Dans le bruit, sauf préparée étage 4 (+7,3). Par disposition :
+  le poste fortifié, désormais sur la hauteur, se défend mieux (brute 24,6 à 34,2 %, préparée 65,4 à 85,2 %) ; le
+  camp endormi est plus facile (préparée 89,7 à 96,6 %). Durées : 20 à 41 s. « Bloqués sans raison » : 0 à 4, 12 à
+  l'étage 4 brute. Tutoriel (`sim_tutoriel`, 200 parties) : 99 %.
+- Lidar (que l'écran) : `capture_c2 mode=identique` : identique ; 60 images/s sur le PC de test (village, 5 héros,
+  1 500 points au plus) ; `test_prompt3` : tout est bon.

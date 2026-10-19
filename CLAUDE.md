@@ -154,6 +154,6 @@ Le détail de chaque système est dans son fichier ; le lire avant d'y toucher, 
 - Combat v2 : C1, C2 faites ; C3 en cours (`docs/combat.md`).
 - Étape E (exploration et combat autonome) : faite (vigilance des monstres, exploration ; plus de placement par le Maître ; infiltration, assassinat, pièges ; liens et caractère en combat : protéger un ami, appât, abandon, `battle_ties.gd`) (`docs/combat.md`).
 - Recensement « Techniques de programmation pour le combat » (https://claude.ai/code/artifact/63bb7dd2-1f20-43b7-b955-b4d05529fa23) : points 1 à 10 faits (jauge de détection, corps et compagnons disparus, son qui suit les passages, chemins discrets, annotation tactique `battle_terrain.gd`, recherche intelligente et carte de fuite `battle_search.gd`, coordination, formations, camps et nuit, calques de débogage et revoir le dernier combat, première brique du directeur d'IA `battle_director.gd` ; `tools/test_techniques.gd`) (`docs/combat.md`).
-- Cartes (demande du porteur du projet) : étapes 1 à 4 faites (vue de dessus retirée et option « Performances » ;
+- Cartes (demande du porteur du projet) : étapes 1 à 6 faites (vue de dessus retirée et option « Performances » ; zones de départ selon l'histoire de l'étage ; lidar en nuage de points qui lève le brouillard ;
   générateur de cartes rondes 24 x 26 par bruits superposés, `map_generator.gd` ; rendu 3D des villages, forêts, reliefs ;
   brouillard de guerre) (`docs/combat.md`, « Cartes » ; bancs `tools/test_cartes.gd`, outil `tools/essai_cartes.gd`).

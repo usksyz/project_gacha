@@ -569,6 +569,37 @@ Les renvois « voir … » peuvent désigner une autre partie de `docs/` ou `CLA
   (`_fogged_color`). Un monstre que personne ne voit est caché (`fogged` ; le mode dev le montre, grisé, comme avant) ;
   un corps n'apparaît que sur une case déjà vue. Pas de brouillard en duel. `capture_c2` recalcule le brouillard avant
   l'image. Banc : `tools/test_cartes.gd` (lieux, forme, village, forêt, graine, sauvegarde).
+  5. Scènes de départ (demande du porteur du projet : « les zones de départ ennemies et alliées sont placées après la
+  génération ; elles peuvent être dans les villages, les forêts..., en accord avec la mission et l'histoire de l'étage » ;
+  `MapGenerator._scenario`, chiffres en tête du fichier ; `MAP_VERSION` 3, `SAVE_VERSION` 12 : les étages figés d'avant
+  sont refaits). Pour les lieux à histoire (`STORY_TEMPLATES` : village, prairie, forêt, relief), le terrain est fait
+  partout (plus de bandes de départ plates, `_flat_zone` et `_open_zone` ne servent plus qu'aux autres lieux), puis :
+  l'arrivée des héros (`hero_entry`) est le bout sud de la route du village ou du sentier de la forêt (ils arrivent par
+  le chemin), sinon un point du bord sud ; on y dégage les arbres et les buissons (`HERO_CLEAR`) ; le cœur du camp ennemi
+  (`enemy_anchor`) : au village envahi, au milieu des maisons ; en forêt, la plus grande clairière du nord (agrandie pour
+  le camp) ; en terrain accidenté, la hauteur la plus haute du nord ; dans la prairie, à l'opposé de l'arrivée ; toujours
+  à plus de `CAMP_DISTANCE` cases des héros. Zones : `hero_zone` (`HERO_ZONE_RADIUS`), `enemy_zone`
+  (`ENEMY_ZONE_RADIUS`), `entry_cells` (le bord du côté du camp : les renforts y entrent, `enemy["entry_cell"]`),
+  `ambush_cells` (herbes et abris sur le chemin des héros). Combat : les héros partent de leur zone (`_place_in_zone` : le
+  corps à corps du côté du camp, tournés vers lui) ; les monstres de la leur ; le camp, le poste, les rondes (autour du
+  camp, chacune dans son quartier), le pillage (entre les maisons) et l'embuscade (sur le chemin des héros) se placent
+  d'après la scène (`BattleAlert._anchor`, les gardes tournés vers l'arrivée des héros, `_toward_heroes`) ; l'arrière
+  (rotation), la fuite sans monstre connu (`Battle.retreat_point`) : vers l'arrivée ; l'exploration préfère le côté du
+  camp (`BattleExplore._enemy_side`) ; la caméra démarre entre le centre et l'arrivée. Survie, défense, duel : comme avant
+  (lignes). Aperçu de l'étage : la zone d'arrivée en vert. `essai_cartes` : « h » et « e » pour les zones. Banc :
+  `test_cartes` (village : camp entre les maisons, héros par la route ; forêt : camp en clairière ; au combat, chacun dans
+  sa zone).
+  6. Lidar (demande du porteur du projet : « améliorer le lidar, pas assez bien fait ; le brouillard se dissipe via le
+  lidar » ; `BattleView3D._scan_lidar`, `_draw_lidar`, chiffres `LIDAR_*` ; que l'écran). Avant : seulement les bâtonnets
+  du héros choisi, des traits figés à hauteur des yeux dont le bout flottait en l'air. Maintenant, à chaque mise à jour de
+  la perception, chaque héros debout balaie son éventail : des points cyan se posent sur le dessus des cases tous les
+  `LIDAR_STEP` cases le long de chaque bâtonnet, du héros vers le loin (`LIDAR_SPEED`), d'un bord de l'éventail à
+  l'autre (`LIDAR_SWEEP`), et s'effacent en `LIDAR_LIFE` s ; un point blanc là où le bâtonnet bute contre un obstacle ;
+  un anneau rouge qui s'élargit sur chaque monstre vu. Le héros choisi a les points les plus vifs (les autres moitié moins,
+  ou un peu plus sans héros choisi) ; au plus `LIDAR_MAX_POINTS`. Brouillard (`_update_fog`) : une case s'éclaire quand
+  un point du lidar y passe (elle le reste `LIDAR_HOLD` s) ou tout près d'un héros, et la lumière monte et descend en
+  douceur (`FOG_RISE`, `FOG_FALL`) : le brouillard se dissipe au passage du balayage. L'éventail du héros choisi reste
+  dessiné en traits très fins. `capture_c2 ... direct=<secondes>` : le combat tourne en temps réel avant l'image.
 - Choix du porteur du projet pour le combat : du temps réel (pas du tour par tour) où l'on voit les
   personnages bouger, utiliser le décor, et les ennemis leur foncer dessus. On vit le combat :
   jamais de bouton « passer » ni d'accélération. Le joueur soutient ses héros en les guidant
