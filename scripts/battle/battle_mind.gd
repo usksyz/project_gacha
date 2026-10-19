@@ -298,4 +298,4 @@ func _panic_think(unit: Dictionary, foes: Array) -> void:
 func _flee_cell(fighter: Dictionary) -> Vector2:
 	if search != null:
 		return search.flee_target(fighter)
-	return _free_cell_near(Vector2i(_cell_of(fighter["pos"]).x, GRID_H - 2))
+	return retreat_point(fighter["pos"])

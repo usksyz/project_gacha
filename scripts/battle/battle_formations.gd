@@ -11,6 +11,9 @@ func _rotate(tired: Dictionary) -> Dictionary:
 	var spot: Vector2 = tired["pos"]
 	var relief := _find_relief(tired)
 	var rear := _free_cell_near(_cell_of(Vector2(spot.x, minf(GRID_H - 2.5, spot.y + GameData.ROTATION_REAR_DISTANCE))))
+	if map_data.has("enemy_anchor"):  # (scène : l'arrière, c'est à l'opposé du camp ennemi)
+		var away: Vector2 = (spot - BattleMap.center(map_data["enemy_anchor"])).normalized()
+		rear = _free_cell_near(_cell_of(spot + away * GameData.ROTATION_REAR_DISTANCE))
 	tired["order"] = {"kind": "move", "pos": rear}
 	tired["path"] = PackedVector2Array()
 	tired["resting"] = true

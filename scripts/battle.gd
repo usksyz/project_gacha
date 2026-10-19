@@ -554,7 +554,16 @@ func _call_reinforcements() -> void:
 	for place in _free_since.keys():
 		if time - _free_since[place] >= REINFORCE_DELAY and not waiting.is_empty():
 			var enemy: Dictionary = waiting.pop_front()
-			_spawn_enemy(enemy, map_data.get("entry_row", MapGenerator.ENTRY_ROW))
+			var entry_cells: Array = map_data.get("entry_cells", [])
+			if enemy["source"].has("entry_cell") or not entry_cells.is_empty():
+				# (scène : par le bord du côté du camp ennemi)
+				var cell := Vector2i(GRID_W / 2, 1)
+				if not entry_cells.is_empty():
+					cell = entry_cells[randi_range(0, entry_cells.size() - 1)]
+				cell = enemy["source"].get("entry_cell", cell)
+				_spawn_enemy(enemy, cell.y, cell.x)
+			else:
+				_spawn_enemy(enemy, map_data.get("entry_row", MapGenerator.ENTRY_ROW))
 			alert.on_spawn(enemy)  # (étape E : sans alarme, il sort du camp, ou fait sa ronde)
 			arrivals.append(enemy["name"])
 			_free_since.erase(place)

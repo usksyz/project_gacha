@@ -40,6 +40,10 @@ func _run() -> void:
 				var ch := "."
 				if not gen.inside(c):
 					ch = " "
+				elif c in data.get("hero_zone", []):
+					ch = "h"
+				elif c in data.get("enemy_zone", []):
+					ch = "e"
 				elif k == BattleMap.Kind.BLOCK:
 					ch = "#"
 				elif k == BattleMap.Kind.STAIRS:

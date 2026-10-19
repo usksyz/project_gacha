@@ -15,6 +15,8 @@ var hero_rows: Array = []
 var enemy_starts: Array = []
 ## Carte ronde (cartes, étape 2 : format 2 et plus).
 var round_map := false
+## (Scènes) Les cases d'arrivée des héros (MapGenerator._scenario ; vide : les lignes « hero_rows »).
+var hero_zone: Array = []
 
 
 ## « map_data » : la carte (floor_layout(...)["map"]) ; « starts » : les cases de départ à montrer.
@@ -22,6 +24,7 @@ func setup(map_data: Dictionary, starts: Array) -> void:
 	map.from_data(map_data)
 	hero_rows = map_data.get("hero_rows", [])
 	round_map = map_data.get("version", 1) >= 2
+	hero_zone = map_data.get("hero_zone", [])
 	enemy_starts = starts
 	custom_minimum_size = Vector2(map.size.x, map.size.y) * CELL
 	queue_redraw()
@@ -36,7 +39,9 @@ func _draw() -> void:
 		var color: Color = BattleView.KIND_COLORS.get(map.kind_at(cell), BattleView.GROUND_COLOR) \
 			.lightened(height * BattleView.HEIGHT_LIGHTEN)
 		draw_rect(Rect2(Vector2(cell) * CELL, Vector2(CELL, CELL) - Vector2.ONE), color)
-	if hero_rows.size() >= 2:
+	for cell in hero_zone:
+		draw_rect(Rect2(Vector2(cell) * CELL, Vector2(CELL, CELL) - Vector2.ONE), ZONE_COLOR, false, 2.0)
+	if hero_zone.is_empty() and hero_rows.size() >= 2:
 		var top: int = mini(hero_rows[0], hero_rows[1])
 		var bottom: int = maxi(hero_rows[0], hero_rows[1])
 		draw_rect(Rect2(Vector2(0, top) * CELL, Vector2(map.size.x, bottom - top + 1) * CELL), ZONE_COLOR, false, 2.0)

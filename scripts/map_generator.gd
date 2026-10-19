@@ -37,8 +37,9 @@ extends RefCounted
 const K := BattleMap.Kind
 
 ## Version du format de la carte (pour les cartes enregistrées dans la sauvegarde). 2 : cartes rondes de 24 x 26
-## (cartes, étape 2) ; une carte de version 1 (18 x 20) est refaite (voir GameSave).
-const MAP_VERSION := 2
+## (cartes, étape 2) ; une carte de version 1 (18 x 20) est refaite (voir GameSave). 3 : zones de départ placées selon
+## l'histoire de l'étage (« scènes », voir _scenario) ; une carte d'avant est refaite aussi.
+const MAP_VERSION := 3
 
 const WIDTH := 24
 const LENGTH := 26
@@ -77,6 +78,16 @@ const TREE_SPACING := 1.3
 const FOREST_DENSITY := -0.32
 ## Relief : une case garde son niveau si au moins CA_KEEP de ses 8 voisines sont aussi hautes (automate cellulaire).
 const CA_KEEP := 4
+## Scènes de départ (demande du porteur du projet : « les zones de départ des ennemis et des alliés sont placées après la
+## génération, dans le village, la forêt..., en accord avec la mission et l'histoire de l'étage » ; voir _scenario) :
+## les lieux qui en ont une, la place dégagée autour de l'arrivée des héros (HERO_CLEAR), la taille des zones, la
+## distance minimale entre les deux camps au départ, l'arc du bord par où entrent les renforts (cosinus).
+const STORY_TEMPLATES := ["village", "prairie", "foret", "relief"]
+const HERO_CLEAR := 2.5
+const HERO_ZONE_RADIUS := 3.2
+const ENEMY_ZONE_RADIUS := 4.0
+const CAMP_DISTANCE := 9.0
+const ENTRY_ARC := 0.45
 
 
 ## Le gabarit d'un étage (voir l'en-tête). « map_seed » : la forêt ou le relief, selon la graine (étages ordinaires).
@@ -116,18 +127,18 @@ static func generate(floor_number: int, quest: Dictionary, floor_seed: int) -> D
 	cells.size = map["size"]
 	cells.heights = PackedInt32Array(map["heights"])
 	cells.kinds = PackedInt32Array(map["kinds"])
-	var starts := []
-	for row in range(map["enemy_rows"].x, map["enemy_rows"].y + 1):
-		for x in WIDTH:
-			if cells.walkable(Vector2i(x, row)) and cells.height_at(Vector2i(x, row)) == 0:
-				starts.append(Vector2i(x, row))
+	var starts := _enemy_cells(cells, map).duplicate()
 	var entries := []
 	for x in range(1, WIDTH - 1):
 		if cells.walkable(Vector2i(x, map["entry_row"])):
 			entries.append(x)
+	var entry_cells: Array = map.get("entry_cells", [])
 	for enemy in enemies:
 		enemy["elite"] = false
-		enemy["entry"] = entries[rng.randi_range(0, entries.size() - 1)]
+		if entry_cells.is_empty():
+			enemy["entry"] = entries[rng.randi_range(0, entries.size() - 1)]
+		else:  # (scène : les renforts arrivent par le bord du côté ennemi)
+			enemy["entry_cell"] = entry_cells[rng.randi_range(0, entry_cells.size() - 1)]
 		if enemy.get("wave", 0) == 0 and not starts.is_empty():
 			enemy["start"] = starts.pop_at(rng.randi_range(0, starts.size() - 1))
 	return {"version": MAP_VERSION, "seed": floor_seed, "map": map, "enemies": enemies}
@@ -142,8 +153,10 @@ static func generate_map(floor_number: int, quest: Dictionary, map_seed: int) ->
 	var rng := RandomNumberGenerator.new()
 	rng.seed = map_seed
 	var template := template_for(floor_number, quest, map_seed)
+	# (la disposition des monstres est tirée de la même graine, voir BattleAlert.disposition_for : la scène en dépend)
+	var disposition: String = BattleAlert.disposition_for(quest, map_seed)
 	for attempt in ATTEMPTS:
-		var data := _build(template, rng)
+		var data := _build(template, rng, disposition)
 		if check(data) == "":
 			data["seed"] = map_seed
 			return data
@@ -165,7 +178,16 @@ static func check(data: Dictionary) -> String:
 	map.heights = PackedInt32Array(data["heights"])
 	map.kinds = PackedInt32Array(data["kinds"])
 	var hero_cells := _hero_cells(map, data)
-	for row in data["hero_rows"]:
+	var enemy_cells := _enemy_cells(map, data)
+	if data.get("story", false):
+		# (scène : des zones placées selon l'histoire, pas des lignes ; voir _scenario)
+		if hero_cells.size() < 6:
+			return "zone des héros trop petite"
+		if enemy_cells.size() < 8:
+			return "zone des ennemis trop petite"
+		if data["entry_cells"].is_empty():
+			return "pas de bord pour les renforts"
+	for row in ([] if data.get("story", false) else data["hero_rows"]):
 		var row_height := -1
 		var free := 0
 		for x in range(3, WIDTH - 3):
@@ -178,13 +200,12 @@ static func check(data: Dictionary) -> String:
 			free += 1
 		if free < 8:
 			return "zone des héros trop petite (ligne %d)" % row
-	var enemy_cells := _enemy_cells(map, data)
-	for row in range(data["enemy_rows"].x, data["enemy_rows"].y + 1):
+	for row in ([] if data.get("story", false) else range(data["enemy_rows"].x, data["enemy_rows"].y + 1)):
 		if enemy_cells.filter(func(c): return c.y == row).size() < 10:
 			return "zone des ennemis trop petite (ligne %d)" % row
 	var from_heroes := map.reachable(hero_cells)
 	var from_enemies := map.reachable(enemy_cells)
-	if not from_enemies.has(Vector2i(WIDTH / 2, data["hero_rows"][0])):
+	if not from_enemies.has(hero_cells[hero_cells.size() / 2]):
 		return "les ennemis n'atteignent pas les héros"
 	if not from_heroes.has(enemy_cells[enemy_cells.size() / 2]):
 		return "les héros n'atteignent pas les ennemis"
@@ -208,6 +229,8 @@ static func check(data: Dictionary) -> String:
 
 
 static func _hero_cells(map: BattleMap, data: Dictionary) -> Array:
+	if data.has("hero_zone"):
+		return data["hero_zone"].filter(func(c): return map.walkable(c))
 	var cells := []
 	for row in data["hero_rows"]:
 		for x in range(3, WIDTH - 3):
@@ -217,6 +240,8 @@ static func _hero_cells(map: BattleMap, data: Dictionary) -> Array:
 
 
 static func _enemy_cells(map: BattleMap, data: Dictionary) -> Array:
+	if data.has("enemy_zone"):
+		return data["enemy_zone"].filter(func(c): return map.walkable(c))
 	var cells := []
 	for row in range(data["enemy_rows"].x, data["enemy_rows"].y + 1):
 		for x in WIDTH:
@@ -229,12 +254,13 @@ static func _enemy_cells(map: BattleMap, data: Dictionary) -> Array:
 # Fabrication
 # ---------------------------------------------------------------------------
 
-static func _build(template: String, rng: RandomNumberGenerator) -> Dictionary:
+static func _build(template: String, rng: RandomNumberGenerator, disposition := "") -> Dictionary:
 	var map := BattleMap.new(WIDTH, LENGTH)
 	var terrain: Dictionary = TERRAIN.get(template, TERRAIN["arene"])
 	var data := {"version": MAP_VERSION, "template": template, "structures": [], "roads": [],
 		"edge_style": terrain["edge"], "hero_rows": [HERO_FRONT_ROW, HERO_BACK_ROW], "enemy_rows": ENEMY_ROWS,
 		"entry_row": ENTRY_ROW, "alley_exits": [], "alley_exit_row": -1, "wall_row": -1, "lookout": []}
+	data["story"] = template in STORY_TEMPLATES  # (une scène de départ, voir _scenario)
 	var taken := {}  # cases déjà prises par un décor (avec la marge autour des maisons), la lisière, la route
 	for i in map.kinds.size():
 		if not inside(map.cell_at(i)):
@@ -256,6 +282,8 @@ static func _build(template: String, rng: RandomNumberGenerator) -> Dictionary:
 		_:
 			for i in rng.randi_range(3, 5):
 				_place(map, data, taken, rng, Vector2i(1, 1), K.ROCK, 1, "rock", 0)
+	if data["story"]:
+		_scenario(map, data, rng, disposition)
 	_slopes(map, terrain, rng)
 	_edge(map)
 	_fill_pockets(map, data)
@@ -273,7 +301,7 @@ static func _relief_heights(map: BattleMap, data: Dictionary, terrain: Dictionar
 	var levels: Array = terrain["levels"]
 	for i in map.kinds.size():
 		var cell := map.cell_at(i)
-		if not inside(cell) or _flat_zone(cell, data):
+		if not inside(cell) or (not data["story"] and _flat_zone(cell, data)):
 			continue
 		var value := noise.get_noise_2d(cell.x, cell.y)
 		map.heights[i] = 2 if value >= levels[1] else (1 if value >= levels[0] else 0)
@@ -299,6 +327,8 @@ static func _relief_heights(map: BattleMap, data: Dictionary, terrain: Dictionar
 ## Le centre des zones de départ (là où l'on se place) : aucun décor. Les côtés des zones peuvent avoir des arbres, des
 ## herbes ou des rochers (pas de relief : voir _flat_zone).
 static func _open_zone(cell: Vector2i, data: Dictionary) -> bool:
+	if data["story"]:
+		return false  # (scène : le décor partout ; les zones de départ viennent après)
 	return _flat_zone(cell, data) and cell.x >= 5 and cell.x < WIDTH - 5
 
 
@@ -669,6 +699,189 @@ static func _town(map: BattleMap, data: Dictionary, rng: RandomNumberGenerator) 
 	for i in rng.randi_range(3, 5):
 		_place(map, data, taken, rng, Vector2i(rng.randi_range(1, 2), 1), K.ROCK if rng.randf() < 0.5 else K.LOW_WALL, 1,
 			"debris", 1, Vector2i(ENEMY_ROWS.y + 1, top - 2))
+
+
+# ---------------------------------------------------------------------------
+# Scènes de départ (placées après le terrain, selon l'histoire de l'étage)
+# ---------------------------------------------------------------------------
+
+## La scène de départ (demande du porteur du projet ; ajout du projet). Le terrain est fait partout, sans bandes de départ ;
+## puis on place, selon le lieu et la disposition des monstres (BattleAlert.disposition_for, tirée de la même graine) :
+## - l'arrivée des héros (« hero_entry ») : le bout sud de la route du village ou du sentier de la forêt (ils arrivent par
+##   le chemin), sinon un point du bord sud ; on y dégage un peu de place (HERO_CLEAR : les arbres et les buissons) ;
+## - le cœur du camp ennemi (« enemy_anchor ») : au village envahi, au milieu des maisons ; en forêt, la plus grande
+##   clairière (agrandie pour le camp) ; en terrain accidenté, la hauteur la plus haute ; dans la prairie, à l'opposé de
+##   l'arrivée des héros ; toujours à plus de CAMP_DISTANCE cases d'eux ;
+## - les zones : « hero_zone » (à HERO_ZONE_RADIUS cases de l'arrivée), « enemy_zone » (à ENEMY_ZONE_RADIUS cases du
+##   camp), « entry_cells » (le bord du côté ennemi, par où entrent les renforts), « ambush_cells » (les herbes et les
+##   abris sur le chemin des héros, pour une embuscade).
+static func _scenario(map: BattleMap, data: Dictionary, rng: RandomNumberGenerator, disposition: String) -> void:
+	var entry := _hero_entry(map, data, rng)
+	_clear_around(map, data, entry, HERO_CLEAR)
+	var anchor := _enemy_anchor(map, data, rng, entry, disposition)
+	if data["template"] == "foret":
+		_clear_around(map, data, anchor, 2.0)  # (la clairière du camp)
+	data["hero_entry"] = entry
+	data["enemy_anchor"] = anchor
+	data["hero_zone"] = _zone(map, entry, HERO_ZONE_RADIUS, Vector2(-100, -100), 0.0)
+	data["enemy_zone"] = _zone(map, anchor, ENEMY_ZONE_RADIUS, BattleMap.center(entry), CAMP_DISTANCE)
+	data["entry_cells"] = _entry_cells(map, anchor)
+	data["ambush_cells"] = _ambush_cells(map, entry, anchor)
+
+
+## L'arrivée des héros : le bout sud de la route ou du sentier, sinon un point du bord sud (un peu de côté, selon la graine).
+static func _hero_entry(map: BattleMap, data: Dictionary, rng: RandomNumberGenerator) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	for cell in data["roads"]:
+		if inside(cell) and cell.y >= CENTER.y and map.walkable(cell) and cell.y > best.y:
+			best = cell
+	if best.x >= 0:
+		return best
+	var angle := PI / 2.0 + rng.randf_range(-0.6, 0.6)  # (le sud : vers le bas de la carte)
+	var point := CENTER + Vector2(cos(angle) * RADII.x, sin(angle) * RADII.y) * 0.8
+	return _nearest_open(map, Vector2i(point))
+
+
+## Le cœur du camp ennemi, selon le lieu (voir _scenario) ; toujours loin de l'arrivée des héros.
+static func _enemy_anchor(map: BattleMap, data: Dictionary, rng: RandomNumberGenerator, entry: Vector2i, disposition: String) -> Vector2i:
+	var far := func(c: Vector2i) -> bool: return Vector2(c).distance_to(Vector2(entry)) >= CAMP_DISTANCE
+	var best := Vector2i(-1, -1)
+	match data["template"]:
+		"village":
+			# Au milieu des maisons (le village envahi), sur une case libre.
+			var houses: Array = data["structures"].filter(func(s): return s["kind"] == "house")
+			if not houses.is_empty():
+				var sum := Vector2.ZERO
+				for house in houses:
+					sum += Vector2(house["rect"].get_center())
+				best = _nearest_open(map, Vector2i(sum / houses.size()))
+		"foret":
+			# La plus grande clairière du nord : la case libre la plus loin des arbres.
+			var best_open := -1.0
+			for i in map.kinds.size():
+				var cell := map.cell_at(i)
+				if not inside(cell) or cell.y > CENTER.y - 2 or not map.walkable(cell) or not far.call(cell):
+					continue
+				var score := _openness(map, cell, 4) - absf(cell.x - CENTER.x) * 0.05
+				if score > best_open:
+					best_open = score
+					best = cell
+		"relief":
+			# La hauteur la plus haute du nord (un poste, un camp en surplomb).
+			var best_height := -1.0
+			for i in map.kinds.size():
+				var cell := map.cell_at(i)
+				if not inside(cell) or cell.y > CENTER.y or not map.walkable(cell) or not far.call(cell):
+					continue
+				if map.kind_at(cell) == K.LADDER:
+					continue
+				var score := map.height_at(cell) + _openness(map, cell, 2) * 0.1
+				if score > best_height:
+					best_height = score
+					best = cell
+	if best.x < 0 or not far.call(best):
+		# À l'opposé de l'arrivée des héros (la prairie, ou faute de mieux).
+		var opposite := CENTER - (Vector2(entry) - CENTER) * 0.6
+		best = _nearest_open(map, Vector2i(opposite))
+	return best
+
+
+## La distance au premier obstacle autour d'une case (au plus « radius » + 1) : la taille d'une clairière.
+static func _openness(map: BattleMap, cell: Vector2i, radius: int) -> float:
+	var nearest := float(radius + 1)
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			var other := cell + Vector2i(dx, dy)
+			if not map.in_bounds(other) or not inside(other) or not map.walkable(other):
+				nearest = minf(nearest, Vector2(dx, dy).length())
+	return nearest
+
+
+## La case libre (dans le disque, où l'on se tient) la plus proche.
+static func _nearest_open(map: BattleMap, cell: Vector2i) -> Vector2i:
+	for radius in range(0, 8):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var other := cell + Vector2i(dx, dy)
+				if maxi(absi(dx), absi(dy)) == radius and map.in_bounds(other) and inside(other) and map.walkable(other) \
+						and map.kind_at(other) != K.LADDER:
+					return other
+	return Vector2i(CENTER)
+
+
+## Dégage la place autour d'une case : les arbres et les buissons deviennent du sol (les maisons, les rochers restent).
+static func _clear_around(map: BattleMap, data: Dictionary, center: Vector2i, radius: float) -> void:
+	var cleared := {}
+	for structure in data["structures"]:
+		if not structure["kind"] in ["trees", "bush"]:
+			continue
+		var cell: Vector2i = structure["rect"].position
+		if Vector2(cell).distance_to(Vector2(center)) <= radius:
+			map.kinds[map.index(cell)] = K.GROUND
+			map.heights[map.index(cell)] = structure.get("base", 0)
+			cleared[cell] = true
+	data["structures"] = data["structures"].filter(func(s): return not (cleared.has(s["rect"].position) and s["kind"] in ["trees", "bush"]))
+
+
+## Les cases où l'on se tient (pas une échelle), à moins de « radius » de « center », et à plus de « min_dist » d'« avoid ».
+static func _zone(map: BattleMap, center: Vector2i, radius: float, avoid: Vector2, min_dist: float) -> Array:
+	var cells := []
+	var r := ceili(radius)
+	for dy in range(-r, r + 1):
+		for dx in range(-r, r + 1):
+			var cell := center + Vector2i(dx, dy)
+			if not map.in_bounds(cell) or not inside(cell) or not map.walkable(cell) or map.kind_at(cell) == K.LADDER:
+				continue
+			if Vector2(dx, dy).length() > radius or BattleMap.center(cell).distance_to(avoid) < min_dist:
+				continue
+			cells.append(cell)
+	return cells
+
+
+## Le bord de la carte du côté du camp ennemi (les cases du disque contre la lisière, dans la direction du camp) : par là
+## entrent les renforts.
+static func _entry_cells(map: BattleMap, anchor: Vector2i) -> Array:
+	var toward := Vector2(anchor) + Vector2(0.5, 0.5) - CENTER
+	toward = toward.normalized() if toward.length() > 1.0 else Vector2(0, -1)
+	var cells := []
+	for i in map.kinds.size():
+		var cell := map.cell_at(i)
+		if not inside(cell) or not map.walkable(cell) or map.kind_at(cell) == K.LADDER:
+			continue
+		var border := false
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if not inside(cell + d):
+				border = true
+		if border and (Vector2(cell) + Vector2(0.5, 0.5) - CENTER).normalized().dot(toward) >= 1.0 - ENTRY_ARC:
+			cells.append(cell)
+	return cells
+
+
+## Les cachettes sur le chemin des héros (entre le tiers et les trois quarts du trajet, à moins de 3 cases de la ligne) :
+## les herbes hautes, ou une case collée à un obstacle, un rocher ou un muret.
+static func _ambush_cells(map: BattleMap, entry: Vector2i, anchor: Vector2i) -> Array:
+	var a := Vector2(entry)
+	var b := Vector2(anchor)
+	var length := a.distance_to(b)
+	var cells := []
+	if length < 1.0:
+		return cells
+	var dir := (b - a) / length
+	for i in map.kinds.size():
+		var cell := map.cell_at(i)
+		if not inside(cell) or not map.walkable(cell) or map.height_at(cell) > 0:
+			continue
+		var rel := Vector2(cell) - a
+		var t := rel.dot(dir) / length
+		if t < 0.3 or t > 0.75 or absf(rel.cross(dir)) > 3.0:
+			continue
+		var cover := map.kind_at(cell) == K.GRASS
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if map.kind_at(cell + d) in [K.BLOCK, K.ROCK, K.LOW_WALL]:
+				cover = true
+		if cover:
+			cells.append(cell)
+	return cells
 
 
 ## Mélange les nombres 0 .. count - 1 avec la graine de la carte (même graine, même mélange).

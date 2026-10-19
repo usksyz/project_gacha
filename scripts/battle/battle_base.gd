@@ -345,22 +345,54 @@ func _place_units() -> void:
 		var start = first[i]["source"].get("start")  # (place fixée par l'étage, voir MapGenerator.generate)
 		if start != null:
 			_spawn_enemy(first[i], start.y, start.x)
+		elif not map_data.get("enemy_zone", []).is_empty():
+			var cell: Vector2i = map_data["enemy_zone"][randi_range(0, map_data["enemy_zone"].size() - 1)]
+			_spawn_enemy(first[i], cell.y, cell.x)  # (scène : dans la zone du camp ennemi)
 		else:
 			var enemy_rows: Vector2i = map_data.get("enemy_rows", MapGenerator.ENEMY_ROWS)
 			_spawn_enemy(first[i], randi_range(enemy_rows.x, enemy_rows.y))
 
 
-## Le placement automatique des héros : la première ligne, et les tireurs derrière (lignes « hero_rows »).
+## Le placement automatique des héros : la première ligne, et les tireurs derrière (lignes « hero_rows »). Sur une carte
+## à scène (MapGenerator._scenario) : à leur arrivée (« hero_zone »), le corps à corps devant (du côté du camp ennemi),
+## les tireurs derrière, tournés vers le camp.
 func _place_heroes() -> void:
 	var front: Array[Dictionary] = []
 	var back: Array[Dictionary] = []
 	for hero in heroes:
 		(back if hero["ranged"] else front).append(hero)
+	if not map_data.get("hero_zone", []).is_empty():
+		_place_in_zone(front + back)
+		return
 	var rows: Array = map_data.get("hero_rows", [MapGenerator.HERO_FRONT_ROW, MapGenerator.HERO_BACK_ROW])
 	_place_row(front, rows[0])
 	_place_row(back, rows[1])
 	for hero in heroes:
 		hero["post"] = hero["pos"]
+
+
+## (Scènes) Les héros dans leur zone d'arrivée : les cases les plus proches du camp ennemi d'abord (le corps à corps), puis
+## les suivantes (les tireurs) ; chacun regarde vers le camp.
+func _place_in_zone(fighters: Array) -> void:
+	var anchor: Vector2 = BattleMap.center(map_data.get("enemy_anchor", Vector2i(GRID_W / 2, 0)))
+	var cells: Array = map_data["hero_zone"].duplicate()
+	cells.sort_custom(func(a, b): return BattleMap.center(a).distance_to(anchor) < BattleMap.center(b).distance_to(anchor))
+	for i in fighters.size():
+		var fighter: Dictionary = fighters[i]
+		fighter["pos"] = _free_cell_near(cells[mini(i * 2, cells.size() - 1)])
+		fighter["prev_pos"] = fighter["pos"]
+		fighter["present"] = true
+		_settle(fighter)
+		fighter["facing"] = (anchor - fighter["pos"]).normalized()
+	for fighter in fighters:
+		fighter["post"] = fighter["pos"]
+
+
+## Le point de repli des héros : leur arrivée (scène), sinon le bas de la carte, dans la colonne de « pos ».
+func retreat_point(pos: Vector2) -> Vector2:
+	if map_data.has("hero_entry"):
+		return _free_cell_near(map_data["hero_entry"])
+	return _free_cell_near(Vector2i(_cell_of(pos).x, GRID_H - 2))
 
 
 ## Aligne des combattants sur une ligne, centrés, sur des cases libres.

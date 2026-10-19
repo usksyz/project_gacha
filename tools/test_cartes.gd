@@ -25,6 +25,7 @@ func _run() -> void:
 	_check_shape()
 	_check_places()
 	_check_seed()
+	_check_scenes()
 	_check_save()
 	print("")
 	print("RÉSULTAT : %s" % ("tout est bon" if failures == 0 else "%d problème(s)" % failures))
@@ -98,6 +99,55 @@ func _check_seed() -> void:
 	var b: Dictionary = gen.generate_map(2, game.floor_quest(2), 99)
 	_check(a["heights"] == b["heights"] and a["kinds"] == b["kinds"] and a["structures"].size() == b["structures"].size(),
 		"deux fois la graine 99 : la même prairie")
+
+
+func _check_scenes() -> void:
+	print("Scènes de départ (selon l'histoire de l'étage)")
+	var houses_near := 0
+	var far_enough := 0
+	var total := 0
+	for s in 20:
+		var data: Dictionary = gen.generate_map(1, game.floor_quest(1), s)
+		total += 1
+		var anchor: Vector2i = data["enemy_anchor"]
+		var entry: Vector2i = data["hero_entry"]
+		if data["structures"].any(func(st): return st["kind"] == "house" and Vector2(st["rect"].get_center()).distance_to(Vector2(anchor)) <= 5.0):
+			houses_near += 1
+		if Vector2(entry).distance_to(Vector2(anchor)) >= gen.CAMP_DISTANCE and data["roads"].has(entry):
+			far_enough += 1
+	_check(houses_near == total, "village envahi : les monstres au milieu des maisons (%d sur %d)" % [houses_near, total])
+	_check(far_enough == total, "les héros arrivent par la route, loin du camp (%d sur %d)" % [far_enough, total])
+	var clearing := 0
+	var forests := 0
+	for s in 40:
+		if gen.template_for(3, game.floor_quest(3), s) != "foret":
+			continue
+		var data: Dictionary = gen.generate_map(3, game.floor_quest(3), s)
+		forests += 1
+		var map := BattleMap.new()
+		map.from_data(data)
+		var open := 0
+		var anchor: Vector2i = data["enemy_anchor"]
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				open += 1 if map.walkable(anchor + Vector2i(dx, dy)) else 0
+		clearing += 1 if open >= 8 else 0
+	_check(forests > 0 and clearing == forests, "forêt : le camp dans une clairière (%d sur %d)" % [clearing, forests])
+	# Au combat : les héros partent de leur zone d'arrivée, les monstres de la leur.
+	var quest: Dictionary = game.floor_quest(1)
+	var layout: Dictionary = gen.generate(1, quest, 7)
+	var team := []
+	for i in 5:
+		team.append(game.dev_create_hero(1, ""))
+	var battle = load("res://scripts/battle.gd").new(team, layout["enemies"], quest)
+	battle.map_data = layout["map"]
+	battle.start()
+	var zone: Array = layout["map"]["hero_zone"]
+	var heroes_ok: bool = battle.heroes.all(func(h): return zone.any(func(c): return BattleMap.center(c).distance_to(h["pos"]) <= 2.0))
+	var anchor: Vector2 = BattleMap.center(layout["map"]["enemy_anchor"])
+	var present: Array = battle.enemies.filter(func(e): return e["present"])
+	var enemies_ok: bool = present.all(func(e): return e["pos"].distance_to(anchor) <= gen.ENEMY_ZONE_RADIUS + 3.0)
+	_check(heroes_ok and enemies_ok, "au combat : les héros à leur arrivée, les monstres dans le village")
 
 
 func _check_save() -> void:

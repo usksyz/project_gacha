@@ -55,6 +55,8 @@ var counts := {"synchronises": 0, "formations": 0, "bonds_abri": 0}
 ## (point 7) La formation de l'équipe qui explore (« coin » ou « colonne »), le prochain message, l'abri visé par le
 ## meneur et la fin de sa pause.
 var formation := "coin"
+## (Scènes) Là où la mission envoie l'équipe (le camp ennemi de la scène ; Vector2(-1, -1) : le haut de la carte).
+var _enemy_side := Vector2(-1, -1)
 var _formation_logged := 0.0
 var _bound_target := Vector2(-1, -1)
 var _bound_wait := 0.0
@@ -66,6 +68,8 @@ func _init(owner) -> void:
 
 func setup() -> void:
 	explored.resize(battle.GRID_W * battle.GRID_H)
+	if battle.map_data.has("enemy_anchor"):
+		_enemy_side = BattleMap.center(battle.map_data["enemy_anchor"])
 	explored.fill(-1000.0)
 	for hero in battle.heroes:
 		roles[hero["id"]] = _role_of(hero)
@@ -577,7 +581,7 @@ func _replan() -> void:
 ## La case inexplorée la plus proche (où l'on peut se tenir), en préférant le côté ennemi (le haut de la carte). Tout
 ## est exploré : le camp ennemi (le haut de la carte), où ils finiront bien par trouver quelqu'un.
 func _frontier(from: Vector2) -> Vector2:
-	var best := Vector2(battle.GRID_W / 2.0, 2.5)
+	var best := _enemy_side if _enemy_side.x >= 0.0 else Vector2(battle.GRID_W / 2.0, 2.5)
 	var best_score := INF
 	for i in explored.size():
 		var cell: Vector2i = battle.map.cell_at(i)
@@ -586,7 +590,9 @@ func _frontier(from: Vector2) -> Vector2:
 		if not battle.map.walkable(cell) or battle.map.kind_at(cell) == BattleMap.Kind.LADDER:
 			continue
 		var center := BattleMap.center(cell)
-		var score := from.distance_to(center) + cell.y * GameData.EXPLORE_FORWARD
+		# (côté ennemi : le haut de la carte, ou le camp de la scène, que la mission désigne)
+		var forward: float = center.distance_to(_enemy_side) if _enemy_side.x >= 0.0 else float(cell.y)
+		var score := from.distance_to(center) + forward * GameData.EXPLORE_FORWARD
 		if score < best_score:
 			best_score = score
 			best = center

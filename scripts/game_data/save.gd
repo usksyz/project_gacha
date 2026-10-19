@@ -37,7 +37,9 @@ const SAVE_PATH := "user://sauvegarde.cfg"
 ##     (« rapport_du_jour »), jour de repos (hero["rest_until"]) ; absents = rien en attente, rien vu.
 ## 11 : cartes, étape 2 : cartes rondes de 24 x 26 (MapGenerator.MAP_VERSION 2) : les étages figés et la carte du combat
 ##      en cours d'une version d'avant sont refaits.
-const SAVE_VERSION := 11
+## 12 : scènes de départ (MapGenerator.MAP_VERSION 3) : de même, les étages figés et la carte du combat en cours d'avant
+##      sont refaits (les zones de départ sont placées selon l'histoire de l'étage).
+const SAVE_VERSION := 12
 
 
 ## Enregistre toute la partie : monnaies, étage, héros (morts compris), codes utilisés.

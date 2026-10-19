@@ -168,7 +168,7 @@ func _pick(monster: Dictionary) -> int:
 ## à au plus FLEE_RADIUS pas de lui. Sans monstre connu : le bas de la carte, comme avant.
 func flee_target(hero: Dictionary) -> Vector2:
 	var map: BattleMap = battle.map
-	var fallback: Vector2 = battle._free_cell_near(Vector2i(map.cell_of(hero["pos"]).x, battle.GRID_H - 2))
+	var fallback: Vector2 = battle.retreat_point(hero["pos"])
 	var goals := []
 	for id in hero["knows"]:
 		var foe: Dictionary = battle.units[id]

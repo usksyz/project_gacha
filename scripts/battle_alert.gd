@@ -92,16 +92,21 @@ func setup() -> void:
 ## qui en fait le tour, les autres au repos autour du feu. Endormi : tout le monde dort, sans guetteur ni patrouille.
 func _arrange_camp(units: Array, sleeping: bool) -> void:
 	var center := _pick_cell(Vector2i(5, _y(2)), Vector2i(battle.GRID_W - 6, _y(3)))
+	if _anchor().x >= 0:
+		center = _nearest_standable(_anchor())  # (scène : le camp au cœur de la zone ennemie, voir MapGenerator._scenario)
 	home = BattleMap.center(center)
 	var rest := units.duplicate()
 	if not sleeping:
 		var shooters := rest.filter(func(u): return u["ranged"])
 		var others := rest.filter(func(u): return not u["ranged"])
 		rest = shooters + others
+		# (les guetteurs de part et d'autre, deux pas vers l'arrivée des héros, tournés vers elle)
+		var toward := _toward_heroes(center)
 		for i in mini(GameData.GUARDS_PER_CAMP, rest.size() - 1):
 			var guard: Dictionary = rest.pop_front()
-			var side := -3 if i == 0 else 3
-			_put(guard, _best_lookout(center + Vector2i(side, 2), 1), "guet", Vector2(0, 1))
+			var side := -3.0 if i == 0 else 3.0
+			var spot := center + Vector2i((toward.orthogonal() * side + toward * 2.0).round())
+			_put(guard, _best_lookout(spot, 1), "guet", toward)
 		if rest.size() >= 3:
 			var walker: Dictionary = rest.pop_back()
 			var route := _loop_around(center, GameData.PATROL_RADIUS)
@@ -148,11 +153,14 @@ func _pitch_tents(center: Vector2i, units: Array) -> void:
 func _arrange_post(units: Array) -> void:
 	var top := Vector2i(battle.GRID_W / 2, 4)
 	var best := -1
-	for y in range(_y(2), _y(9)):
-		for x in range(1, battle.GRID_W - 1):
+	var anchor := _anchor()
+	for y in range(_y(2), _y(9)) if anchor.x < 0 else range(anchor.y - 4, anchor.y + 5):
+		for x in range(1, battle.GRID_W - 1) if anchor.x < 0 else range(anchor.x - 4, anchor.x + 5):
 			var cell := Vector2i(x, y)
-			if not _standable(cell):
+			if not battle.map.in_bounds(cell) or not _standable(cell):
 				continue
+			if anchor.x >= 0 and Vector2(cell).distance_to(Vector2(anchor)) > 4.0:
+				continue  # (scène : la hauteur près du camp ennemi)
 			var h: int = battle.map.height_at(cell)
 			if h > best or (h == best and absi(x - battle.GRID_W / 2) < absi(top.x - battle.GRID_W / 2)):
 				best = h
@@ -162,9 +170,9 @@ func _arrange_post(units: Array) -> void:
 	var shooters := units.filter(func(u): return u["ranged"])
 	var others := units.filter(func(u): return not u["ranged"])
 	for i in shooters.size():
-		_put(shooters[i], _best_lookout(top + Vector2i(i - shooters.size() / 2, 0), 1), "poste", Vector2(0, 1))
+		_put(shooters[i], _best_lookout(top + Vector2i(i - shooters.size() / 2, 0), 1), "poste", _toward_heroes(top))
 	for i in others.size():
-		_put(others[i], top + foot[i % foot.size()], "poste", Vector2(0, 1))
+		_put(others[i], top + foot[i % foot.size()], "poste", _toward_heroes(top))
 	for unit in units:
 		unit["squad"] = 0  # (point 2 : un seul groupe, le poste)
 
@@ -181,16 +189,25 @@ func _arrange_patrols(units: Array) -> void:
 	if not group.is_empty():
 		groups.append(group)
 	var band := float(battle.GRID_W - 2) / maxf(1.0, groups.size())
-	home = Vector2(battle.GRID_W / 2.0, _y(3) + 0.5)
+	home = Vector2(battle.GRID_W / 2.0, _y(3) + 0.5) if _anchor().x < 0 else BattleMap.center(_anchor())
 	for g in groups.size():
 		var x0 := 1 + roundi(band * g)
 		var x1 := 1 + roundi(band * (g + 1)) - 1
 		var route := []
-		for corner in [Vector2i(x0, _y(2)), Vector2i(x1, _y(3)), Vector2i(x1, _y(8)), Vector2i(x0, _y(7))]:
+		var corners := [Vector2i(x0, _y(2)), Vector2i(x1, _y(3)), Vector2i(x1, _y(8)), Vector2i(x0, _y(7))]
+		if _anchor().x >= 0:
+			# (scène : chaque patrouille tourne autour du camp, dans son quartier, à 3 à 5 cases)
+			corners = []
+			var base := TAU * g / maxf(1.0, groups.size())
+			for k in 4:
+				var angle := base + (k - 1.5) * 0.45
+				var reach := 3.0 if k % 3 == 0 else 5.0
+				corners.append(_anchor() + Vector2i(roundi(cos(angle) * reach), roundi(sin(angle) * reach)))
+		for corner in corners:
 			route.append(BattleMap.center(_pick_cell(corner - Vector2i(1, 1), corner + Vector2i(1, 1))))
 		for i in groups[g].size():
 			var unit: Dictionary = groups[g][i]
-			_put(unit, _cell_of(route[0]) + Vector2i(i, 0), "ronde", Vector2(0, 1))
+			_put(unit, _cell_of(route[0]) + Vector2i(i, 0), "ronde", _toward_heroes(_cell_of(route[0])))
 			unit["route"] = route
 			unit["route_i"] = 1
 			unit["squad"] = g + 1  # (point 2 : chaque patrouille est un groupe)
@@ -209,25 +226,32 @@ func _arrange_ambush(units: Array) -> void:
 			var cover: bool = battle.map.in_bounds(below) and battle.map.kind_at(below) in [BattleMap.Kind.ROCK, BattleMap.Kind.LOW_WALL, BattleMap.Kind.BLOCK]
 			if kind == BattleMap.Kind.GRASS or cover:
 				spots.append(cell)
+	var planned: Array = battle.map_data.get("ambush_cells", []).filter(func(c): return _standable(c))
+	if planned.size() >= units.size():
+		spots = planned  # (scène : les cachettes sur le chemin des héros, voir MapGenerator._ambush_cells)
 	home = Vector2(battle.GRID_W / 2.0, _y(7) + 0.5)
 	for unit in units:
 		var cell := _pick_cell(Vector2i(2, _y(5)), Vector2i(battle.GRID_W - 3, _y(9)))
 		if not spots.is_empty():
 			cell = spots.pop_at(_rng.randi_range(0, spots.size() - 1))
 			spots = spots.filter(func(c): return c.distance_to(cell) >= 2.0)  # (pas tous dans le même buisson)
-		_put(unit, cell, "embusque", Vector2(0, 1))
+		_put(unit, cell, "embusque", _toward_heroes(cell))
 
 
 ## Le village envahi : les monstres sont dispersés et rôdent chacun autour de sa place (les bêtes plus loin).
 func _arrange_pillage(units: Array) -> void:
 	var taken := []
 	home = Vector2(battle.GRID_W / 2.0, _y(4) + 0.5)
+	# (scène : dispersés entre les maisons du village envahi, voir MapGenerator._scenario)
+	var zone: Array = battle.map_data.get("enemy_zone", []).filter(func(c): return _standable(c))
+	if not zone.is_empty():
+		home = BattleMap.center(_anchor())
 	for unit in units:
-		var cell := _pick_cell(Vector2i(2, _y(1)), Vector2i(battle.GRID_W - 3, _y(7)))
+		var cell := _pillage_cell(zone)
 		for attempt in 12:
 			if taken.all(func(c): return c.distance_to(cell) >= 3.0):
 				break
-			cell = _pick_cell(Vector2i(2, _y(1)), Vector2i(battle.GRID_W - 3, _y(7)))
+			cell = _pillage_cell(zone)
 		taken.append(cell)
 		var radius := 5.0 if unit["base_name"] in GameData.EMBED_BEASTS else 3.0
 		var route := [BattleMap.center(cell)]
@@ -240,7 +264,7 @@ func _arrange_pillage(units: Array) -> void:
 				if BattleMap.center(point).distance_to(route[route.size() - 1]) >= 2.5:
 					break
 			route.append(BattleMap.center(point))
-		_put(unit, cell, "ronde", Vector2(0, 1))
+		_put(unit, cell, "ronde", _toward_heroes(cell))
 		unit["route"] = route
 		unit["route_i"] = 1
 
@@ -827,3 +851,23 @@ func _loop_around(center: Vector2i, radius: float) -> Array:
 ## à l'échelle de la carte du combat.
 func _y(old_row: int) -> int:
 	return roundi(old_row * battle.GRID_H / 20.0)
+
+
+## (Scènes) Le cœur du camp ennemi de la carte (MapGenerator._scenario ; Vector2i(-1, -1) : une carte sans scène).
+func _anchor() -> Vector2i:
+	return battle.map_data.get("enemy_anchor", Vector2i(-1, -1))
+
+
+## (Scènes) La direction de l'arrivée des héros depuis cette case (sans scène : le bas de la carte).
+func _toward_heroes(cell: Vector2i) -> Vector2:
+	if not battle.map_data.has("hero_entry"):
+		return Vector2(0, 1)
+	var toward: Vector2 = BattleMap.center(battle.map_data["hero_entry"]) - BattleMap.center(cell)
+	return toward.normalized() if toward.length() > 0.1 else Vector2(0, 1)
+
+
+## Une place de départ au village envahi : dans la zone de la scène (entre les maisons), sinon dans le haut de la carte.
+func _pillage_cell(zone: Array) -> Vector2i:
+	if zone.is_empty():
+		return _pick_cell(Vector2i(2, _y(1)), Vector2i(battle.GRID_W - 3, _y(7)))
+	return zone[_rng.randi_range(0, zone.size() - 1)]
