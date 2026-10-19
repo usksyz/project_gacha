@@ -26,6 +26,10 @@ héros uniques qui peuvent mourir définitivement, Tour à étages, gestion de b
   dans `backups/avant-promptN/` (mêmes chemins), poussés avec le reste ; `backups/.gdignore` empêche Godot de les
   lire (sinon les `class_name` seraient en double).
 
+- Contexte léger (règle du porteur du projet) : avant chaque nouvelle requête, compacter le contexte (`/compact`) ou
+  repartir à neuf (`/clear`) quand c'est possible, et confier le travail à des sous-agents (outil Agent : recherche dans
+  le code, mise en œuvre d'une étape, simulations) pour garder la conversation principale légère. `/compact` et `/clear`
+  sont des commandes que seul le porteur du projet peut taper : Claude le lui rappelle quand c'est le moment.
 - Règles de travail pour les simulations (copies du projet) : voir aussi `docs/mesures.md` (outils et mesures).
   Copies du projet pour les simulations : `override.cfg` en UTF-8 SANS BOM (PowerShell `Set-Content -Encoding utf8`
   en ajoute un : Godot ignore alors le fichier et les simulations écrivent dans la vraie sauvegarde, constaté en C3 ;
