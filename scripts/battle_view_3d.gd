@@ -103,6 +103,23 @@ const FOG_UNSEEN := 0.12
 const FOG_REMEMBERED := 0.5
 const FOG_REFRESH := 0.2
 const FOG_AROUND := 1.6
+## Le lidar (demande du porteur du projet : « améliorer le lidar ; le brouillard se dissipe via le lidar » ; voir
+## _scan_lidar) : à chaque mise à jour de la perception, chaque héros balaie son éventail de bâtonnets ; des points se
+## posent sur le sol tous les LIDAR_STEP cases le long de chaque bâtonnet, du héros vers le loin (à LIDAR_SPEED cases par
+## seconde), le balayage allant d'un bord de l'éventail à l'autre en LIDAR_SWEEP s ; ils s'effacent en LIDAR_LIFE s. Un
+## point blanc là où le bâtonnet bute, une impulsion rouge sur un monstre repéré. Une case reste éclairée LIDAR_HOLD s après
+## le passage d'un point ; la lumière du brouillard y monte de FOG_RISE par seconde et redescend de FOG_FALL.
+const LIDAR_STEP := 0.6
+const LIDAR_SPEED := 22.0
+const LIDAR_SWEEP := 0.16
+const LIDAR_LIFE := 0.7
+const LIDAR_HOLD := 0.45
+const LIDAR_MAX_POINTS := 1500
+const FOG_RISE := 5.0
+const FOG_FALL := 1.2
+const LIDAR_GROUND := Color(0.45, 0.95, 1.0)
+const LIDAR_HIT := Color(0.95, 1.0, 1.0)
+const LIDAR_FOE := Color(1.0, 0.35, 0.3)
 
 ## Les formes de base (une MultiMesh opaque et une transparente pour chacune).
 enum Shape {BOX, SPHERE, PRISM, CYLINDER, RAMP}
@@ -148,6 +165,14 @@ var fog := PackedFloat32Array()
 var seen_ever := PackedByteArray()
 var fog_timer := 0.0
 var fog_on := true
+## Le lidar : les points (position, moment où ils apparaissent, sorte : 0 sol, 1 obstacle, 2 monstre, héros), le dernier
+## moment où un point est passé sur chaque case, et la dernière mise à jour de la perception balayée.
+var lidar_pos := PackedVector3Array()
+var lidar_born := PackedFloat32Array()
+var lidar_kind := PackedByteArray()
+var lidar_owner := PackedInt32Array()
+var lidar_lit := PackedFloat32Array()
+var _last_scan := -1.0
 
 # Gestes.
 var pressing := false
@@ -247,9 +272,20 @@ func setup(owner_view: BattleView) -> void:
 	seen_ever.resize(battle.map.kinds.size())
 	seen_ever.fill(0)
 	fog_timer = 0.0
+	lidar_pos = PackedVector3Array()
+	lidar_born = PackedFloat32Array()
+	lidar_kind = PackedByteArray()
+	lidar_owner = PackedInt32Array()
+	lidar_lit = PackedFloat32Array()
+	lidar_lit.resize(battle.map.kinds.size())
+	lidar_lit.fill(-100.0)
+	_last_scan = -1.0
 	_build_map()
 	_build_units()
 	cam_target = Vector3(Battle.GRID_W / 2.0, LEVEL * 0.5, Battle.GRID_H / 2.0)
+	if battle.map_data.has("hero_entry"):  # (scènes : entre le centre et l'arrivée des héros)
+		var entry: Vector2 = BattleMap.center(battle.map_data["hero_entry"])
+		cam_target = cam_target.lerp(Vector3(entry.x, LEVEL * 0.5, entry.y), 0.4)
 	zoom = ZOOM_DEFAULT
 	turn = 0
 	yaw = YAW_DEG
@@ -966,31 +1002,37 @@ func _update_fade(delta: float) -> void:
 # Brouillard de guerre (cartes, étape 4)
 # ---------------------------------------------------------------------------
 
-## La lumière de chaque case : vue en ce moment (parcourue par un bâtonnet d'un héros à la dernière mise à jour de la
-## perception, voir BattleExplore.mark, ou tout près d'un héros), déjà vue, ou jamais vue. La lisière prend la lumière
-## de sa voisine la plus éclairée. Rien ne change dans le combat : ce n'est que l'écran.
+## Le temps du combat à l'écran (glissé entre deux pas : les points du lidar avancent en douceur).
+func _view_time() -> float:
+	return battle.time + clampf(view.accumulator, 0.0, Battle.TICK)
+
+
+## La lumière de chaque case (que l'écran : rien ne change dans le combat) : éclairée là où le lidar vient de passer (un
+## point posé il y a moins de LIDAR_HOLD s, voir _scan_lidar) ou tout près d'un héros ; déjà vue : FOG_REMEMBERED ;
+## jamais vue : FOG_UNSEEN. La lumière y monte et descend en douceur (FOG_RISE, FOG_FALL) : le brouillard se dissipe
+## au passage du balayage. La lisière prend la lumière de sa voisine la plus éclairée.
 func _update_fog(delta: float) -> void:
-	if not fog_on or battle.explore == null or battle.perception == null:
+	if not fog_on or battle.perception == null:
 		return
+	_scan_lidar()
 	fog_timer -= delta
 	if fog_timer > 0.0:
 		return
-	fog_timer = FOG_REFRESH
+	var step := FOG_REFRESH / 3.0 - fog_timer
+	fog_timer = FOG_REFRESH / 3.0
 	var map: BattleMap = battle.map
-	var explored: PackedFloat32Array = battle.explore.explored
-	var now: float = battle.perception.updated_at - 0.05
+	var now := _view_time()
 	var heroes: Array = battle._alive(battle.heroes)
-	var next := PackedFloat32Array()
-	next.resize(fog.size())
+	var target := PackedFloat32Array()
+	target.resize(fog.size())
 	for i in fog.size():
-		var cell := map.cell_at(i)
-		var visible: bool = explored[i] >= now
+		var visible: bool = now - lidar_lit[i] <= LIDAR_HOLD
 		if not visible:
-			var center := BattleMap.center(cell)
+			var center := BattleMap.center(map.cell_at(i))
 			visible = heroes.any(func(h): return h["pos"].distance_to(center) <= FOG_AROUND)
 		if visible:
 			seen_ever[i] = 1
-		next[i] = 1.0 if visible else (FOG_REMEMBERED if seen_ever[i] == 1 else FOG_UNSEEN)
+		target[i] = 1.0 if visible else (FOG_REMEMBERED if seen_ever[i] == 1 else FOG_UNSEEN)
 	if battle.map_data.get("version", 1) >= 2:
 		for i in fog.size():
 			var cell := map.cell_at(i)
@@ -1000,11 +1042,110 @@ func _update_fog(delta: float) -> void:
 			for d in BattleMap.DIRECTIONS:
 				var other: Vector2i = cell + d
 				if map.in_bounds(other) and MapGenerator.inside(other):
-					light = maxf(light, next[map.index(other)])
-			next[i] = light
-	if next != fog:
-		fog = next
+					light = maxf(light, target[map.index(other)])
+			target[i] = light
+	var changed := false
+	for i in fog.size():
+		var value := fog[i]
+		var wanted := target[i]
+		if absf(value - wanted) < 0.001:
+			continue
+		fog[i] = move_toward(value, wanted, (FOG_RISE if wanted > value else FOG_FALL) * step)
+		changed = true
+	if changed:
 		_fill_multimeshes()
+
+
+## (Lidar) À chaque nouvelle mise à jour de la perception : le balayage de chaque héros debout. Pour chacun de ses
+## bâtonnets (BattlePerception : « rays », le bout de chacun), des points tous les LIDAR_STEP cases sur le dessus des cases
+## traversées ; un point blanc au bout s'il bute avant sa longueur ; une impulsion rouge sur chaque monstre qu'il voit. Chaque
+## point apparaît quand le balayage l'atteint (de gauche à droite de l'éventail, puis du héros vers le loin).
+func _scan_lidar() -> void:
+	var updated: float = battle.perception.updated_at
+	if updated <= _last_scan:
+		return
+	_last_scan = updated
+	var map: BattleMap = battle.map
+	var now := _view_time()
+	# (les points trop vieux s'en vont)
+	var keep := 0
+	for k in lidar_born.size():
+		if now - lidar_born[k] <= LIDAR_LIFE:
+			lidar_pos[keep] = lidar_pos[k]
+			lidar_born[keep] = lidar_born[k]
+			lidar_kind[keep] = lidar_kind[k]
+			lidar_owner[keep] = lidar_owner[k]
+			keep += 1
+	lidar_pos.resize(keep)
+	lidar_born.resize(keep)
+	lidar_kind.resize(keep)
+	lidar_owner.resize(keep)
+	for hero in battle._alive(battle.heroes):
+		var origin: Vector2 = hero["pos"]
+		var eye: float = battle.height_of(hero) * LEVEL + BODY_HEIGHT * 0.9
+		var rays: PackedVector2Array = hero.get("rays", PackedVector2Array())
+		var full: float = GameData.SIGHT_LENGTH * 0.95
+		for r in rays.size():
+			var end: Vector2 = rays[r]
+			var length := origin.distance_to(end)
+			var sweep := LIDAR_SWEEP * r / maxf(1.0, rays.size() - 1.0)
+			var d := LIDAR_STEP * 0.6
+			while d < length:
+				var p := origin.lerp(end, d / length)
+				var cell := map.cell_of(p)
+				var born := now + sweep + d / LIDAR_SPEED
+				_lidar_add(Vector3(p.x, map.height_at(cell) * LEVEL + 0.04, p.y), born, 0, hero["id"])
+				lidar_lit[map.index(cell)] = maxf(lidar_lit[map.index(cell)], born)
+				d += LIDAR_STEP
+			var stop := map.cell_of(end)
+			lidar_lit[map.index(stop)] = maxf(lidar_lit[map.index(stop)], now + sweep + length / LIDAR_SPEED)
+			if length < full * 0.85:
+				# Il bute : un point blanc contre l'obstacle, à hauteur des yeux (ou sur le dessus, s'il est plus bas).
+				var y := minf(eye, maxf(map.height_at(stop) * LEVEL, tops[map.index(stop)] if map.index(stop) < tops.size() else 0.0))
+				_lidar_add(Vector3(end.x, maxf(y, 0.1), end.y), now + sweep + length / LIDAR_SPEED, 1, hero["id"])
+		for id in hero.get("sees", {}):
+			var foe: Dictionary = battle.units[id]
+			var at: Vector2 = foe["pos"]
+			_lidar_add(Vector3(at.x, battle.height_of(foe) * LEVEL + BODY_HEIGHT * 0.5, at.y), now + origin.distance_to(at) / LIDAR_SPEED, 2, hero["id"])
+
+
+func _lidar_add(pos: Vector3, born: float, kind: int, owner: int) -> void:
+	if lidar_pos.size() >= LIDAR_MAX_POINTS:
+		return
+	lidar_pos.append(pos)
+	lidar_born.append(born)
+	lidar_kind.append(kind)
+	lidar_owner.append(owner)
+
+
+## (Lidar) Les points, par-dessus la 3D : ils naissent vifs et s'effacent ; ceux du héros choisi plus vifs que les autres.
+## Les impulsions sur un monstre : un anneau rouge qui s'élargit.
+func _draw_lidar(k: float) -> void:
+	if not fog_on:
+		return
+	var now := _view_time()
+	for i in lidar_pos.size():
+		var age := now - lidar_born[i]
+		if age < 0.0 or age > LIDAR_LIFE:
+			continue
+		var fade := 1.0 - age / LIDAR_LIFE
+		var mine: bool = lidar_owner[i] == view.selected_id
+		var strength := fade * (1.0 if mine else (0.55 if view.selected_id < 0 else 0.35))
+		var at := project(lidar_pos[i])
+		match lidar_kind[i]:
+			0:
+				var c := LIDAR_GROUND
+				c.a = 0.95 * strength
+				var size := (1.6 + 1.4 * fade) * k  # (un point vif qui rapetisse en s'effaçant)
+				overlay.draw_rect(Rect2(at - Vector2.ONE * size, Vector2.ONE * size * 2.0), c)
+			1:
+				var c := LIDAR_HIT
+				c.a = strength
+				overlay.draw_circle(at, (2.5 + 1.5 * fade) * k, c)
+			2:
+				var c := LIDAR_FOE
+				c.a = 0.85 * strength
+				overlay.draw_arc(at, (4.0 + 14.0 * (1.0 - fade)) * k, 0.0, TAU, 18, c, 1.6 * k, true)
 
 
 ## La couleur d'une pièce du décor, assombrie par le brouillard de sa case.
@@ -1091,6 +1232,7 @@ func _draw_overlay() -> void:
 			overlay.draw_circle(project(Vector3(spot.x, _surface_at(spot) + 0.03, spot.y)), 5.0 * k,
 				BattleView.CORPSE_FOUND_COLOR if corpse["found"] else BattleView.CORPSE_COLOR)
 	_draw_layer()
+	_draw_lidar(k)
 	_draw_orders(bodies, k)
 	_draw_rays()
 	for unit in battle.units:
@@ -1109,10 +1251,11 @@ func _draw_rays() -> void:
 		return
 	var eye: float = display_y.get(hero["id"], 0.0) + BODY_HEIGHT * 0.9
 	var from := project(unit_feet(hero) + Vector3(0, BODY_HEIGHT * 0.9, 0))
+	# (le lidar dessine les points, voir _draw_lidar : ici, seulement l'éventail du héros choisi, en traits très fins)
+	var faint := BattleView.RAY_COLOR
+	faint.a = 0.18
 	for end in hero.get("rays", PackedVector2Array()):
-		var to := project(Vector3(end.x, eye, end.y))
-		overlay.draw_line(from, to, BattleView.RAY_COLOR, 1.0, true)
-		overlay.draw_circle(to, 2.5, BattleView.RAY_DOT_COLOR)
+		overlay.draw_line(from, project(Vector3(end.x, eye, end.y)), faint, 1.0, true)
 	# Mode dev (IA tactique) : la case qu'il a choisie, un losange sur son dessus.
 	var cell = hero.get("tactic", {}).get("cell")
 	if Settings.dev_mode and cell != null:

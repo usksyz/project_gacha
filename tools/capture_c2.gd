@@ -131,6 +131,10 @@ func _capture() -> void:
 	# « cache=oui » : le héros choisi est posé d'office là où un bâtiment le cache à la caméra (pour voir les murs
 	# et toits devenir transparents).
 	await _frames(5)  # (l'écran 3D doit avoir pris sa taille avant de projeter quoi que ce soit)
+	if _args.get("direct", "") != "":  # (lidar : « direct=<secondes> », le combat tourne en temps réel avant l'image)
+		view.paused = false
+		await get_tree().create_timer(float(_args["direct"])).timeout
+		view.paused = true
 	if _args.get("cache", "non") == "oui" and view.selected_id >= 0:
 		var hero: Dictionary = battle.units[view.selected_id]
 		var best_cell := Vector2i(-1, -1)
