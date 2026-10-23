@@ -30,6 +30,12 @@ héros uniques qui peuvent mourir définitivement, Tour à étages, gestion de b
   repartir à neuf (`/clear`) quand c'est possible, et confier le travail à des sous-agents (outil Agent : recherche dans
   le code, mise en œuvre d'une étape, simulations) pour garder la conversation principale légère. `/compact` et `/clear`
   sont des commandes que seul le porteur du projet peut taper : Claude le lui rappelle quand c'est le moment.
+- Bon modèle pour chaque morceau (règle du porteur du projet, pour économiser) : la conversation principale découpe
+  chaque demande en morceaux, puis confie chacun au sous-agent du bon niveau (`.claude/agents/`) :
+  `eclaireur` (Haiku : chercher, lire, lister, résumer une sortie), `artisan` (Sonnet : mettre en œuvre un plan clair,
+  bancs et mesures, doc), `architecte` (Opus : concevoir, découper un gros chantier, bug difficile, relecture profonde).
+  En cas de doute, le niveau du dessous d'abord, et on monte si le résultat ne suffit pas. La conversation principale
+  garde la coordination, les décisions à demander au porteur du projet, les commits et le résumé final.
 - Règles de travail pour les simulations (copies du projet) : voir aussi `docs/mesures.md` (outils et mesures).
   Copies du projet pour les simulations : `override.cfg` en UTF-8 SANS BOM (PowerShell `Set-Content -Encoding utf8`
   en ajoute un : Godot ignore alors le fichier et les simulations écrivent dans la vraie sauvegarde, constaté en C3 ;
